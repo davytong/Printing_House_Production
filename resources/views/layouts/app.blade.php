@@ -1,4 +1,4 @@
-<!DOCTYPE html>
+﻿<!DOCTYPE html>
 <html lang="km">
 <head>
 <meta charset="UTF-8">
@@ -15,6 +15,8 @@
 <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet">
 <!-- Bootstrap Icons -->
 <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css" rel="stylesheet">
+<!-- Font Awesome 6 (for material icons) -->
+<link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.2/css/all.min.css" rel="stylesheet">
 
 <style>
 /* ═══════════════════════════════════════════════════════
@@ -101,7 +103,7 @@ span, td, th, p, h1, h2, h3, h4, button, label, input, select {
 ═══════════════════════════════════════════════════════ */
 .sidebar {
   width: var(--sidebar-w);
-  min-height: 100vh;
+  height: 100vh;
   background: var(--sidebar-bg);
   display: flex;
   flex-direction: column;
@@ -110,7 +112,18 @@ span, td, th, p, h1, h2, h3, h4, button, label, input, select {
   z-index: 1000;
   border-right: 1px solid var(--sidebar-border);
   transition: transform var(--ease);
+  /* ── SCROLLABLE ── */
+  overflow-y: auto;
+  overflow-x: hidden;
+  overscroll-behavior: contain;
+  -webkit-overflow-scrolling: touch;
 }
+
+/* Custom scrollbar — slim, dark theme */
+.sidebar::-webkit-scrollbar { width: 4px; }
+.sidebar::-webkit-scrollbar-track { background: transparent; }
+.sidebar::-webkit-scrollbar-thumb { background: rgba(255,255,255,.15); border-radius: 2px; }
+.sidebar::-webkit-scrollbar-thumb:hover { background: rgba(255,255,255,.3); }
 
 .sidebar-logo {
   display: flex;
@@ -211,9 +224,10 @@ span, td, th, p, h1, h2, h3, h4, button, label, input, select {
 }
 
 .sidebar-footer {
-  margin-top: auto;
   padding: 1rem;
   border-top: 1px solid var(--sidebar-border);
+  margin-top: 1rem;  /* flows naturally inside scroll — no auto */
+  flex-shrink: 0;
 }
 
 .sidebar-date {
@@ -755,11 +769,21 @@ span, td, th, p, h1, h2, h3, h4, button, label, input, select {
    MOBILE
 ═══════════════════════════════════════════════════════ */
 @media (max-width: 1024px) {
-  .sidebar { transform: translateX(-100%); }
+  .sidebar {
+    transform: translateX(-100%);
+    /* On mobile: limit height to viewport so it scrolls properly */
+    height: 100dvh;           /* dvh = dynamic viewport height (accounts for browser chrome) */
+    height: 100vh;            /* fallback */
+    max-height: -webkit-fill-available;
+  }
   .sidebar.open { transform: translateX(0); }
   .main-wrap { margin-left: 0; }
   .topbar { padding: 0 1rem; }
-  .page-content { padding: 1.25rem 1rem; }
+  .page-content {
+    padding: 1.25rem 1rem;
+    /* Leave room for mobile bottom nav */
+    padding-bottom: calc(1.25rem + 64px);
+  }
   #sidebar-overlay { display: block; }
 }
 
@@ -769,6 +793,8 @@ span, td, th, p, h1, h2, h3, h4, button, label, input, select {
   inset: 0;
   background: rgba(0,0,0,.4);
   z-index: 999;
+  backdrop-filter: blur(2px);
+  -webkit-backdrop-filter: blur(2px);
 }
 
 .hamburger {
@@ -789,6 +815,88 @@ span, td, th, p, h1, h2, h3, h4, button, label, input, select {
   .kpi-card .kpi-value { font-size: 1.7rem; }
   .data-table thead th, .data-table tbody td { font-size: .78rem; padding: .55rem .7rem; }
 }
+
+/* ═══════════════════════════════════════════════════════
+   MOBILE BOTTOM NAV — quick access on phone
+═══════════════════════════════════════════════════════ */
+.mobile-bottom-nav {
+  display: none;
+  position: fixed;
+  bottom: 0; left: 0; right: 0;
+  height: 64px;
+  background: var(--sidebar-bg);
+  border-top: 1px solid var(--sidebar-border);
+  z-index: 998;
+  justify-content: space-around;
+  align-items: stretch;
+  padding: 0 .25rem;
+}
+
+@media (max-width: 1024px) {
+  .mobile-bottom-nav { display: flex; }
+}
+
+.mob-nav-item {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: .2rem;
+  text-decoration: none;
+  color: #64748b;
+  font-size: .6rem;
+  font-weight: 600;
+  padding: .4rem .1rem;
+  border-radius: var(--radius-sm);
+  transition: color var(--ease), background var(--ease);
+  min-width: 0;
+  position: relative;
+}
+
+.mob-nav-item i {
+  font-size: 1.3rem;
+  line-height: 1;
+}
+
+.mob-nav-item span {
+  font-size: .58rem;
+  text-align: center;
+  line-height: 1.2;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 58px;
+}
+
+.mob-nav-item:hover,
+.mob-nav-item.active {
+  color: var(--primary-light);
+}
+
+.mob-nav-item.active::after {
+  content: '';
+  position: absolute;
+  top: 0; left: 20%; right: 20%;
+  height: 2px;
+  background: var(--primary-light);
+  border-radius: 0 0 2px 2px;
+}
+
+.mob-nav-badge {
+  position: absolute;
+  top: 4px; right: calc(50% - 22px);
+  min-width: 15px; height: 15px;
+  background: var(--danger);
+  color: #fff;
+  border-radius: 999px;
+  font-size: .55rem;
+  font-family: var(--font-latin);
+  font-weight: 700;
+  display: flex; align-items: center; justify-content: center;
+  padding: 0 3px;
+  border: 2px solid var(--sidebar-bg);
+}
 </style>
 
 @stack('head')
@@ -798,48 +906,200 @@ span, td, th, p, h1, h2, h3, h4, button, label, input, select {
 <!-- ═══════════════════════════════════════════════
      SIDEBAR
 ════════════════════════════════════════════════ -->
+@php
+  $_unread    = \App\Models\SystemNotification::where('is_read', false)->count();
+  $_tgGroups  = \App\Models\TelegramGroup::count();
+  $_lowStock  = \App\Models\InventoryItem::where('status','active')->whereColumn('quantity_in_stock','<=','minimum_stock')->count();
+  $_breakdown = \App\Models\Machine::where('status','breakdown')->count();
+@endphp
 <aside class="sidebar" id="sidebar">
-  <a href="{{ route('printing.index') }}" class="sidebar-logo">
+  <a href="{{ route('dashboard') }}" class="sidebar-logo">
     <div class="logo-icon">🖨️</div>
     <div class="logo-text">
-      <strong>PrintTracker</strong>
+      <strong>PrintTracker Pro</strong>
       <small>ប្រព័ន្ធគ្រប់គ្រង</small>
     </div>
   </a>
 
+  {{-- OVERVIEW --}}
   <div class="sidebar-section">
-    <p class="sidebar-section-label">MAIN MENU</p>
+    <p class="sidebar-section-label">OVERVIEW</p>
     <ul class="sidebar-nav">
       <li>
-        <a href="{{ route('printing.index') }}"
-           class="{{ request()->routeIs('printing.index') ? 'active' : '' }}">
+        <a href="{{ route('dashboard') }}" class="{{ request()->routeIs('dashboard') ? 'active' : '' }}">
           <i class="bi bi-speedometer2 nav-icon"></i>
-          <span>ទំព័រគ្រប់គ្រង</span>
+          <span>Executive Dashboard</span>
+          @if($_unread > 0)
+            <span class="sb-badge sb-badge-danger">{{ $_unread }}</span>
+          @endif
         </a>
       </li>
       <li>
-        <a href="{{ route('printing.report') }}"
-           class="{{ request()->routeIs('printing.report') ? 'active' : '' }}">
-          <i class="bi bi-bar-chart-line nav-icon"></i>
-          <span>របាយការណ៍</span>
+        <a href="{{ route('analytics.index') }}" class="{{ request()->routeIs('analytics.*') ? 'active' : '' }}">
+          <i class="bi bi-graph-up-arrow nav-icon"></i>
+          <span>Analytics</span>
         </a>
       </li>
     </ul>
   </div>
 
+  {{-- PRODUCTION --}}
   <div class="sidebar-section">
-    <p class="sidebar-section-label">INTEGRATIONS</p>
+    <p class="sidebar-section-label">PRODUCTION</p>
     <ul class="sidebar-nav">
       <li>
-        <a href="{{ route('telegram.setup') }}"
-           class="{{ request()->routeIs('telegram.*') ? 'active' : '' }}">
+        <a href="{{ route('printing.index') }}" class="{{ request()->routeIs('printing.index') ? 'active' : '' }}">
+          <i class="bi bi-printer nav-icon"></i>
+          <span>ការបោះពុម្ព</span>
+        </a>
+      </li>
+      <li>
+        <a href="{{ route('printing.report') }}" class="{{ request()->routeIs('printing.report') ? 'active' : '' }}">
+          <i class="bi bi-bar-chart-line nav-icon"></i>
+          <span>របាយការណ៍</span>
+        </a>
+      </li>
+      <li>
+        <a href="{{ route('requests.index') }}" class="{{ request()->routeIs('requests.*') ? 'active' : '' }}">
+          <i class="bi bi-file-earmark-plus nav-icon"></i>
+          <span>ស្នើរសុំបោះពុម្ព</span>
+          @php $pReqs = \App\Models\PrintRequest::where('status','pending')->count(); @endphp
+          @if($pReqs > 0)
+            <span class="sb-badge sb-badge-warning">{{ $pReqs }}</span>
+          @endif
+        </a>
+      </li>
+    </ul>
+  </div>
+
+  {{-- PROCUREMENT --}}
+  <div class="sidebar-section">
+    <p class="sidebar-section-label">PROCUREMENT</p>
+    <ul class="sidebar-nav">
+      <li>
+        <a href="{{ route('procurement.index') }}" class="{{ request()->routeIs('procurement.*') ? 'active' : '' }}">
+          <i class="bi bi-receipt nav-icon"></i>
+          <span>Procurement</span>
+          @php $pPend = \App\Models\ProcurementRequest::where('status','pending')->count(); @endphp
+          @if($pPend > 0)
+            <span class="sb-badge sb-badge-warning">{{ $pPend }}</span>
+          @endif
+        </a>
+      </li>
+      <li>
+        <a href="{{ route('suppliers.index') }}" class="{{ request()->routeIs('suppliers.*') ? 'active' : '' }}">
+          <i class="bi bi-building nav-icon"></i>
+          <span>Suppliers</span>
+        </a>
+      </li>
+      <li>
+        <a href="{{ route('purchase-orders.index') }}" class="{{ request()->routeIs('purchase-orders.*') ? 'active' : '' }}">
+          <i class="bi bi-cart3 nav-icon"></i>
+          <span>Purchase Orders</span>
+        </a>
+      </li>
+    </ul>
+  </div>
+
+  {{-- WAREHOUSE --}}
+  <div class="sidebar-section">
+    <p class="sidebar-section-label">STOCK / WAREHOUSE</p>
+    <ul class="sidebar-nav">
+
+      {{-- Daily Update shortcuts — one per responsible team --}}
+      <li>
+        <a href="{{ route('stock.movements.daily') }}?category=paper"
+           class="{{ request()->routeIs('stock.movements.daily') && request('category')==='paper' ? 'active' : '' }}">
+          <i class="bi bi-pencil-square nav-icon"></i>
+          <span>📄 រាយការណ៍ ក្រដាស</span>
+        </a>
+      </li>
+      <li>
+        <a href="{{ route('stock.movements.daily') }}?category=film"
+           class="{{ request()->routeIs('stock.movements.daily') && request('category')==='film' ? 'active' : '' }}">
+          <i class="bi bi-pencil-square nav-icon"></i>
+          <span>🎞️ រាយការណ៍ Film</span>
+        </a>
+      </li>
+      <li>
+        <a href="{{ route('stock.movements.daily') }}?category=consumable"
+           class="{{ request()->routeIs('stock.movements.daily') && request('category')==='consumable' ? 'active' : '' }}">
+          <i class="bi bi-pencil-square nav-icon"></i>
+          <span>🧴 រាយការណ៍ Consumable </span>
+        </a>
+      </li>
+
+      <li style="border-top:1px solid var(--surface-2);margin-top:.3rem;padding-top:.3rem">
+        <a href="{{ route('stock.materials.index') }}" class="{{ request()->routeIs('stock.materials.*') ? 'active' : '' }}">
+          <i class="bi bi-box-seam nav-icon"></i>
+          <span>បញ្ជី Materials</span>
+          @php $lowMat = \App\Models\Material::where('status','active')->get()->filter(fn($m)=>$m->isLowStock())->count(); @endphp
+          @if($lowMat > 0)
+            <span class="sb-badge sb-badge-warning">{{ $lowMat }}</span>
+          @endif
+        </a>
+      </li>
+      <li>
+        <a href="{{ route('stock.movements.index') }}" class="{{ request()->routeIs('stock.movements.index') ? 'active' : '' }}">
+          <i class="bi bi-arrow-left-right nav-icon"></i>
+          <span>ប្រវត្តិចលនា</span>
+        </a>
+      </li>
+      <li>
+        <a href="{{ route('stock.reports.index') }}" class="{{ request()->routeIs('stock.reports.*') ? 'active' : '' }}">
+          <i class="bi bi-file-earmark-bar-graph nav-icon"></i>
+          <span>Stock Reports</span>
+        </a>
+      </li>
+      <li>
+        <a href="{{ route('inventory.index') }}" class="{{ request()->routeIs('inventory.*') ? 'active' : '' }}">
+          <i class="bi bi-boxes nav-icon"></i>
+          <span>Inventory (legacy)</span>
+          @if($_lowStock > 0)
+            <span class="sb-badge sb-badge-warning">{{ $_lowStock }}</span>
+          @endif
+        </a>
+      </li>
+    </ul>
+  </div>
+
+  {{-- EQUIPMENT --}}
+  <div class="sidebar-section">
+    <p class="sidebar-section-label">EQUIPMENT</p>
+    <ul class="sidebar-nav">
+      <li>
+        <a href="{{ route('machines.index') }}" class="{{ request()->routeIs('machines.*') ? 'active' : '' }}">
+          <i class="bi bi-gear nav-icon"></i>
+          <span>ម៉ាស៊ីន & ថែទាំ</span>
+          @if($_breakdown > 0)
+            <span class="sb-badge sb-badge-danger">{{ $_breakdown }}</span>
+          @endif
+        </a>
+      </li>
+    </ul>
+  </div>
+
+  {{-- SYSTEM --}}
+  <div class="sidebar-section">
+    <p class="sidebar-section-label">SYSTEM</p>
+    <ul class="sidebar-nav">
+      <li>
+        <a href="{{ route('notifications.index') }}" class="{{ request()->routeIs('notifications.*') ? 'active' : '' }}">
+          <i class="bi bi-bell nav-icon"></i>
+          <span>ការជូនដំណឹង</span>
+          @if($_unread > 0)
+            <span class="sb-badge sb-badge-danger">{{ $_unread }}</span>
+          @endif
+        </a>
+      </li>
+      <li>
+        <a href="{{ route('telegram.setup') }}" class="{{ request()->routeIs('telegram.*') ? 'active' : '' }}">
           <i class="bi bi-telegram nav-icon"></i>
           <span>Telegram Bot</span>
-          @php $groupCount = \App\Models\TelegramGroup::count(); @endphp
-          @if($groupCount > 0)
-            <span style="margin-left:auto;background:rgba(16,185,129,.25);color:#6ee7b7;font-size:.65rem;font-family:var(--font-latin);font-weight:700;padding:.1em .55em;border-radius:999px">{{ $groupCount }}</span>
+          @if($_tgGroups > 0)
+            <span class="sb-badge" style="background:rgba(16,185,129,.3);color:#6ee7b7">{{ $_tgGroups }}</span>
           @else
-            <span style="margin-left:auto;background:rgba(239,68,68,.2);color:#fca5a5;font-size:.65rem;font-family:var(--font-latin);font-weight:700;padding:.1em .55em;border-radius:999px">!</span>
+            <span class="sb-badge sb-badge-danger">!</span>
           @endif
         </a>
       </li>
@@ -847,6 +1107,23 @@ span, td, th, p, h1, h2, h3, h4, button, label, input, select {
   </div>
 
   <div class="sidebar-footer">
+    @if(session('user_name'))
+      <div style="display:flex;align-items:center;gap:.6rem;margin-bottom:.6rem;padding-bottom:.6rem;border-bottom:1px solid var(--sidebar-border)">
+        <div style="width:32px;height:32px;border-radius:50%;background:linear-gradient(135deg,#4f46e5,#6366f1);display:flex;align-items:center;justify-content:center;font-size:.75rem;color:#fff;font-weight:700;flex-shrink:0">
+          {{ strtoupper(substr(session('user_name'), 0, 1)) }}
+        </div>
+        <div style="flex:1;min-width:0">
+          <div style="font-size:.78rem;font-weight:600;color:#e2e8f0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">{{ session('user_name') }}</div>
+          <div style="font-size:.65rem;color:#64748b">{{ \App\Http\Controllers\EntryController::positionLabel(session('user_position')) }}</div>
+        </div>
+        <form action="{{ route('entry.logout') }}" method="POST" style="margin:0">
+          @csrf
+          <button type="submit" title="Logout" style="background:none;border:none;color:#64748b;cursor:pointer;font-size:.85rem;padding:4px">
+            <i class="bi bi-box-arrow-left"></i>
+          </button>
+        </form>
+      </div>
+    @endif
     <div class="sidebar-date">
       <i class="bi bi-calendar3"></i>
       <span>{{ now()->format('d M Y') }}</span>
@@ -854,8 +1131,55 @@ span, td, th, p, h1, h2, h3, h4, button, label, input, select {
   </div>
 </aside>
 
+<style>
+.sb-badge {
+  margin-left: auto;
+  font-size: .62rem;
+  font-family: var(--font-latin);
+  font-weight: 700;
+  padding: .1em .5em;
+  border-radius: 999px;
+  min-width: 18px;
+  text-align: center;
+  background: rgba(255,255,255,.15);
+  color: #fff;
+  flex-shrink: 0;
+}
+.sb-badge-danger  { background: rgba(239,68,68,.35);  color: #fca5a5; }
+.sb-badge-warning { background: rgba(245,158,11,.35); color: #fde68a; }
+</style>
+
 <!-- Sidebar overlay for mobile -->
 <div id="sidebar-overlay" onclick="toggleSidebar()"></div>
+
+<!-- Mobile Bottom Nav -->
+<nav class="mobile-bottom-nav">
+  <a href="{{ route('dashboard') }}"
+     class="mob-nav-item {{ request()->routeIs('dashboard') ? 'active' : '' }}">
+    <i class="bi bi-speedometer2"></i>
+    <span>Dashboard</span>
+    @if($_unread > 0)<span class="mob-nav-badge">{{ $_unread }}</span>@endif
+  </a>
+  <a href="{{ route('printing.index') }}"
+     class="mob-nav-item {{ request()->routeIs('printing.index') ? 'active' : '' }}">
+    <i class="bi bi-printer"></i>
+    <span>បោះពុម្ព</span>
+  </a>
+  <a href="{{ route('stock.movements.daily') }}?category=paper"
+     class="mob-nav-item {{ request()->routeIs('stock.movements.daily') ? 'active' : '' }}">
+    <i class="bi bi-pencil-square"></i>
+    <span>Stock</span>
+  </a>
+  <a href="{{ route('printing.report') }}"
+     class="mob-nav-item {{ request()->routeIs('printing.report') ? 'active' : '' }}">
+    <i class="bi bi-bar-chart-line"></i>
+    <span>Report</span>
+  </a>
+  <button class="mob-nav-item" onclick="toggleSidebar()" style="background:none;border:none;cursor:pointer;color:#64748b">
+    <i class="bi bi-list"></i>
+    <span>Menu</span>
+  </button>
+</nav>
 
 <!-- ═══════════════════════════════════════════════
      MAIN
@@ -873,6 +1197,30 @@ span, td, th, p, h1, h2, h3, h4, button, label, input, select {
         <i class="bi bi-clock" style="color:var(--primary)"></i>
         <span id="live-time">--:--</span>
       </div>
+      <a href="{{ route('notifications.index') }}"
+         id="notif-bell"
+         style="position:relative;display:flex;align-items:center;gap:.4rem;padding:.3rem .75rem;background:var(--surface-2);border:1px solid var(--border);border-radius:999px;font-size:.78rem;color:var(--text-secondary);text-decoration:none">
+        <i class="bi bi-bell" style="color:var(--primary)"></i>
+        @if(isset($_unread) && $_unread > 0)
+          <span id="notif-count"
+                style="position:absolute;top:-4px;right:-4px;min-width:17px;height:17px;
+                       background:var(--danger);color:#fff;border-radius:999px;
+                       font-size:.6rem;font-family:var(--font-latin);font-weight:700;
+                       display:flex;align-items:center;justify-content:center;padding:0 3px;
+                       border:2px solid var(--surface)">
+            {{ $_unread > 99 ? '99+' : $_unread }}
+          </span>
+        @else
+          <span id="notif-count"
+                style="position:absolute;top:-4px;right:-4px;min-width:17px;height:17px;
+                       background:var(--danger);color:#fff;border-radius:999px;
+                       font-size:.6rem;font-family:var(--font-latin);font-weight:700;
+                       display:none;align-items:center;justify-content:center;padding:0 3px;
+                       border:2px solid var(--surface)">
+            0
+          </span>
+        @endif
+      </a>
       <div class="topbar-badge">
         <i class="bi bi-circle-fill" style="color:var(--success);font-size:.45rem"></i>
         <span>Online</span>
@@ -1062,6 +1410,29 @@ function showAlert(type, message) {
   // return a resolved promise so existing await showAlert(...) chains don't break
   return Promise.resolve();
 }
+
+/* ── Live notification badge poll ─── */
+(function pollNotifications() {
+  const badge = document.getElementById('notif-count');
+  if (!badge) return;
+
+  function refresh() {
+    fetch('{{ route("notifications.count") }}', {
+      headers: { 'X-Requested-With': 'XMLHttpRequest' }
+    })
+    .then(r => r.ok ? r.json() : null)
+    .then(data => {
+      if (!data) return;
+      const n = data.unread || 0;
+      badge.textContent = n > 99 ? '99+' : n;
+      badge.style.display = n > 0 ? 'flex' : 'none';
+    })
+    .catch(() => {});
+  }
+
+  refresh();
+  setInterval(refresh, 30000);
+})();
 
 function showLoading(show = true) {
   document.getElementById('loading-overlay').classList.toggle('show', show);

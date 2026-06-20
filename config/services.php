@@ -36,7 +36,12 @@ return [
     ],
 
     'telegram' => [
-        'bot_token' => env('TELEGRAM_BOT_TOKEN'),
+        'bot_token'       => env('TELEGRAM_BOT_TOKEN'),
+        'webhook_secret'  => env('TELEGRAM_WEBHOOK_SECRET'),
+        // Low-stock alert — send to one specific group/topic, not broadcast
+        'alert_chat_id'   => env('TELEGRAM_ALERT_CHAT_ID'),
+        'alert_thread_id' => env('TELEGRAM_ALERT_THREAD_ID') ? (int) env('TELEGRAM_ALERT_THREAD_ID') : null,
+        'alert_cooldown'  => (int) env('TELEGRAM_ALERT_COOLDOWN_HOURS', 24),
     ],
 
 ];

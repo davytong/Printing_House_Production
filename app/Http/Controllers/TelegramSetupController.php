@@ -11,6 +11,30 @@ use Illuminate\View\View;
 
 class TelegramSetupController extends Controller
 {
+    private function apiGet(string $endpoint, array $params = []): ?\Illuminate\Http\Client\Response
+    {
+        try {
+            return Http::timeout(10)
+                ->withOptions(['curl' => [CURLOPT_RESOLVE => ['api.telegram.org:443:149.154.167.220']]])
+                ->get($this->apiBase() . $endpoint, $params);
+        } catch (\Throwable $e) {
+            Log::error("TelegramSetup API GET failed: $endpoint", ['error' => $e->getMessage()]);
+            return null;
+        }
+    }
+
+    private function apiPost(string $endpoint, array $params = []): ?\Illuminate\Http\Client\Response
+    {
+        try {
+            return Http::timeout(10)
+                ->withOptions(['curl' => [CURLOPT_RESOLVE => ['api.telegram.org:443:149.154.167.220']]])
+                ->post($this->apiBase() . $endpoint, $params);
+        } catch (\Throwable $e) {
+            Log::error("TelegramSetup API POST failed: $endpoint", ['error' => $e->getMessage()]);
+            return null;
+        }
+    }
+
     private function token(): string
     {
         return config('services.telegram.bot_token', '');
@@ -32,24 +56,32 @@ class TelegramSetupController extends Controller
         $botError = null;
 
         if ($token) {
-            $me = Http::timeout(6)->get($this->apiBase() . '/getMe');
-            if ($me->successful() && $me->json('ok')) {
-                $botInfo = $me->json('result');
-            } else {
-                $botError = $me->json('description') ?? 'Could not reach Telegram API';
-            }
+            try {
+                $me = Http::timeout(6)->withOptions(['curl' => [CURLOPT_RESOLVE => ['api.telegram.org:443:149.154.167.220']]])->get($this->apiBase() . '/getMe');
+                if ($me->successful() && $me->json('ok')) {
+                    $botInfo = $me->json('result');
+                } else {
+                    $botError = $me->json('description') ?? 'Could not reach Telegram API';
+                }
 
-            $wh = Http::timeout(6)->get($this->apiBase() . '/getWebhookInfo');
-            if ($wh->successful() && $wh->json('ok')) {
-                $webhookInfo = $wh->json('result');
+                $wh = Http::timeout(6)->withOptions(['curl' => [CURLOPT_RESOLVE => ['api.telegram.org:443:149.154.167.220']]])->get($this->apiBase() . '/getWebhookInfo');
+                if ($wh->successful() && $wh->json('ok')) {
+                    $webhookInfo = $wh->json('result');
+                }
+            } catch (\Throwable $e) {
+                $botError = 'Connection error: ' . $e->getMessage();
             }
         }
 
-        $groups  = TelegramGroup::orderBy('name')->get();
+        // Group by chat_id so forum topics show under their parent group
+        $groups     = TelegramGroup::orderBy('chat_id')->orderBy('message_thread_id')->get();
+        $groupedChats = $groups->groupBy('chat_id');
+
         $appUrl  = config('app.url');
 
         return view('telegram.setup', compact(
-            'token', 'botInfo', 'webhookInfo', 'botError', 'groups', 'appUrl'
+            'token', 'botInfo', 'webhookInfo', 'botError',
+            'groups', 'groupedChats', 'appUrl'
         ));
     }
 
@@ -64,16 +96,25 @@ class TelegramSetupController extends Controller
 
         $url = rtrim($request->webhook_url, '/') . '/api/telegram/webhook';
 
-        $response = Http::timeout(10)->get($this->apiBase() . '/setWebhook', [
-            'url'             => $url,
+        $params = [
+            'url'                  => $url,
             'drop_pending_updates' => true,
-        ]);
+            'allowed_updates'      => json_encode(['message', 'edited_message', 'my_chat_member']),
+        ];
 
-        if ($response->successful() && $response->json('ok')) {
-            return back()->with('success', 'Webhook set: ' . $url);
+        // Attach secret token if configured
+        $secret = config('services.telegram.webhook_secret');
+        if ($secret) {
+            $params['secret_token'] = $secret;
         }
 
-        return back()->with('error', 'Failed: ' . ($response->json('description') ?? $response->body()));
+        $response = $this->apiGet('/setWebhook', $params);
+
+        if ($response && $response->successful() && $response->json('ok')) {
+            return back()->with('success', 'Webhook set: ' . $url . ($secret ? ' (secret token active ✅)' : ''));
+        }
+
+        return back()->with('error', 'Failed: ' . ($response?->json('description') ?? 'Connection error'));
     }
 
     // ─────────────────────────────────────────────
@@ -81,15 +122,13 @@ class TelegramSetupController extends Controller
     // ─────────────────────────────────────────────
     public function deleteWebhook(): RedirectResponse
     {
-        $response = Http::timeout(10)->get($this->apiBase() . '/deleteWebhook', [
-            'drop_pending_updates' => true,
-        ]);
+        $response = $this->apiGet('/deleteWebhook', ['drop_pending_updates' => true]);
 
-        if ($response->successful() && $response->json('ok')) {
+        if ($response && $response->successful() && $response->json('ok')) {
             return back()->with('success', 'Webhook removed. You can now use php artisan telegram:poll');
         }
 
-        return back()->with('error', 'Failed: ' . ($response->json('description') ?? $response->body()));
+        return back()->with('error', 'Failed: ' . ($response?->json('description') ?? 'Connection error'));
     }
 
     // ─────────────────────────────────────────────
@@ -98,8 +137,8 @@ class TelegramSetupController extends Controller
     public function pollNow(): RedirectResponse
     {
         // Must have no webhook set to use getUpdates
-        $wh = Http::timeout(6)->get($this->apiBase() . '/getWebhookInfo');
-        $webhookUrl = $wh->json('result.url') ?? '';
+        $wh = $this->apiGet('/getWebhookInfo');
+        $webhookUrl = $wh?->json('result.url') ?? '';
 
         if ($webhookUrl) {
             return back()->with('error',
@@ -107,14 +146,10 @@ class TelegramSetupController extends Controller
         }
 
         $offset   = cache('telegram_offset', 0);
-        $response = Http::timeout(15)->get($this->apiBase() . '/getUpdates', [
-            'offset'  => $offset,
-            'timeout' => 5,
-            'limit'   => 100,
-        ]);
+        $response = $this->apiGet('/getUpdates', ['offset' => $offset, 'timeout' => 5, 'limit' => 100]);
 
-        if (! $response->successful()) {
-            return back()->with('error', 'Telegram API error: ' . $response->status());
+        if (! $response || ! $response->successful()) {
+            return back()->with('error', 'Telegram API error or connection failed');
         }
 
         $results = $response->json('result') ?? [];
@@ -128,10 +163,11 @@ class TelegramSetupController extends Controller
 
             if ($chat && in_array($chat['type'] ?? '', ['group', 'supergroup'])) {
                 TelegramGroup::updateOrCreate(
-                    ['chat_id' => $chat['id']],
+                    ['chat_id' => $chat['id'], 'message_thread_id' => null],
                     [
-                        'name' => $chat['title'] ?? 'Unknown Group',
-                        'type' => $chat['type'],
+                        'name'     => $chat['title'] ?? 'Unknown Group',
+                        'type'     => $chat['type'],
+                        'is_forum' => (bool) ($chat['is_forum'] ?? false),
                     ]
                 );
                 $saved++;
@@ -150,33 +186,44 @@ class TelegramSetupController extends Controller
     public function addGroup(Request $request): RedirectResponse
     {
         $request->validate([
-            'chat_id'    => 'required',
-            'group_name' => 'required|string|max:255',
+            'chat_id'           => 'required',
+            'group_name'        => 'required|string|max:255',
+            'message_thread_id' => 'nullable|integer|min:1',
+            'topic_name'        => 'nullable|string|max:255',
+            'purpose'           => 'nullable|string|max:50',
         ]);
+
+        $chatId   = $request->chat_id;
+        $threadId = $request->integer('message_thread_id') ?: null;
 
         // Verify the chat_id is reachable
-        $chatId = $request->chat_id;
-        $check  = Http::timeout(8)->get($this->apiBase() . '/getChat', [
-            'chat_id' => $chatId,
-        ]);
+        $check = $this->apiGet('/getChat', ['chat_id' => $chatId]);
 
-        if (! $check->successful() || ! $check->json('ok')) {
+        if (! $check || ! $check->successful() || ! $check->json('ok')) {
             return back()->with('error',
                 'Could not verify chat ID. Make sure the bot is a member of the group. ' .
-                'Error: ' . ($check->json('description') ?? 'unknown'));
+                'Error: ' . ($check?->json('description') ?? 'Connection failed'));
         }
 
-        $chat = $check->json('result');
+        $chat     = $check->json('result');
+        $isForum  = (bool) ($chat['is_forum'] ?? false);
 
+        // If topic group: allow multiple entries (same chat_id, different thread_id)
         TelegramGroup::updateOrCreate(
-            ['chat_id' => $chatId],
+            ['chat_id' => $chatId, 'message_thread_id' => $threadId],
             [
-                'name' => $chat['title'] ?? $request->group_name,
-                'type' => $chat['type'] ?? 'group',
+                'name'              => $chat['title'] ?? $request->group_name,
+                'type'              => $chat['type'] ?? 'supergroup',
+                'is_forum'          => $isForum,
+                'topic_name'        => $request->input('topic_name') ?: null,
+                'purpose'           => $request->input('purpose') ?: null,
             ]
         );
 
-        return back()->with('success', 'Group "' . ($chat['title'] ?? $request->group_name) . '" added successfully.');
+        $label = ($chat['title'] ?? $request->group_name)
+            . ($threadId ? " › {$request->input('topic_name', 'Thread #'.$threadId)}" : '');
+
+        return back()->with('success', "Added: \"{$label}\"" . ($isForum ? ' (Forum group ✅)' : ''));
     }
 
     // ─────────────────────────────────────────────
@@ -190,22 +237,52 @@ class TelegramSetupController extends Controller
     }
 
     // ─────────────────────────────────────────────
+    // Update a group's purpose (inline from the list)
+    // ─────────────────────────────────────────────
+    public function updatePurpose(Request $request, TelegramGroup $group): RedirectResponse
+    {
+        $request->validate([
+            'purpose' => 'nullable|string|max:50',
+        ]);
+
+        // If setting a purpose, clear it from any other group that had it (one purpose = one destination)
+        $newPurpose = $request->input('purpose') ?: null;
+        if ($newPurpose) {
+            TelegramGroup::where('purpose', $newPurpose)
+                ->where('id', '!=', $group->id)
+                ->update(['purpose' => null]);
+        }
+
+        $group->update(['purpose' => $newPurpose]);
+
+        $label = $newPurpose ? "Set \"{$group->displayLabel()}\" → {$newPurpose}" : "Cleared purpose for \"{$group->displayLabel()}\"";
+        return back()->with('success', $label);
+    }
+
+    // ─────────────────────────────────────────────
     // Send a test message to verify a group works
     // ─────────────────────────────────────────────
     public function testGroup(TelegramGroup $group): RedirectResponse
     {
-        $response = Http::timeout(10)->post($this->apiBase() . '/sendMessage', [
+        $params = [
             'chat_id'    => $group->chat_id,
-            'text'       => "✅ PrintTracker connected!\nBot: @" . (config('telegram.bot_username', 'Bot')) . "\nTime: " . now()->format('d/m/Y H:i:s'),
-            'parse_mode' => 'HTML',
-        ]);
+            'text'       => "✅ PrintTracker connected!\n"
+                          . ($group->topic_name ? "Topic: {$group->topic_name}\n" : "")
+                          . "Time: " . now()->format('d/m/Y H:i:s'),
+        ];
 
-        if ($response->successful() && $response->json('ok')) {
-            return back()->with('success', 'Test message sent to "' . $group->name . '"!');
+        if ($group->message_thread_id) {
+            $params['message_thread_id'] = $group->message_thread_id;
+        }
+
+        $response = $this->apiPost('/sendMessage', $params);
+
+        if ($response && $response->successful() && $response->json('ok')) {
+            return back()->with('success', 'Test message sent to "' . $group->displayLabel() . '"!');
         }
 
         return back()->with('error',
-            'Failed to send to "' . $group->name . '": ' .
-            ($response->json('description') ?? $response->body()));
+            'Failed to send to "' . $group->displayLabel() . '": ' .
+            ($response?->json('description') ?? 'Connection error'));
     }
 }
