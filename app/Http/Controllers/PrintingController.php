@@ -194,7 +194,7 @@ class PrintingController extends Controller
     }
 
     // ─────────────────────────────────────────────
-    // Log daily print
+    // Report page
     // ─────────────────────────────────────────────
     public function store(Request $request): RedirectResponse
     {
@@ -221,6 +221,75 @@ class PrintingController extends Controller
         $book->increment('total_printed', $amount);
 
         return back()->with('success', "បានកត់ {$amount} ក្បាល សម្រាប់ '{$book->title}'");
+    }
+
+    // ─────────────────────────────────────────────
+    // Batch update printed quantity for multiple books
+    // ─────────────────────────────────────────────
+    public function batchUpdate(Request $request): RedirectResponse
+    {
+        $request->validate([
+            'updates'          => 'required|array|min:1',
+            'updates.*.id'     => 'required|exists:books,id',
+            'updates.*.amount' => 'required|integer|min:0',
+            'mode'             => 'required|in:add,set_done,set_progress',
+        ]);
+
+        $mode    = $request->mode;
+        $count   = 0;
+        $details = [];
+
+        foreach ($request->updates as $upd) {
+            $book   = Book::find($upd['id']);
+            if (!$book) continue;
+
+            if ($mode === 'set_done') {
+                // Set printed = target
+                $was = $book->total_printed;
+                $book->total_printed = $book->target_qty;
+                $book->save();
+                if ($book->total_printed !== $was) {
+                    DailyPrint::create([
+                        'book_id'       => $book->id,
+                        'printed_today' => $book->target_qty - $was,
+                        'date'          => now()->toDateString(),
+                    ]);
+                }
+            } elseif ($mode === 'add') {
+                // Add amount to printed
+                $remaining = max($book->target_qty - $book->total_printed, 0);
+                $add       = min((int) $upd['amount'], $remaining);
+                if ($add > 0) {
+                    $book->increment('total_printed', $add);
+                    DailyPrint::create([
+                        'book_id'       => $book->id,
+                        'printed_today' => $add,
+                        'date'          => now()->toDateString(),
+                    ]);
+                }
+            } elseif ($mode === 'set_progress') {
+                // Set an exact total_printed value
+                $val = min((int) $upd['amount'], $book->target_qty);
+                $diff = $val - $book->total_printed;
+                if ($diff > 0) {
+                    $book->total_printed = $val;
+                    $book->save();
+                    DailyPrint::create([
+                        'book_id'       => $book->id,
+                        'printed_today' => $diff,
+                        'date'          => now()->toDateString(),
+                    ]);
+                }
+            }
+
+            $count++;
+            $details[] = $book->title;
+        }
+
+        $msg = "Updated {$count} book(s): " . implode(', ', array_slice($details, 0, 3))
+             . (count($details) > 3 ? '...' : '');
+
+        return back()->with('success', $msg);
     }
 
     // ─────────────────────────────────────────────

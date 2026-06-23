@@ -275,6 +275,24 @@
   <div class="col-xl-8 col-lg-7">
     <div class="panel" style="display:flex;flex-direction:column;height:100%">
 
+      {{-- BATCH TOOLBAR --}}
+      <div id="batchBar" style="display:none;background:#1e293b;color:#fff;padding:.6rem 1.25rem;
+           border-radius:8px;margin:.75rem 1rem;align-items:center;gap:.75rem;flex-wrap:wrap;">
+        <span id="batchSelCount" style="font-size:.82rem;font-weight:600;">0 selected</span>
+        <button class="btn btn-sm btn-success" onclick="openBatchModal('set_done')">
+          <i class="bi bi-check-circle-fill me-1"></i>Mark All Done (100%)
+        </button>
+        <button class="btn btn-sm btn-warning" onclick="openBatchModal('add')">
+          <i class="bi bi-plus-circle me-1"></i>Add Copies to Each
+        </button>
+        <button class="btn btn-sm btn-info text-white" onclick="openBatchModal('set_progress')">
+          <i class="bi bi-pencil me-1"></i>Set Exact Printed Qty
+        </button>
+        <button class="btn btn-sm btn-outline-light ms-auto" onclick="clearBatchSelection()">
+          <i class="bi bi-x-lg"></i> Clear
+        </button>
+      </div>
+
       <div class="panel-header" style="flex-wrap:wrap;gap:.6rem">
         <div class="ph-title">
           <div class="ph-icon" style="background:#dcfce7;color:#15803d"><i class="bi bi-table"></i></div>
@@ -314,6 +332,10 @@
         <table class="data-table" id="booksTable">
           <thead>
             <tr>
+              <th style="width:32px;text-align:center;padding:.4rem .3rem">
+                <input type="checkbox" id="selectAll" class="form-check-input"
+                       style="width:15px;height:15px;cursor:pointer" title="Select all">
+              </th>
               <th style="width:44px;text-align:center">
                 <span class="th-km">#</span><span class="th-en">No.</span>
               </th>
@@ -367,10 +389,22 @@
               @endphp
               <tr class="row-select"
                   data-book-id="{{ $book->id }}"
+                  data-target="{{ $book->target_qty }}"
+                  data-printed="{{ $book->total_printed }}"
+                  data-title-text="{{ $book->title }}"
                   data-category="{{ $book->category }}"
                   data-status="{{ $sk }}"
                   data-grade="{{ $book->grade ?? '' }}"
                   data-title="{{ strtolower($book->title) }}">
+
+                <td style="text-align:center;padding:.3rem .3rem" onclick="event.stopPropagation()">
+                  <input type="checkbox" class="form-check-input row-check"
+                         data-id="{{ $book->id }}"
+                         data-target="{{ $book->target_qty }}"
+                         data-printed="{{ $book->total_printed }}"
+                         data-title="{{ $book->title }}"
+                         style="width:15px;height:15px;cursor:pointer">
+                </td>
 
                 <td style="text-align:center;font-family:var(--font-latin);font-size:.78rem;
                            color:var(--text-muted);font-weight:600">{{ $i+1 }}</td>
@@ -560,6 +594,45 @@
   </div>
 </div>
 
+{{-- BATCH CONFIRM MODAL --}}
+<div class="modal fade" id="batchModal" tabindex="-1">
+  <div class="modal-dialog modal-dialog-centered">
+    <div class="modal-content" style="border-radius:var(--radius-lg);border:none">
+      <div class="modal-header" style="background:#f0fdf4;border-bottom:1px solid var(--border)">
+        <h6 class="modal-title" id="batchModalTitle">
+          <i class="bi bi-check2-square text-success me-2"></i>Batch Update
+        </h6>
+        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+      </div>
+      <div class="modal-body">
+        <div id="batchModeDesc" class="alert alert-info mb-3" style="font-size:.82rem;"></div>
+        {{-- add / set_progress modes show amount input --}}
+        <div id="batchAmountWrap" style="display:none">
+          <label class="form-label">
+            <span id="batchAmountLabel">Amount per book</span>
+          </label>
+          <input type="number" id="batchAmount" class="form-control" min="0" value="100"
+                 style="font-family:var(--font-latin);font-size:1.1rem;font-weight:700;width:140px">
+        </div>
+        <div id="batchPreviewList" style="max-height:220px;overflow-y:auto;margin-top:1rem;"></div>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-sm btn-outline-secondary" data-bs-dismiss="modal">Cancel</button>
+        <button type="button" class="btn btn-sm btn-primary" id="batchConfirmBtn" onclick="submitBatch()">
+          <i class="bi bi-check-lg me-1"></i>Apply
+        </button>
+      </div>
+    </div>
+  </div>
+</div>
+
+{{-- Hidden batch form --}}
+<form id="batchForm" method="POST" action="{{ route('printing.batch') }}">
+  @csrf
+  <input type="hidden" name="mode" id="batchModeInput">
+  <div id="batchFormFields"></div>
+</form>
+
 @endsection
 
 @push('scripts')
@@ -701,7 +774,121 @@
   catFilter?.addEventListener('change',    applyFilters);
   statusFilter?.addEventListener('change', applyFilters);
   searchInput?.addEventListener('input',   applyFilters);
+
+  /* ── Select-all checkbox ─────────── */
+  document.getElementById('selectAll')?.addEventListener('change', function () {
+    document.querySelectorAll('#booksTable tbody .row-check').forEach(cb => {
+      // only affect visible rows
+      const row = cb.closest('tr');
+      if (row && row.style.display !== 'none') cb.checked = this.checked;
+    });
+    updateBatchBar();
+  });
+
+  /* ── Individual row checkbox ─────── */
+  document.querySelectorAll('#booksTable tbody').forEach(tbody => {
+    tbody.addEventListener('change', e => {
+      if (e.target.classList.contains('row-check')) updateBatchBar();
+    });
+  });
 })();
+
+/* ── Batch helpers ──────────────────────────────────────────────────────── */
+let _batchMode = '';
+
+function getSelectedBooks() {
+  return Array.from(document.querySelectorAll('.row-check:checked')).map(cb => ({
+    id:      cb.dataset.id,
+    title:   cb.dataset.title,
+    target:  parseInt(cb.dataset.target, 10),
+    printed: parseInt(cb.dataset.printed, 10),
+  }));
+}
+
+function updateBatchBar() {
+  const n   = document.querySelectorAll('.row-check:checked').length;
+  const bar = document.getElementById('batchBar');
+  bar.style.display = n > 0 ? 'flex' : 'none';
+  document.getElementById('batchSelCount').textContent = n + ' selected';
+}
+
+function clearBatchSelection() {
+  document.querySelectorAll('.row-check, #selectAll').forEach(cb => cb.checked = false);
+  updateBatchBar();
+}
+
+function openBatchModal(mode) {
+  const books = getSelectedBooks();
+  if (!books.length) { showToast('warning', 'Select at least one book first'); return; }
+
+  _batchMode = mode;
+  document.getElementById('batchModeInput').value = mode;
+
+  const titleEl = document.getElementById('batchModalTitle');
+  const descEl  = document.getElementById('batchModeDesc');
+  const amtWrap = document.getElementById('batchAmountWrap');
+  const amtLbl  = document.getElementById('batchAmountLabel');
+
+  if (mode === 'set_done') {
+    titleEl.innerHTML = '<i class="bi bi-check-circle-fill text-success me-2"></i>Mark All Selected as Done';
+    descEl.className  = 'alert alert-success mb-3';
+    descEl.innerHTML  = '<strong>Mark Done:</strong> Sets printed = target for all selected books. Logs the difference as today\'s print.';
+    amtWrap.style.display = 'none';
+  } else if (mode === 'add') {
+    titleEl.innerHTML = '<i class="bi bi-plus-circle text-warning me-2"></i>Add Copies to Each Book';
+    descEl.className  = 'alert alert-warning mb-3';
+    descEl.innerHTML  = '<strong>Add Copies:</strong> Adds the same quantity to each selected book\'s printed count.';
+    amtWrap.style.display = '';
+    amtLbl.textContent = 'Copies to add (per book)';
+    document.getElementById('batchAmount').value = 100;
+  } else {
+    titleEl.innerHTML = '<i class="bi bi-pencil text-info me-2"></i>Set Exact Printed Quantity';
+    descEl.className  = 'alert alert-info mb-3';
+    descEl.innerHTML  = '<strong>Set Printed:</strong> Sets total_printed to the number you enter for each book (capped at target).';
+    amtWrap.style.display = '';
+    amtLbl.textContent = 'Set total printed to';
+    document.getElementById('batchAmount').value = 500;
+  }
+
+  // Preview list
+  const listEl = document.getElementById('batchPreviewList');
+  listEl.innerHTML = books.map(b => {
+    const pct = b.target > 0 ? Math.round(b.printed / b.target * 100) : 0;
+    const rem = b.target - b.printed;
+    return \`<div style="display:flex;align-items:center;gap:.5rem;padding:.4rem 0;border-bottom:1px solid #f1f5f9;">
+      <div style="flex:1;min-width:0;">
+        <div style="font-size:.82rem;font-weight:600;">${b.title}</div>
+        <div style="font-size:.72rem;color:#64748b;">${b.printed.toLocaleString()} / ${b.target.toLocaleString()} (${pct}%)</div>
+      </div>
+      ${mode==='set_done'
+        ? \`<span style="background:#dcfce7;color:#15803d;border-radius:4px;padding:.1rem .4rem;font-size:.7rem;">+${rem.toLocaleString()} → Done</span>\`
+        : ''}
+    </div>\`;
+  }).join('');
+
+  new bootstrap.Modal(document.getElementById('batchModal')).show();
+}
+
+function submitBatch() {
+  const books  = getSelectedBooks();
+  const mode   = _batchMode;
+  const amount = parseInt(document.getElementById('batchAmount').value, 10) || 0;
+  const fields = document.getElementById('batchFormFields');
+
+  fields.innerHTML = '';
+  books.forEach((b, i) => {
+    const makeInput = (name, val) => {
+      const inp = document.createElement('input');
+      inp.type = 'hidden'; inp.name = name; inp.value = val;
+      fields.appendChild(inp);
+    };
+    makeInput(\`updates[${i}][id]\`, b.id);
+    makeInput(\`updates[${i}][amount]\`, mode === 'set_done' ? b.target : amount);
+  });
+
+  document.getElementById('batchModal').querySelector('[data-bs-dismiss]').click();
+  document.getElementById('batchForm').submit();
+}
 </script>
 @endpush
 
