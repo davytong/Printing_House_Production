@@ -389,15 +389,12 @@ class ScheduleController extends Controller
         $urgentDays = $this->collectWorkingDays($year, $month, $startDay, $duration);
 
         if ($mode === 'existing') {
-            // The task_name refers to an already-planned task that must move EARLIER to urgentDay.
-            // Find where it currently lives:
+            // The task_name refers to ONE task inside a cell (possibly multi-task comma list).
+            // Find the cell that contains it:
             $existingEntry = ProductionSchedule::where('year', $year)
                 ->where('month', $month)
                 ->where('process', $process)
-                ->where(function ($q) use ($taskName) {
-                    $q->where('task', $taskName)
-                      ->orWhere('task', 'like', "%{$taskName}%");
-                })
+                ->where('task', 'like', "%{$taskName}%")
                 ->where('day', '>=', $startDay)
                 ->orderBy('day')
                 ->first();
@@ -405,76 +402,93 @@ class ScheduleController extends Controller
             if ($existingEntry && $existingEntry->day > $startDay) {
                 $origDay = $existingEntry->day;
 
-                // Shift tasks between startDay and origDay-1 forward by 1 working day
-                $rangeDays = range($startDay, $origDay - 1);
-                foreach (array_reverse($rangeDays) as $d) {
-                    $cell = ProductionSchedule::where(['year'=>$year,'month'=>$month,'process'=>$process,'day'=>$d])->first();
-                    if ($cell) {
-                        $nextDay = $this->nextWorkingDay($year, $month, $d);
-                        if ($nextDay <= $daysInMonth) {
-                            $displaced = ProductionSchedule::where(['year'=>$year,'month'=>$month,'process'=>$process,'day'=>$nextDay])->first();
-                            if ($displaced) {
-                                // cascade — merge tasks
-                                $displaced->task = trim($displaced->task . ', ' . $cell->task, ', ');
-                                $displaced->save();
-                            } else {
-                                ProductionSchedule::create([
-                                    'year'=>$year,'month'=>$month,'process'=>$process,
-                                    'day'=>$nextDay,'task'=>$cell->task,
-                                    'note'=>$cell->note,'color'=>$cell->color,
-                                ]);
-                            }
-                            // Log the delay
-                            ScheduleDelayLog::create([
-                                'year'=>$year,'month'=>$month,'process'=>$process,
-                                'original_task'=>$cell->task,'original_day'=>$d,
-                                'shifted_to_day'=>$nextDay,
-                                'reason_type'=>'urgent_task',
-                                'reason_detail'=>"Urgent: {$taskName} — {$reason}",
-                            ]);
-                            $cell->delete();
-                        }
-                    }
+                // ── STEP 1: Remove ONLY $taskName from the source cell's comma list ──
+                $remainingTasks = array_values(array_filter(
+                    array_map('trim', explode(',', $existingEntry->task)),
+                    fn($t) => strcasecmp($t, $taskName) !== 0
+                ));
+
+                if (empty($remainingTasks)) {
+                    // Cell only had this one task — delete the cell
+                    $existingEntry->delete();
+                } else {
+                    // Other tasks remain — keep the cell, just remove this task
+                    $existingEntry->task = implode(', ', $remainingTasks);
+                    $existingEntry->save();
                 }
 
-                // Move the existing task to startDay
-                $existingEntry->day = $startDay;
-                $existingEntry->note = 'URGENT — ' . ($existingEntry->note ?? '');
-                $existingEntry->save();
+                // ── STEP 2: Insert just this task into the target day ──────────
+                $targetCell = ProductionSchedule::where([
+                    'year'=>$year,'month'=>$month,'process'=>$process,'day'=>$startDay
+                ])->first();
+
+                if ($targetCell) {
+                    // Add this task to the front of the existing tasks on target day
+                    $targetTasks = array_map('trim', explode(',', $targetCell->task));
+                    array_unshift($targetTasks, $taskName . ' (URGENT)');
+                    $targetCell->task = implode(', ', $targetTasks);
+                    $targetCell->save();
+                } else {
+                    ProductionSchedule::create([
+                        'year'=>$year,'month'=>$month,'process'=>$process,
+                        'day'=>$startDay,'task'=>$taskName . ' (URGENT)',
+                        'note'=>'URGENT','color'=>'#dc2626',
+                    ]);
+                }
+
+                ScheduleDelayLog::create([
+                    'year'=>$year,'month'=>$month,'process'=>$process,
+                    'original_task'=>$taskName,'original_day'=>$origDay,
+                    'shifted_to_day'=>$startDay,
+                    'reason_type'=>'urgent_task',
+                    'reason_detail'=>"Made urgent — moved earlier: {$reason}",
+                ]);
 
             } else {
-                // Already at or before urgentDay — just mark it urgent
+                // Already at or before urgentDay — just mark it urgent in place
                 if ($existingEntry) {
-                    $existingEntry->note = 'URGENT — ' . ($existingEntry->note ?? '');
+                    // Replace just this task name with "task (URGENT)" in the comma list
+                    $tasks = array_map('trim', explode(',', $existingEntry->task));
+                    $tasks = array_map(fn($t) =>
+                        strcasecmp($t, $taskName) === 0 ? $taskName . ' (URGENT)' : $t,
+                        $tasks
+                    );
+                    $existingEntry->task = implode(', ', $tasks);
                     $existingEntry->save();
                 }
             }
 
             return redirect()->route('schedule.index', ['year'=>$year,'month'=>$month])
-                ->with('success', "'{$taskName}' marked urgent on day {$startDay}!");
+                ->with('success', "'{$taskName}' moved to day {$startDay} as urgent. Other tasks on original day are unchanged.");
         }
 
         // ── MODE: new ─────────────────────────────────────────────────────────
-        // 1. Find any tasks currently in the urgent days and shift them forward
+        // A brand-new urgent job is inserted. Any tasks on the blocked days are
+        // pushed to the next working day AFTER the urgent block ends.
+        // Key rule: only the tasks that occupy the SAME slot get shifted;
+        // if a cell has multiple tasks, ALL of them shift together because
+        // the whole production day for that process is blocked.
         $lastUrgentDay = end($urgentDays);
 
-        // Collect all existing tasks in affected days, shift them beyond urgentDays
         foreach ($urgentDays as $urgentDay) {
-            $existing = ProductionSchedule::where('year', $year)
-                ->where('month', $month)
-                ->where('process', $process)
-                ->where('day', $urgentDay)
-                ->first();
+            $existing = ProductionSchedule::where([
+                'year'=>$year,'month'=>$month,'process'=>$process,'day'=>$urgentDay
+            ])->first();
 
             if ($existing) {
-                // Find next available day after the last urgent day
                 $shiftTo = $this->nextWorkingDay($year, $month, $lastUrgentDay);
 
-                // Check if shiftTo day already has a task — if so, merge
                 if ($shiftTo <= $daysInMonth) {
-                    $targetCell = ProductionSchedule::where(['year'=>$year,'month'=>$month,'process'=>$process,'day'=>$shiftTo])->first();
+                    $targetCell = ProductionSchedule::where([
+                        'year'=>$year,'month'=>$month,'process'=>$process,'day'=>$shiftTo
+                    ])->first();
+
                     if ($targetCell) {
-                        $targetCell->task = trim($targetCell->task . ', ' . $existing->task, ', ');
+                        // Append displaced tasks — avoid duplicating tasks already there
+                        $existingTasks = array_map('trim', explode(',', $existing->task));
+                        $targetTasks   = array_map('trim', explode(',', $targetCell->task));
+                        $merged = array_unique(array_merge($targetTasks, $existingTasks));
+                        $targetCell->task = implode(', ', $merged);
                         $targetCell->save();
                     } else {
                         ProductionSchedule::create([
@@ -489,7 +503,7 @@ class ScheduleController extends Controller
                         'original_task'=>$existing->task,'original_day'=>$urgentDay,
                         'shifted_to_day'=>$shiftTo,
                         'reason_type'=>'urgent_task',
-                        'reason_detail'=>"New urgent task inserted: {$taskName} — {$reason}",
+                        'reason_detail'=>"Displaced by new urgent task: {$taskName} — {$reason}",
                     ]);
                 }
 
@@ -497,8 +511,8 @@ class ScheduleController extends Controller
             }
         }
 
-        // 2. Insert the urgent task across its days
-        $urgentColor = '#dc2626'; // red for urgent
+        // Insert the urgent task across its days (red)
+        $urgentColor = '#dc2626';
         foreach ($urgentDays as $idx => $urgentDay) {
             if ($urgentDay > $daysInMonth) break;
             $label = ($duration > 1) ? $taskName . ' (' . ($idx+1) . '/' . $duration . ')' : $taskName;
