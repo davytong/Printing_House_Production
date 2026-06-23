@@ -366,6 +366,12 @@
             <button type="button" class="btn btn-sm btn-outline-info" data-bs-toggle="modal" data-bs-target="#telegramAlertModal">
                 <i class="bi bi-telegram"></i> Alert Telegram
             </button>
+            <button type="button" class="btn btn-sm btn-danger" data-bs-toggle="modal" data-bs-target="#urgentTaskModal">
+                <i class="bi bi-exclamation-triangle-fill"></i> Urgent Task
+            </button>
+            <button type="button" class="btn btn-sm btn-outline-dark" data-bs-toggle="modal" data-bs-target="#downtimeModal">
+                <i class="bi bi-tools"></i> Machine Downtime
+            </button>
             <button type="button" class="btn btn-sm btn-outline-warning" data-bs-toggle="modal" data-bs-target="#copyMonthModal">
                 <i class="bi bi-clipboard-plus"></i> Copy to Next Month
             </button>
@@ -720,6 +726,121 @@
     </div>
 </div>
 
+
+
+{{-- URGENT TASK MODAL --}}
+<div class="modal fade" id="urgentTaskModal" tabindex="-1">
+    <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content" style="border-radius:16px;border:none">
+            <div class="modal-header" style="background:#fee2e2;border-radius:16px 16px 0 0">
+                <h6 class="modal-title"><i class="bi bi-exclamation-triangle-fill text-danger"></i> Add Urgent Task</h6>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <form id="urgentTaskForm">
+                    <div class="mb-3">
+                        <label class="form-label">Task Name *</label>
+                        <input type="text" class="form-control" id="urgentName" required placeholder="e.g. Emergency Reprint Level 1">
+                    </div>
+                    <div class="row g-3 mb-3">
+                        <div class="col-md-6">
+                            <label class="form-label">Process *</label>
+                            <select class="form-select" id="urgentProcess">
+                                <option value="Design">Design</option>
+                                <option value="Press" selected>Press</option>
+                                <option value="Folding">Folding</option>
+                                <option value="Gathering">Gathering</option>
+                                <option value="Staple">Staple</option>
+                                <option value="Binding">Binding</option>
+                                <option value="Cutting">Cutting</option>
+                                <option value="Packaging">Packaging</option>
+                                <option value="Delivery">Delivery</option>
+                                <option value="Other">Other</option>
+                            </select>
+                        </div>
+                        <div class="col-md-6">
+                            <label class="form-label">Duration (days) *</label>
+                            <input type="number" class="form-control" id="urgentDuration" value="1" min="1" max="30" style="font-family:var(--font-latin)">
+                        </div>
+                    </div>
+                    <div class="row g-3 mb-3">
+                        <div class="col-md-6">
+                            <label class="form-label">Start Date *</label>
+                            <input type="date" class="form-control" id="urgentStart" value="2026-06-23" style="font-family:var(--font-latin)">
+                        </div>
+                        <div class="col-md-6">
+                            <label class="form-label">Machine</label>
+                            <select class="form-select" id="urgentMachine">
+                                <option value="">— Any —</option>
+                            </select>
+                        </div>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">Notes</label>
+                        <input type="text" class="form-control" id="urgentNotes" placeholder="Why is this urgent?">
+                    </div>
+                    <div style="background:#fef2f2;border:1px solid #fca5a5;border-radius:8px;padding:.75rem;font-size:.82rem;color:#991b1b">
+                        <i class="bi bi-info-circle me-1"></i>
+                        <strong>Auto-shift:</strong> Standard tasks on the same days will automatically be paused and rescheduled after this urgent task completes.
+                    </div>
+                </form>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary btn-sm" data-bs-dismiss="modal">Cancel</button>
+                <button type="button" class="btn btn-danger btn-sm" onclick="submitUrgentTask()">
+                    <i class="bi bi-exclamation-triangle-fill"></i> Schedule Urgent
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+
+{{-- MACHINE DOWNTIME MODAL --}}
+<div class="modal fade" id="downtimeModal" tabindex="-1">
+    <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content" style="border-radius:16px;border:none">
+            <div class="modal-header" style="background:#fef3c7;border-radius:16px 16px 0 0">
+                <h6 class="modal-title"><i class="bi bi-tools text-warning"></i> Log Machine Downtime</h6>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <form id="downtimeForm">
+                    <div class="row g-3 mb-3">
+                        <div class="col-md-6">
+                            <label class="form-label">Machine *</label>
+                            <select class="form-select" id="downtimeMachine" required>
+                                <option value="">Select machine...</option>
+                            </select>
+                        </div>
+                        <div class="col-md-6">
+                            <label class="form-label">Duration (hours) *</label>
+                            <input type="number" class="form-control" id="downtimeHours" value="8" min="1" max="720" style="font-family:var(--font-latin)">
+                        </div>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">Start Time *</label>
+                        <input type="datetime-local" class="form-control" id="downtimeStart" style="font-family:var(--font-latin)">
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">Reason</label>
+                        <input type="text" class="form-control" id="downtimeReason" placeholder="e.g. Maintenance, Breakdown, Repair">
+                    </div>
+                    <div style="background:#fffbeb;border:1px solid #fde68a;border-radius:8px;padding:.75rem;font-size:.82rem;color:#92400e">
+                        <i class="bi bi-info-circle me-1"></i>
+                        <strong>Cascade shift:</strong> All tasks on this machine during the downtime will automatically shift forward.
+                    </div>
+                </form>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary btn-sm" data-bs-dismiss="modal">Cancel</button>
+                <button type="button" class="btn btn-warning btn-sm" onclick="submitDowntime()">
+                    <i class="bi bi-tools"></i> Log Downtime
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+
 @if(session('success'))
 {{-- Toast handled by layout --}}
 @endif
@@ -849,5 +970,81 @@ document.addEventListener('DOMContentLoaded', function() {
         }
     }
 });
+
+
+// ── Urgent Task + Downtime API integration ──────────────
+function submitUrgentTask() {
+    const data = {
+        name: document.getElementById("urgentName").value,
+        process: document.getElementById("urgentProcess").value,
+        duration_days: parseInt(document.getElementById("urgentDuration").value),
+        priority: "urgent",
+        scheduled_start_date: document.getElementById("urgentStart").value,
+        assigned_machine_id: document.getElementById("urgentMachine").value || null,
+        notes: document.getElementById("urgentNotes").value,
+    };
+    
+    if (!data.name || !data.scheduled_start_date) {
+        showToast("warning", "Please fill in task name and start date");
+        return;
+    }
+
+    fetch("/api/tasks", {
+        method: "POST",
+        headers: {"Content-Type": "application/json", "Accept": "application/json"},
+        body: JSON.stringify(data)
+    })
+    .then(r => r.json())
+    .then(res => {
+        if (res.ok) {
+            showToast("success", res.message || "Urgent task scheduled!");
+            bootstrap.Modal.getInstance(document.getElementById("urgentTaskModal")).hide();
+            setTimeout(() => location.reload(), 1500);
+        } else {
+            showToast("error", res.message || "Failed to schedule");
+        }
+    })
+    .catch(err => showToast("error", "Connection error: " + err.message));
+}
+
+function submitDowntime() {
+    const data = {
+        machine_id: parseInt(document.getElementById("downtimeMachine").value),
+        start_time: document.getElementById("downtimeStart").value,
+        duration_hours: parseInt(document.getElementById("downtimeHours").value),
+        reason: document.getElementById("downtimeReason").value,
+    };
+    
+    if (!data.machine_id || !data.start_time) {
+        showToast("warning", "Please select machine and start time");
+        return;
+    }
+
+    fetch("/api/downtime", {
+        method: "POST",
+        headers: {"Content-Type": "application/json", "Accept": "application/json"},
+        body: JSON.stringify(data)
+    })
+    .then(r => r.json())
+    .then(res => {
+        if (res.ok) {
+            showToast("success", res.message || "Downtime logged — tasks rescheduled!");
+            bootstrap.Modal.getInstance(document.getElementById("downtimeModal")).hide();
+            setTimeout(() => location.reload(), 1500);
+        } else {
+            showToast("error", res.message || "Failed");
+        }
+    })
+    .catch(err => showToast("error", "Connection error: " + err.message));
+}
+
+// Load machines into dropdowns
+fetch("/api/tasks?from=2026-06-01&to=2026-06-30")
+    .then(r => r.json())
+    .catch(() => {});
+
+// Set default datetime for downtime
+document.getElementById("downtimeStart").value = new Date().toISOString().slice(0,16);
+
 </script>
 @endsection
