@@ -115,6 +115,85 @@ class PrintingController extends Controller
     }
 
     // ─────────────────────────────────────────────
+    // Switch BACK to an old batch (make it active again)
+    //   - freezes the current active batch to history
+    //   - thaws the chosen batch's snapshot back into the books table
+    // ─────────────────────────────────────────────
+    public function restoreBatch(ProductionBatch $batch): RedirectResponse
+    {
+        $current = ProductionBatch::current();
+
+        // Already active — nothing to do
+        if ($batch->id === $current->id) {
+            return redirect()->route('printing.index')
+                ->with('success', "{$batch->name} គឺកំពុងសកម្មរួចហើយ។");
+        }
+
+        // 1. FREEZE current active batch → overwrite its snapshots with live data
+        BatchSnapshot::where('batch_id', $current->id)->delete();
+        foreach (Book::all() as $book) {
+            BatchSnapshot::create([
+                'batch_id'    => $current->id,
+                'book_id'     => $book->id,
+                'title'       => $book->title,
+                'grade'       => $book->grade,
+                'category'    => $book->category,
+                'target_qty'  => $book->target_qty,
+                'printed_qty' => $book->total_printed,
+            ]);
+        }
+        $current->update(['status' => 'completed', 'completed_at' => now()]);
+
+        // 2. THAW chosen batch → restore its snapshot into the books table
+        foreach ($batch->snapshots as $snap) {
+            if ($snap->book_id) {
+                $book = Book::find($snap->book_id);
+                if ($book) {
+                    $book->target_qty    = $snap->target_qty;
+                    $book->total_printed = $snap->printed_qty;
+                    $book->batch_id      = $batch->id;
+                    $book->save();
+                }
+            }
+        }
+        // Books that didn't exist in that batch's snapshot → attach with 0 printed
+        $snapBookIds = $batch->snapshots->pluck('book_id')->filter()->all();
+        Book::whereNotIn('id', $snapBookIds)->update(['batch_id' => $batch->id, 'total_printed' => 0]);
+
+        // 3. Mark chosen batch active + clear its now-live snapshots
+        $batch->update(['status' => 'active', 'completed_at' => null]);
+        BatchSnapshot::where('batch_id', $batch->id)->delete();
+
+        // Daily prints belong to whatever was active; clear for clean slate
+        DailyPrint::query()->delete();
+
+        return redirect()->route('printing.index')
+            ->with('success', "បានប្ដូរទៅ {$batch->name}! ({$current->name} ត្រូវបានរក្សាទុក)");
+    }
+
+    // ─────────────────────────────────────────────
+    // Delete a batch created by mistake (history only, never the active one)
+    // ─────────────────────────────────────────────
+    public function deleteBatch(ProductionBatch $batch): RedirectResponse
+    {
+        if ($batch->status === 'active') {
+            return redirect()->route('printing.index')
+                ->with('error', 'មិនអាចលុប Batch ដែលកំពុងសកម្ម។ សូមប្ដូរទៅ Batch ផ្សេងជាមុនសិន។');
+        }
+        if (ProductionBatch::count() <= 1) {
+            return redirect()->route('printing.index')
+                ->with('error', 'មិនអាចលុប Batch ចុងក្រោយបាន។');
+        }
+
+        $name = $batch->name;
+        $batch->snapshots()->delete();
+        $batch->delete();
+
+        return redirect()->route('printing.index')
+            ->with('success', "បានលុប {$name}។");
+    }
+
+    // ─────────────────────────────────────────────
     // Add single book
     // ─────────────────────────────────────────────
     public function storeBook(Request $request): RedirectResponse

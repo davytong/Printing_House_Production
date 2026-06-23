@@ -33,6 +33,13 @@
     <a href="{{ route('printing.index') }}" class="btn btn-outline-secondary btn-sm">
       <i class="bi bi-arrow-left"></i> Back
     </a>
+    <form action="{{ route('printing.batch-restore', $batch) }}" method="POST" class="m-0"
+          onsubmit="return confirm('ប្ដូរទៅ {{ $batch->name }} ហើយធ្វើឱ្យវាសកម្ម? Batch បច្ចុប្បន្ននឹងត្រូវរក្សាទុកជាប្រវត្តិ។')">
+      @csrf
+      <button type="submit" class="btn btn-success btn-sm">
+        <i class="bi bi-box-arrow-in-left"></i> ប្ដូរទៅ Batch នេះ (Make Active)
+      </button>
+    </form>
     <button onclick="window.print()" class="btn btn-outline-primary btn-sm">
       <i class="bi bi-printer"></i> Print / PDF
     </button>

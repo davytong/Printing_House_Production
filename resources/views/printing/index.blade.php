@@ -43,14 +43,23 @@
         <i class="bi bi-clock-history"></i> ប្រវត្តិ Batch
       </button>
       <ul class="dropdown-menu dropdown-menu-end" style="min-width:220px">
-        <li><h6 class="dropdown-header">Completed Batches</h6></li>
+        <li><h6 class="dropdown-header">Completed Batches — ចុច Switch ដើម្បីត្រឡប់</h6></li>
         @foreach($allBatches->where('status','completed') as $b)
-          <li>
-            <a class="dropdown-item d-flex justify-content-between align-items-center"
-               href="{{ route('printing.batch-history', $b) }}">
-              <span><i class="bi bi-layers me-1"></i>{{ $b->name }}</span>
-              <span style="font-size:.7rem;color:#94a3b8">{{ $b->completed_at?->format('d/m/y') }}</span>
-            </a>
+          <li class="px-2 py-1">
+            <div class="d-flex align-items-center justify-content-between gap-2">
+              <a class="text-decoration-none flex-grow-1" href="{{ route('printing.batch-history', $b) }}"
+                 style="font-size:.82rem;color:var(--text-primary)">
+                <i class="bi bi-layers me-1"></i>{{ $b->name }}
+                <span style="font-size:.68rem;color:#94a3b8">{{ $b->completed_at?->format('d/m/y') }}</span>
+              </a>
+              <form action="{{ route('printing.batch-restore', $b) }}" method="POST" class="m-0"
+                    onsubmit="return confirm('ប្ដូរទៅ {{ $b->name }}? Batch បច្ចុប្បន្ននឹងត្រូវរក្សាទុក។')">
+                @csrf
+                <button class="btn btn-sm btn-outline-success py-0 px-2" type="submit" title="Switch to this batch">
+                  <i class="bi bi-box-arrow-in-left"></i> Switch
+                </button>
+              </form>
+            </div>
           </li>
         @endforeach
       </ul>
@@ -678,6 +687,7 @@
             <strong>{{ $currentBatch->name }}</strong> បច្ចុប្បន្ននឹងត្រូវបានបិទ ហើយរក្សាទុកក្នុងប្រវត្តិ
             ({{ number_format($books->sum('total_printed')) }} ក្បាលបានបោះពុម្ព)។
             បន្ទាប់មក Batch ថ្មីនឹងចាប់ផ្ដើមឡើងវិញពីដើម។
+            <br><strong><i class="bi bi-info-circle me-1"></i>អ្នកអាចប្ដូរត្រឡប់ទៅ Batch ចាស់វិញបានគ្រប់ពេល</strong> តាមរយៈ «ប្រវត្តិ Batch»។
           </div>
           <div class="mb-3">
             <label class="form-label">ឈ្មោះ Batch ថ្មី</label>
