@@ -82,6 +82,7 @@ class ScheduleController extends Controller
             'task'    => 'nullable|string|max:255',
             'note'    => 'nullable|string|max:255',
             'color'   => 'nullable|string|max:30',
+            'status'  => 'nullable|in:planned,in_progress,done',
         ]);
 
         if (empty($request->task) && empty($request->note)) {
@@ -107,7 +108,7 @@ class ScheduleController extends Controller
 
             ProductionSchedule::updateOrCreate(
                 ['year' => $request->year, 'month' => $request->month, 'process' => $request->process, 'day' => $targetDay],
-                ['task' => $request->task, 'note' => $request->note, 'color' => $request->color]
+                ['task' => $request->task, 'note' => $request->note, 'color' => $request->color, 'status' => $request->input('status', 'planned')]
             );
             $saved++;
         }
@@ -662,6 +663,89 @@ class ScheduleController extends Controller
 
         return redirect()->route('schedule.index', ['year'=>$year,'month'=>$month])
             ->with('success', "Machine downtime logged! {$affectedCells->count()} tasks shifted forward by {$downtimeDays} working day(s).");
+    }
+
+    /**
+     * Quick-update the status of a single cell (AJAX).
+     * POST /schedule/status  { year, month, process, day, status }
+     */
+    public function updateStatus(Request $request)
+    {
+        $request->validate([
+            'year'    => 'required|integer',
+            'month'   => 'required|integer|min:1|max:12',
+            'process' => 'required|string',
+            'day'     => 'required|integer|min:1|max:31',
+            'status'  => 'required|in:planned,in_progress,done',
+        ]);
+
+        $cell = ProductionSchedule::where([
+            'year'    => $request->year,
+            'month'   => $request->month,
+            'process' => $request->process,
+            'day'     => $request->day,
+        ])->first();
+
+        if (!$cell) {
+            return response()->json(['ok' => false, 'message' => 'Cell not found'], 404);
+        }
+
+        $cell->status = $request->status;
+        $cell->save();
+
+        return response()->json(['ok' => true, 'status' => $cell->status]);
+    }
+
+    /**
+     * Return delay log data as JSON for inline modal.
+     */
+    public function delayReportJson(Request $request)
+    {
+        $year  = (int) $request->get('year', now()->year);
+        $month = (int) $request->get('month', now()->month);
+
+        $logs = ScheduleDelayLog::where('year', $year)
+            ->where('month', $month)
+            ->orderBy('original_day')
+            ->get();
+
+        $allCells = ProductionSchedule::where('year', $year)
+            ->where('month', $month)
+            ->whereNotNull('task')
+            ->orderBy('process')->orderBy('day')
+            ->get();
+
+        // Process summary
+        $processSummary = [];
+        foreach ($allCells as $cell) {
+            $proc = $cell->process;
+            if (!isset($processSummary[$proc])) {
+                $processSummary[$proc] = ['days' => 0, 'tasks' => []];
+            }
+            $processSummary[$proc]['days']++;
+            foreach (array_map('trim', explode(',', $cell->task)) as $t) {
+                if ($t && !str_starts_with($t, '🔧')) {
+                    $clean = preg_replace('/\s*\(\d+\/\d+\)\s*(URGENT)?/', '', $t);
+                    $clean = str_replace([' (URGENT)', ' URGENT'], '', $clean);
+                    $processSummary[$proc]['tasks'][$clean] = ($processSummary[$proc]['tasks'][$clean] ?? 0) + 1;
+                }
+            }
+        }
+
+        return response()->json([
+            'ok'             => true,
+            'year'           => $year,
+            'month'          => $month,
+            'logs'           => $logs,
+            'allCells'       => $allCells,
+            'processSummary' => $processSummary,
+            'stats' => [
+                'total'     => $allCells->count(),
+                'urgent'    => $logs->where('reason_type', 'urgent_task')->count(),
+                'downtime'  => $logs->where('reason_type', 'machine_downtime')->count(),
+                'delayDays' => $logs->sum(fn($l) => max(0, $l->shifted_to_day - $l->original_day)),
+            ],
+        ]);
     }
 
     /**

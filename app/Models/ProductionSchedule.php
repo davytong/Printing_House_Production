@@ -7,7 +7,7 @@ use Illuminate\Database\Eloquent\Model;
 class ProductionSchedule extends Model
 {
     protected $fillable = [
-        'year', 'month', 'process', 'day', 'task', 'note', 'color',
+        'year', 'month', 'process', 'day', 'task', 'note', 'color', 'status',
     ];
 
     /**

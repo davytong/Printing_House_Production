@@ -330,6 +330,32 @@
 .modal-cell-edit .modal-body { padding: 1.5rem; }
 .modal-cell-edit .form-label { font-size: .82rem; font-weight: 600; }
 
+/* Status pip */
+.status-pip { position:absolute; bottom:2px; right:3px; font-size:.6rem; line-height:1; }
+.done-pip {}
+.prog-pip {}
+.schedule-table td.day-cell { position: relative; }
+
+/* Batch mode */
+body.batch-mode .day-cell { cursor:crosshair !important; }
+body.batch-mode .batch-cb { display:block !important; }
+.batch-toolbar {
+    display:none;
+    position:fixed; bottom:1.5rem; left:50%; transform:translateX(-50%);
+    background:#1e293b; color:#fff; border-radius:12px;
+    padding:.6rem 1.25rem; gap:.75rem; align-items:center;
+    box-shadow: 0 4px 24px rgba(0,0,0,.25);
+    z-index:9999; font-size:.82rem;
+}
+body.batch-mode .batch-toolbar { display:flex; }
+
+/* Compact toolbar tweaks */
+.schedule-header .dropdown-menu { min-width:200px; font-size:.82rem; }
+
+/* Status row tints */
+.schedule-table td.status-done { background: rgba(16,185,129,.07) !important; }
+.schedule-table td.status-in_progress { background: rgba(245,158,11,.07) !important; }
+
 /* Process row colors (left strip) */
 @foreach($processColors as $proc => $clr)
 .process-row-{{ Str::slug($proc) }} td.col-process {
@@ -354,40 +380,83 @@
                 <i class="bi bi-chevron-right"></i>
             </a>
         </div>
-        <div class="d-flex gap-2 flex-wrap">
-            <a href="{{ route('schedule.index', ['year' => now()->year, 'month' => now()->month]) }}#today-col" id="todayBtn"  class="btn btn-sm btn-outline-primary">
-                <i class="bi bi-calendar-event"></i> ថ្ងៃនេះ
+        {{-- COMPACT TOOLBAR: single row with grouped dropdowns --}}
+        <div class="d-flex align-items-center gap-1 flex-wrap">
+            {{-- Today --}}
+            <a href="{{ route('schedule.index', ['year' => now()->year, 'month' => now()->month]) }}#today-col"
+               class="btn btn-sm btn-outline-primary" title="Jump to today">
+                <i class="bi bi-calendar-event"></i>
+                <span class="d-none d-md-inline ms-1">Today</span>
             </a>
-            <a href="{{ route('schedule.export', ['year' => $year, 'month' => $month, 'format' => 'html']) }}" target="_blank" class="btn btn-sm btn-outline-success">
-                <i class="bi bi-calendar-week"></i> Calendar View / PDF
-            </a>
-            <button type="button" class="btn btn-sm btn-outline-secondary" onclick="exportCalendarPDF()">
-                <i class="bi bi-printer"></i> Print Grid
+
+            {{-- Batch Mark Status --}}
+            <button type="button" class="btn btn-sm btn-outline-success" id="batchModeBtn"
+                    onclick="toggleBatchMode()" title="Batch mark cells as Done / In Progress">
+                <i class="bi bi-check2-square"></i>
+                <span class="d-none d-md-inline ms-1">Mark</span>
             </button>
-            <button type="button" class="btn btn-sm btn-outline-info" data-bs-toggle="modal" data-bs-target="#telegramAlertModal">
-                <i class="bi bi-telegram"></i> Alert Telegram
-            </button>
-            <button type="button" class="btn btn-sm btn-danger" data-bs-toggle="modal" data-bs-target="#urgentTaskModal">
-                <i class="bi bi-exclamation-triangle-fill"></i> Urgent Task
-            </button>
-            <button type="button" class="btn btn-sm btn-outline-dark" data-bs-toggle="modal" data-bs-target="#downtimeModal">
-                <i class="bi bi-tools"></i> Machine Downtime
-            </button>
-            <a href="{{ route('schedule.delay-report', ['year'=>$year,'month'=>$month]) }}" class="btn btn-sm btn-outline-warning" target="_blank">
-                <i class="bi bi-journal-text"></i> Delay Log
-            </a>
-            <button type="button" class="btn btn-sm btn-outline-warning" data-bs-toggle="modal" data-bs-target="#copyMonthModal">
-                <i class="bi bi-clipboard-plus"></i> Copy to Next Month
-            </button>
-            <form action="{{ route('schedule.clear') }}" method="POST" class="d-inline" onsubmit="return confirm('⚠️ ពិតជាចង់ជម្រះទិន្នន័យទាំងអស់សម្រាប់ខែនេះ?')">
-                @csrf
-                <input type="hidden" name="year" value="{{ $year }}">
-                <input type="hidden" name="month" value="{{ $month }}">
-                <button type="submit" class="btn btn-sm btn-outline-danger">
-                    <i class="bi bi-trash3"></i> Clear Month
+
+            {{-- Operations dropdown --}}
+            <div class="dropdown">
+                <button class="btn btn-sm btn-outline-secondary dropdown-toggle" type="button" data-bs-toggle="dropdown">
+                    <i class="bi bi-gear"></i>
+                    <span class="d-none d-md-inline ms-1">Actions</span>
                 </button>
-            </form>
+                <ul class="dropdown-menu dropdown-menu-end">
+                    <li><h6 class="dropdown-header">Schedule</h6></li>
+                    <li>
+                        <button class="dropdown-item" data-bs-toggle="modal" data-bs-target="#urgentTaskModal">
+                            <i class="bi bi-exclamation-triangle-fill text-danger me-2"></i>Urgent Task
+                        </button>
+                    </li>
+                    <li>
+                        <button class="dropdown-item" data-bs-toggle="modal" data-bs-target="#downtimeModal">
+                            <i class="bi bi-tools text-warning me-2"></i>Machine Downtime
+                        </button>
+                    </li>
+                    <li><hr class="dropdown-divider"></li>
+                    <li><h6 class="dropdown-header">Reports</h6></li>
+                    <li>
+                        <button class="dropdown-item" onclick="openDelayModal()">
+                            <i class="bi bi-journal-text text-warning me-2"></i>Delay & Work Summary
+                        </button>
+                    </li>
+                    <li>
+                        <button class="dropdown-item" data-bs-toggle="modal" data-bs-target="#telegramAlertModal">
+                            <i class="bi bi-telegram text-info me-2"></i>Alert Telegram
+                        </button>
+                    </li>
+                    <li>
+                        <a class="dropdown-item" href="{{ route('schedule.export', ['year' => $year, 'month' => $month, 'format' => 'html']) }}" target="_blank">
+                            <i class="bi bi-calendar-week text-success me-2"></i>Calendar View / PDF
+                        </a>
+                    </li>
+                    <li>
+                        <button class="dropdown-item" onclick="exportCalendarPDF()">
+                            <i class="bi bi-printer me-2"></i>Print Grid
+                        </button>
+                    </li>
+                    <li><hr class="dropdown-divider"></li>
+                    <li><h6 class="dropdown-header">Manage</h6></li>
+                    <li>
+                        <button class="dropdown-item" data-bs-toggle="modal" data-bs-target="#copyMonthModal">
+                            <i class="bi bi-clipboard-plus me-2"></i>Copy to Next Month
+                        </button>
+                    </li>
+                    <li>
+                        <button class="dropdown-item text-danger" onclick="confirmClearMonth()">
+                            <i class="bi bi-trash3 me-2"></i>Clear Month
+                        </button>
+                    </li>
+                </ul>
+            </div>
         </div>
+        {{-- Hidden clear form --}}
+        <form action="{{ route('schedule.clear') }}" method="POST" id="clearMonthForm">
+            @csrf
+            <input type="hidden" name="year" value="{{ $year }}">
+            <input type="hidden" name="month" value="{{ $month }}">
+        </form>
     </div>
 
     {{-- INFO PANELS: Today + Tomorrow + Progress --}}
@@ -482,13 +551,27 @@
                                 if ($isWeekend) $cellClass .= ' weekend';
                                 if ($isToday) $cellClass .= ' today';
                             @endphp
-                            <td class="{{ $cellClass }}"
+                            @php
+                                $cellStatus = $entry->status ?? 'planned';
+                                $statusOverlay = '';
+                                if($cellStatus === 'done') $statusOverlay = 'background:rgba(16,185,129,.08);';
+                                elseif($cellStatus === 'in_progress') $statusOverlay = 'background:rgba(245,158,11,.08);';
+                            @endphp
+                            <td class="{{ $cellClass }} status-{{ $entry->status ?? 'planned' }}"
                                 data-process="{{ $process }}"
                                 data-day="{{ $d }}"
                                 data-task="{{ $entry->task ?? '' }}"
                                 data-note="{{ $entry->note ?? '' }}"
                                 data-color="{{ $entry->color ?? '' }}"
-                                onclick="openCellModal(this)">
+                                data-status="{{ $entry->status ?? 'planned' }}"
+                                onclick="handleCellClick(event, this)"
+                                style="{{ $statusOverlay }}">
+                                {{-- Batch checkbox (hidden until batch mode) --}}
+                                <span class="batch-cb" onclick="event.stopPropagation()" style="display:none;position:absolute;top:2px;left:2px;">
+                                    <input type="checkbox" class="form-check-input batch-check"
+                                           data-process="{{ $process }}" data-day="{{ $d }}"
+                                           style="width:14px;height:14px;cursor:pointer;">
+                                </span>
                                 @if($entry && $entry->task)
                                     @foreach(explode(',', $entry->task) as $singleTask)
                                         @if(trim($singleTask))
@@ -498,8 +581,13 @@
                                         @endif
                                     @endforeach
                                 @endif
-                                @if($entry && $entry->note)
+                                @if($entry && $entry->note && !in_array($entry->note,['URGENT']))
                                     <span class="cell-note">{{ $entry->note }}</span>
+                                @endif
+                                @if($cellStatus === 'done')
+                                    <span class="status-pip done-pip" title="Done">✅</span>
+                                @elseif($cellStatus === 'in_progress')
+                                    <span class="status-pip prog-pip" title="In Progress">🔄</span>
                                 @endif
                             </td>
                         @endforeach
@@ -526,6 +614,60 @@
             <span class="legend-dot" style="background: #fef3c7; border: 1px solid #d1d5db;"></span>
             Weekend
         </span>
+        <span class="legend-item ms-3" style="border-left:1px solid #e2e8f0;padding-left:.75rem;">
+            <span style="font-size:.68rem;">✅</span> Done
+        </span>
+        <span class="legend-item">
+            <span style="font-size:.68rem;">🔄</span> In Progress
+        </span>
+        <span class="legend-item ms-2" style="font-size:.7rem;color:#7c3aed;">
+            <i class="bi bi-check2-square me-1"></i>Right-click cell or use <strong>Mark</strong> button to set status
+        </span>
+    </div>
+</div>
+
+{{-- BATCH STATUS TOOLBAR (floats at bottom when batch mode active) --}}
+<div class="batch-toolbar" id="batchToolbar">
+    <span id="batchCount">0 selected</span>
+    <button class="btn btn-sm btn-success" onclick="applyBatchStatus('done')">
+        <i class="bi bi-check-circle-fill me-1"></i>Mark Done
+    </button>
+    <button class="btn btn-sm btn-warning" onclick="applyBatchStatus('in_progress')">
+        <i class="bi bi-arrow-repeat me-1"></i>In Progress
+    </button>
+    <button class="btn btn-sm btn-secondary" onclick="applyBatchStatus('planned')">
+        <i class="bi bi-clock me-1"></i>Planned
+    </button>
+    <button class="btn btn-sm btn-outline-light ms-2" onclick="toggleBatchMode()">
+        <i class="bi bi-x-lg"></i> Exit
+    </button>
+</div>
+
+{{-- DELAY LOG / WORK SUMMARY MODAL (inline, no new tab) --}}
+<div class="modal fade modal-xl" id="delayLogModal" tabindex="-1">
+    <div class="modal-dialog modal-dialog-centered modal-xl">
+        <div class="modal-content" style="border-radius:16px;border:none;max-height:90vh;">
+            <div class="modal-header" style="background:#fffbeb;border-radius:16px 16px 0 0;">
+                <h6 class="modal-title">
+                    <i class="bi bi-clipboard-data text-warning me-2"></i>
+                    Monthly Work Summary
+                    <span id="dlModalMonth" class="ms-2 text-muted" style="font-weight:400;font-size:.82rem;"></span>
+                </h6>
+                <div class="d-flex gap-2 ms-auto me-3">
+                    <a id="dlFullPageBtn" href="{{ route('schedule.delay-report', ['year'=>$year,'month'=>$month]) }}"
+                       class="btn btn-sm btn-outline-secondary" target="_blank">
+                        <i class="bi bi-box-arrow-up-right"></i> Full Page
+                    </a>
+                </div>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body" style="overflow-y:auto;padding:1.25rem;" id="delayLogBody">
+                <div class="text-center py-4">
+                    <div class="spinner-border text-warning" role="status"></div>
+                    <div class="mt-2 text-muted" style="font-size:.82rem;">Loading summary...</div>
+                </div>
+            </div>
+        </div>
     </div>
 </div>
 

@@ -118,6 +118,8 @@ Route::prefix('schedule')->name('schedule.')->group(function () {
     Route::post('/urgent',        [ScheduleController::class, 'urgentTask'])->name('urgent');
     Route::post('/downtime',      [ScheduleController::class, 'machineDowntime'])->name('downtime');
     Route::get('/delay-report',   [ScheduleController::class, 'delayReport'])->name('delay-report');
+    Route::get('/delay-json',     [ScheduleController::class, 'delayReportJson'])->name('delay-json');
+    Route::post('/status',        [ScheduleController::class, 'updateStatus'])->name('status');
 });
 
 // ── Analytics ─────────────────────────────────────────────

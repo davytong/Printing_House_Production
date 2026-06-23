@@ -22,6 +22,13 @@
 @endphp
 
 <style>
+@media print {
+    .sidebar, .topbar, nav, .page-header, .btn, .d-flex.align-items-center.justify-content-between { display: none !important; }
+    .page-content { max-width: 100% !important; margin: 0 !important; padding: 0 !important; }
+    .card { border: 1px solid #ddd !important; box-shadow: none !important; }
+    body { font-size: 11px; }
+}
+
 .summary-card {
     border-radius: 12px;
     border: 1px solid var(--border);
