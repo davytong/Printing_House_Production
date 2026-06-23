@@ -95,22 +95,25 @@ class ScheduleController extends Controller
                 ->with('success', 'ជម្រះទិន្នន័យបានជោគជ័យ!');
         }
 
-        ProductionSchedule::updateOrCreate(
-            [
-                'year'    => $request->year,
-                'month'   => $request->month,
-                'process' => $request->process,
-                'day'     => $request->day,
-            ],
-            [
-                'task'  => $request->task,
-                'note'  => $request->note,
-                'color' => $request->color,
-            ]
-        );
+        // Multi-day span support
+        $spanDays = max(1, (int) $request->input('span_days', 1));
+        $daysInMonth = \Carbon\Carbon::createFromDate($request->year, $request->month, 1)->daysInMonth;
+        $saved = 0;
 
+        for ($i = 0; $i < $spanDays; $i++) {
+            $targetDay = $request->day + $i;
+            if ($targetDay > $daysInMonth) break;
+
+            ProductionSchedule::updateOrCreate(
+                ['year' => $request->year, 'month' => $request->month, 'process' => $request->process, 'day' => $targetDay],
+                ['task' => $request->task, 'note' => $request->note, 'color' => $request->color]
+            );
+            $saved++;
+        }
+
+        $msg = $saved > 1 ? "Saved across {$saved} days" : 'Saved!';
         return redirect()->route('schedule.index', ['year' => $request->year, 'month' => $request->month])
-            ->with('success', 'រក្សាទុកបានជោគជ័យ!');
+            ->with('success', $msg);
     }
 
     /**

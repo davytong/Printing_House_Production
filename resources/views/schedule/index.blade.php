@@ -552,13 +552,39 @@
                             <option value="Listening Workbook">
                             <option value="Reading Textbook">
                             <option value="Reading Workbook">
+                            <option value="Writing Textbook">
+                            <option value="Writing Workbook">
+                            <option value="Song">
+                            <option value="Folktale">
+                            <option value="Grammar">
+                            <option value="Test Book">
+                            <option value="Teacher Book">
+                            <option value="Level 1">
+                            <option value="Level 2">
+                            <option value="Level 3">
+                            <option value="Level 4">
+                            <option value="Level 5">
+                            <option value="Level 6">
                             <option value="Delivery">
+                            <option value="Maintenance">
                         </datalist>
                     </div>
                     <div class="mb-3">
                         <label class="form-label">កំណត់ចំណាំ (Note)</label>
                         <input type="text" class="form-control" name="note" id="cellNote"
                                placeholder="e.g. ថ្ងៃអាទិត្យ, ថ្ងៃឈប់សម្រាក...">
+                    </div>
+                    {{-- SPAN: copy task across multiple consecutive days --}}
+                    <div class="mb-3">
+                        <label class="form-label">Span (days)</label>
+                        <div class="d-flex gap-2 align-items-center">
+                            <input type="number" class="form-control" name="span_days" id="cellSpanDays"
+                                   min="1" max="30" value="1"
+                                   style="width:80px;font-family:var(--font-latin);font-weight:700">
+                            <span style="font-size:.78rem;color:var(--text-muted)">
+                                Set &gt; 1 to copy this task across multiple consecutive days
+                            </span>
+                        </div>
                     </div>
                     <div class="mb-3">
                         <label class="form-label">ពណ៌ (Color)</label>
