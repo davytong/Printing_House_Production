@@ -206,18 +206,19 @@
 
 /* Task content inside cell */
 .cell-task {
-    font-size: .72rem;
+    font-size: .68rem;
     font-weight: 600;
-    padding: .2rem .4rem;
+    padding: .15rem .35rem;
     border-radius: 4px;
-    display: inline-block;
+    display: block;
     max-width: 100%;
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
-    line-height: 1.4;
+    line-height: 1.3;
     color: #fff;
     text-shadow: 0 1px 1px rgba(0,0,0,.15);
+    margin-bottom: 2px;
 }
 
 .cell-note {
@@ -486,9 +487,13 @@
                                 data-color="{{ $entry->color ?? '' }}"
                                 onclick="openCellModal(this)">
                                 @if($entry && $entry->task)
-                                    <span class="cell-task" style="background: {{ $entry->color ?: $color }}; color: #fff;">
-                                        {{ $entry->task }}
-                                    </span>
+                                    @foreach(explode(',', $entry->task) as $singleTask)
+                                        @if(trim($singleTask))
+                                            <span class="cell-task" style="background: {{ $entry->color ?: $color }}; color: #fff;">
+                                                {{ trim($singleTask) }}
+                                            </span>
+                                        @endif
+                                    @endforeach
                                 @endif
                                 @if($entry && $entry->note)
                                     <span class="cell-note">{{ $entry->note }}</span>
@@ -550,7 +555,7 @@
                     <div class="mb-3">
                         <label class="form-label">កិច្ចការ (Task)</label>
                         <input type="text" class="form-control" name="task" id="cellTask"
-                               placeholder="e.g. Listening Textbook, All Cover..."
+                               placeholder="e.g. Listening Textbook, Reading Workbook (comma = multiple)"
                                list="taskSuggestions">
                         <datalist id="taskSuggestions">
                             <option value="All Cover">
@@ -574,6 +579,9 @@
                             <option value="Delivery">
                             <option value="Maintenance">
                         </datalist>
+                        <div style="font-size:.72rem;color:var(--text-muted);margin-top:.3rem">
+                            <i class="bi bi-info-circle"></i> Use <strong>comma (,)</strong> to add multiple tasks: <code>Listening Textbook, Reading Workbook, Writing</code>
+                        </div>
                     </div>
                     <div class="mb-3">
                         <label class="form-label">កំណត់ចំណាំ (Note)</label>
