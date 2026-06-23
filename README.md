@@ -1,59 +1,157 @@
-<p align="center"><a href="https://laravel.com" target="_blank"><img src="https://raw.githubusercontent.com/laravel/art/master/logo-lockup/5%20SVG/2%20CMYK/1%20Full%20Color/laravel-logolockup-cmyk-red.svg" width="400" alt="Laravel Logo"></a></p>
+# Printing House Production System
 
-<p align="center">
-<a href="https://github.com/laravel/framework/actions"><img src="https://github.com/laravel/framework/workflows/tests/badge.svg" alt="Build Status"></a>
-<a href="https://packagist.org/packages/laravel/framework"><img src="https://img.shields.io/packagist/dt/laravel/framework" alt="Total Downloads"></a>
-<a href="https://packagist.org/packages/laravel/framework"><img src="https://img.shields.io/packagist/v/laravel/framework" alt="Latest Stable Version"></a>
-<a href="https://packagist.org/packages/laravel/framework"><img src="https://img.shields.io/packagist/l/laravel/framework" alt="License"></a>
-</p>
+A complete production management system for a printing house, built with Laravel 12 + MySQL + XAMPP.
 
-## About Laravel
+## Features
 
-Laravel is a web application framework with expressive, elegant syntax. We believe development must be an enjoyable and creative experience to be truly fulfilling. Laravel takes the pain out of development by easing common tasks used in many web projects, such as:
+- **Production Tracking** — 48 books across 6 ESL levels, daily print recording
+- **Stock Management** — Paper, Film, Consumable materials with daily reporting
+- **Procurement** — Multi-item requests, file attachments, supplier history, analytics
+- **Telegram Integration** — Send reports to group topics, auto-routing by purpose
+- **Entry Screen** — Simple name + position login (no password), localStorage remember
+- **Mobile Friendly** — Bottom nav, responsive sidebar, touch-optimized
 
-- [Simple, fast routing engine](https://laravel.com/docs/routing).
-- [Powerful dependency injection container](https://laravel.com/docs/container).
-- Multiple back-ends for [session](https://laravel.com/docs/session) and [cache](https://laravel.com/docs/cache) storage.
-- Expressive, intuitive [database ORM](https://laravel.com/docs/eloquent).
-- Database agnostic [schema migrations](https://laravel.com/docs/migrations).
-- [Robust background job processing](https://laravel.com/docs/queues).
-- [Real-time event broadcasting](https://laravel.com/docs/broadcasting).
+## Requirements
 
-Laravel is accessible, powerful, and provides tools required for large, robust applications.
+- PHP 8.2+
+- MySQL/MariaDB 10.4+
+- Apache (XAMPP recommended on Windows)
+- Composer
 
-## Learning Laravel
+## Setup on a New Device
 
-Laravel has the most extensive and thorough [documentation](https://laravel.com/docs) and video tutorial library of all modern web application frameworks, making it a breeze to get started with the framework. You can also check out [Laravel Learn](https://laravel.com/learn), where you will be guided through building a modern Laravel application.
+### 1. Clone the repository
 
-If you don't feel like reading, [Laracasts](https://laracasts.com) can help. Laracasts contains thousands of video tutorials on a range of topics including Laravel, modern PHP, unit testing, and JavaScript. Boost your skills by digging into our comprehensive video library.
+```bash
+git clone https://github.com/davytong/Printing_House_Production.git
+cd Printing_House_Production
+```
 
-## Laravel Sponsors
+### 2. Install dependencies
 
-We would like to extend our thanks to the following sponsors for funding Laravel development. If you are interested in becoming a sponsor, please visit the [Laravel Partners program](https://partners.laravel.com).
+```bash
+composer install
+```
 
-### Premium Partners
+### 3. Configure environment
 
-- **[Vehikl](https://vehikl.com)**
-- **[Tighten Co.](https://tighten.co)**
-- **[Kirschbaum Development Group](https://kirschbaumdevelopment.com)**
-- **[64 Robots](https://64robots.com)**
-- **[Curotec](https://www.curotec.com/services/technologies/laravel)**
-- **[DevSquad](https://devsquad.com/hire-laravel-developers)**
-- **[Redberry](https://redberry.international/laravel-development)**
-- **[Active Logic](https://activelogic.com)**
+```bash
+cp .env.example .env
+php artisan key:generate
+```
 
-## Contributing
+Edit `.env` with your database settings:
 
-Thank you for considering contributing to the Laravel framework! The contribution guide can be found in the [Laravel documentation](https://laravel.com/docs/contributions).
+```env
+DB_CONNECTION=mysql
+DB_HOST=127.0.0.1
+DB_PORT=3306
+DB_DATABASE=printing_system
+DB_USERNAME=root
+DB_PASSWORD=
 
-## Code of Conduct
+TELEGRAM_BOT_TOKEN=your_bot_token_here
+```
 
-In order to ensure that the Laravel community is welcoming to all, please review and abide by the [Code of Conduct](https://laravel.com/docs/contributions#code-of-conduct).
+### 4. Create database and run migrations
 
-## Security Vulnerabilities
+```sql
+CREATE DATABASE printing_system CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
+```
 
-If you discover a security vulnerability within Laravel, please send an e-mail to Taylor Otwell via [taylor@laravel.com](mailto:taylor@laravel.com). All security vulnerabilities will be promptly addressed.
+```bash
+php artisan migrate
+```
+
+### 5. Create storage link
+
+```bash
+php artisan storage:link
+```
+
+### 6. Build caches
+
+```bash
+php artisan config:cache
+php artisan route:cache
+php artisan view:cache
+```
+
+### 7. Run the application
+
+**Option A — XAMPP (recommended for office)**
+
+Configure Apache VirtualHost in `httpd-vhosts.conf`:
+
+```apache
+<VirtualHost *:8080>
+    DocumentRoot "C:/path/to/Printing_House_Production/public"
+    ServerName localhost
+
+    <Directory "C:/path/to/Printing_House_Production/public">
+        Options Indexes FollowSymLinks
+        AllowOverride All
+        Require all granted
+    </Directory>
+</VirtualHost>
+```
+
+Then access at `http://localhost:8080`
+
+**Option B — Laravel dev server (quick test)**
+
+```bash
+php artisan serve
+```
+
+Access at `http://localhost:8000`
+
+## Network Access (Office LAN)
+
+Other computers on the same network can access via:
+```
+http://SERVER_IP:8080
+```
+
+Find server IP: `ipconfig` (Windows) or `ifconfig` (Mac/Linux)
+
+## Project Structure
+
+```
+app/
+├── Http/Controllers/
+│   ├── EntryController.php        — Login screen
+│   ├── DashboardController.php    — Main dashboard
+│   ├── PrintingController.php     — Book production
+│   ├── ProcurementController.php  — Purchase requests
+│   ├── Stock/
+│   │   ├── MaterialController.php — Stock items
+│   │   ├── MovementController.php — Stock movements + daily report
+│   │   └── StockReportController.php
+│   ├── TelegramController.php     — Bot API endpoints
+│   └── TelegramSetupController.php
+├── Models/
+│   ├── Book.php, DailyPrint.php
+│   ├── Material.php, StockMovement.php
+│   ├── ProcurementRequest.php, ProcurementItem.php
+│   ├── TelegramGroup.php
+│   └── ActivityLog.php
+└── Services/
+    ├── StockService.php
+    ├── TelegramService.php
+    ├── AlertService.php
+    ├── ReportService.php
+    └── ImageService.php
+```
+
+## Telegram Bot Setup
+
+1. Create bot via @BotFather
+2. Add bot to your group
+3. Go to `/telegram` in the app
+4. Click "Poll" to detect groups
+5. Assign purpose to each topic (Paper Stock, Press Report, etc.)
 
 ## License
 
-The Laravel framework is open-sourced software licensed under the [MIT license](https://opensource.org/licenses/MIT).
+Private — BELTEI Printing Press
