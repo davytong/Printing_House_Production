@@ -37,19 +37,23 @@
     <div class="panel mt-4">
       <div class="panel-header"><div class="ph-title"><div class="ph-icon" style="background:#dbeafe;color:#1d4ed8"><i class="bi bi-info-circle"></i></div><span>ព័ត៌មាន</span></div></div>
       <div class="panel-body d-flex flex-column gap-3">
-        @foreach([
-          ['ប្រភេទ', $material->categoryLabel()],
-          ['Sub-Type', $material->sub_type ?? '—'],
-          ['Size', $material->size ?? '—'],
-          ['ឯកតា', $material->unit],
-          ['Min Stock', number_format($material->min_stock,1).' '.$material->unit, true],
-          ['តម្លៃ/Unit', '$'.number_format($material->unit_cost,2), true],
-          ['តម្លៃសរុប', '$'.number_format($stock * $material->unit_cost, 2), true],
-          ['ទីតាំង', $material->location ?? '—'],
-        ] as [$lbl,$val,$latin??false])
+                @php
+          $infoRows = [
+            ['ប្រភេទ', $material->categoryLabel(), false],
+            ['Sub-Type', $material->sub_type ?? '—', false],
+            ['Size', $material->size ?? '—', false],
+            ['ឯកតា', $material->unit, false],
+            ['Min Stock', number_format($material->min_stock,1).' '.$material->unit, true],
+            ['តម្លៃ/Unit', '$'.number_format($material->unit_cost,2), true],
+            ['តម្លៃសរុប', '$'.number_format($stock * $material->unit_cost, 2), true],
+            ['ទីតាំង', $material->location ?? '—', false],
+          ];
+        @endphp
+        @foreach($infoRows as $row)
+          @php [$lbl, $val, $latin] = $row; @endphp
           <div>
             <div style="font-size:.72rem;font-weight:600;color:var(--text-muted);text-transform:uppercase;letter-spacing:.04em">{{ $lbl }}</div>
-            <div style="font-size:.88rem;margin-top:.1rem;{{ $latin?'font-family:var(--font-latin)':'' }}">{{ $val }}</div>
+            <div style="font-size:.88rem;margin-top:.1rem;{{ $latin ? 'font-family:var(--font-latin)' : '' }}">{{ $val }}</div>
           </div>
         @endforeach
       </div>
