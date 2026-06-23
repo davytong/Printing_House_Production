@@ -29,6 +29,8 @@ Route::get('/production',        [PrintingController::class, 'index'])->name('pr
 Route::post('/books/import',     [PrintingController::class, 'importCsv'])->name('books.import');
 Route::post('/printing/store',   [PrintingController::class, 'store'])->name('printing.store');
 Route::post('/printing/batch',   [PrintingController::class, 'batchUpdate'])->name('printing.batch');
+Route::post('/printing/new-batch', [PrintingController::class, 'startNewBatch'])->name('printing.new-batch');
+Route::get('/printing/batch/{batch}', [PrintingController::class, 'showBatch'])->name('printing.batch-history');
 Route::get('/report',            [PrintingController::class, 'report'])->name('printing.report');
 // Book CRUD (individual, no CSV)
 Route::post('/books',            [PrintingController::class, 'storeBook'])->name('books.store');

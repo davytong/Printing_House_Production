@@ -26,7 +26,40 @@
     <h1 class="section-title">ការបោះពុម្ព</h1>
     <p class="section-sub">គ្រប់គ្រង និងតាមដានការបោះពុម្ពសៀវភៅ</p>
   </div>
-  <div class="d-flex gap-2 flex-wrap">
+  <div class="d-flex gap-2 flex-wrap align-items-center">
+    {{-- Current batch indicator --}}
+    <span style="display:inline-flex;align-items:center;gap:.4rem;background:#eef2ff;
+                 border:1px solid #c7d2fe;color:#4338ca;padding:.35rem .75rem;
+                 border-radius:999px;font-size:.8rem;font-weight:700">
+      <i class="bi bi-layers-fill"></i>
+      {{ $currentBatch->name }}
+      <span style="font-weight:400;font-size:.72rem;opacity:.8">(active)</span>
+    </span>
+
+    {{-- Batch history dropdown --}}
+    @if($allBatches->where('status','completed')->count() > 0)
+    <div class="dropdown">
+      <button class="btn btn-outline-secondary btn-sm dropdown-toggle" type="button" data-bs-toggle="dropdown">
+        <i class="bi bi-clock-history"></i> ប្រវត្តិ Batch
+      </button>
+      <ul class="dropdown-menu dropdown-menu-end" style="min-width:220px">
+        <li><h6 class="dropdown-header">Completed Batches</h6></li>
+        @foreach($allBatches->where('status','completed') as $b)
+          <li>
+            <a class="dropdown-item d-flex justify-content-between align-items-center"
+               href="{{ route('printing.batch-history', $b) }}">
+              <span><i class="bi bi-layers me-1"></i>{{ $b->name }}</span>
+              <span style="font-size:.7rem;color:#94a3b8">{{ $b->completed_at?->format('d/m/y') }}</span>
+            </a>
+          </li>
+        @endforeach
+      </ul>
+    </div>
+    @endif
+
+    <button class="btn btn-success btn-sm" data-bs-toggle="modal" data-bs-target="#newBatchModal">
+      <i class="bi bi-arrow-repeat"></i> ចាប់ផ្ដើម Batch ថ្មី
+    </button>
     <button class="btn btn-primary btn-sm" data-bs-toggle="modal" data-bs-target="#addBookModal">
       <i class="bi bi-plus-lg"></i> បន្ថែមសៀវភៅ
     </button>
@@ -278,6 +311,7 @@
       {{-- BATCH TOOLBAR --}}
       <div id="batchBar" style="display:none;background:#1e293b;color:#fff;padding:.6rem 1.25rem;
            border-radius:8px;margin:.75rem 1rem;align-items:center;gap:.75rem;flex-wrap:wrap;">
+        <span style="font-size:.78rem;font-weight:700;opacity:.85"><i class="bi bi-check2-square me-1"></i>Bulk Update:</span>
         <span id="batchSelCount" style="font-size:.82rem;font-weight:600;">0 selected</span>
         <button class="btn btn-sm btn-success" onclick="openBatchModal('set_done')">
           <i class="bi bi-check-circle-fill me-1"></i>Mark All Done (100%)
@@ -622,6 +656,62 @@
           <i class="bi bi-check-lg me-1"></i>Apply
         </button>
       </div>
+    </div>
+  </div>
+</div>
+
+{{-- ════  START NEW BATCH MODAL  ════ --}}
+<div class="modal fade" id="newBatchModal" tabindex="-1">
+  <div class="modal-dialog modal-dialog-centered">
+    <div class="modal-content" style="border-radius:var(--radius-lg);border:none">
+      <form action="{{ route('printing.new-batch') }}" method="POST">
+        @csrf
+        <div class="modal-header" style="background:#f0fdf4;border-bottom:1px solid var(--border)">
+          <h5 class="modal-title" style="font-size:.95rem;font-weight:700">
+            <i class="bi bi-arrow-repeat me-2 text-success"></i>ចាប់ផ្ដើម Batch ថ្មី
+          </h5>
+          <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+        </div>
+        <div class="modal-body">
+          <div class="alert alert-warning" style="font-size:.82rem">
+            <i class="bi bi-info-circle me-1"></i>
+            <strong>{{ $currentBatch->name }}</strong> បច្ចុប្បន្ននឹងត្រូវបានបិទ ហើយរក្សាទុកក្នុងប្រវត្តិ
+            ({{ number_format($books->sum('total_printed')) }} ក្បាលបានបោះពុម្ព)។
+            បន្ទាប់មក Batch ថ្មីនឹងចាប់ផ្ដើមឡើងវិញពីដើម។
+          </div>
+          <div class="mb-3">
+            <label class="form-label">ឈ្មោះ Batch ថ្មី</label>
+            <input type="text" name="name" class="form-control"
+                   placeholder="Batch {{ $allBatches->count() + 1 }}"
+                   value="Batch {{ $allBatches->count() + 1 }}">
+          </div>
+          <div class="mb-3">
+            <label class="form-label">របៀបចាប់ផ្ដើម</label>
+            <div class="form-check">
+              <input class="form-check-input" type="radio" name="reset_mode" id="rm1" value="keep_targets" checked>
+              <label class="form-check-label" for="rm1" style="font-size:.85rem">
+                <strong>រក្សាគោលដៅដដែល</strong> — បោះពុម្ពសៀវភៅដដែលម្ដងទៀត (printed reset to 0)
+              </label>
+            </div>
+            <div class="form-check">
+              <input class="form-check-input" type="radio" name="reset_mode" id="rm2" value="keep_targets_zero">
+              <label class="form-check-label" for="rm2" style="font-size:.85rem">
+                <strong>កំណត់គោលដៅឡើងវិញ</strong> — សៀវភៅដដែល តែគោលដៅ = 0 (set new targets after)
+              </label>
+            </div>
+          </div>
+          <div class="mb-0">
+            <label class="form-label">កំណត់ចំណាំ (Notes)</label>
+            <input type="text" name="notes" class="form-control" placeholder="optional">
+          </div>
+        </div>
+        <div class="modal-footer" style="border-top:1px solid var(--border)">
+          <button type="button" class="btn btn-outline-secondary btn-sm" data-bs-dismiss="modal">បោះបង់</button>
+          <button type="submit" class="btn btn-success btn-sm">
+            <i class="bi bi-arrow-repeat"></i> ចាប់ផ្ដើម Batch ថ្មី
+          </button>
+        </div>
+      </form>
     </div>
   </div>
 </div>

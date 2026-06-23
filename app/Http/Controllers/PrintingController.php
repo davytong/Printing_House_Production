@@ -4,6 +4,8 @@ namespace App\Http\Controllers;
 
 use App\Models\Book;
 use App\Models\DailyPrint;
+use App\Models\ProductionBatch;
+use App\Models\BatchSnapshot;
 use App\Models\TelegramGroup;
 use Illuminate\Http\Request;
 use Illuminate\Http\RedirectResponse;
@@ -26,8 +28,90 @@ class PrintingController extends Controller
     // ─────────────────────────────────────────────
     public function index(): View
     {
-        $books = $this->booksOrdered()->get();
-        return view('printing.index', compact('books'));
+        $currentBatch = ProductionBatch::current();
+        $books        = $this->booksOrdered()->get();
+        $allBatches   = ProductionBatch::orderBy('id', 'desc')->get();
+
+        return view('printing.index', compact('books', 'currentBatch', 'allBatches'));
+    }
+
+    // ─────────────────────────────────────────────
+    // Start a NEW batch (printing round)
+    //   - snapshots current books into the finishing batch
+    //   - marks current batch completed
+    //   - creates a new active batch
+    //   - resets all books' printed count to 0 (keeps targets)
+    // ─────────────────────────────────────────────
+    public function startNewBatch(Request $request): RedirectResponse
+    {
+        $request->validate([
+            'name'        => 'nullable|string|max:255',
+            'reset_mode'  => 'required|in:keep_targets,keep_targets_zero,fresh',
+        ]);
+
+        $current = ProductionBatch::current();
+        $books   = Book::all();
+
+        // 1. Snapshot every book's current result into the finishing batch
+        foreach ($books as $book) {
+            BatchSnapshot::create([
+                'batch_id'    => $current->id,
+                'book_id'     => $book->id,
+                'title'       => $book->title,
+                'grade'       => $book->grade,
+                'category'    => $book->category,
+                'target_qty'  => $book->target_qty,
+                'printed_qty' => $book->total_printed,
+            ]);
+        }
+
+        // 2. Complete the current batch
+        $current->update([
+            'status'       => 'completed',
+            'completed_at' => now(),
+        ]);
+
+        // 3. Create the new active batch
+        $count = ProductionBatch::count();
+        $newBatch = ProductionBatch::create([
+            'name'       => $request->name ?: ('Batch ' . ($count + 1)),
+            'status'     => 'active',
+            'notes'      => $request->input('notes'),
+            'started_at' => now(),
+        ]);
+
+        // 4. Reset books for the new round
+        //    keep_targets       → reset printed to 0, keep same targets
+        //    keep_targets_zero  → reset printed to 0 AND set target to 0 (set later)
+        //    fresh              → keep targets, reset printed to 0 (same as keep_targets)
+        foreach ($books as $book) {
+            $book->batch_id      = $newBatch->id;
+            $book->total_printed = 0;
+            if ($request->reset_mode === 'keep_targets_zero') {
+                $book->target_qty = 0;
+            }
+            $book->save();
+        }
+
+        // Clear daily prints (they belonged to the completed batch — already snapshotted)
+        DailyPrint::query()->delete();
+
+        return redirect()->route('printing.index')
+            ->with('success', "បានចាប់ផ្ដើម {$newBatch->name} ថ្មី! ({$current->name} ត្រូវបានរក្សាទុកក្នុងប្រវត្តិ)");
+    }
+
+    // ─────────────────────────────────────────────
+    // View a past (completed) batch's snapshot
+    // ─────────────────────────────────────────────
+    public function showBatch(ProductionBatch $batch): View
+    {
+        $snapshots = $batch->snapshots()
+            ->orderBy('category')
+            ->orderByRaw("CAST(SUBSTRING_INDEX(COALESCE(grade,'0'), ' ', -1) AS UNSIGNED)")
+            ->orderBy('title')
+            ->get();
+
+        return view('printing.batch-history', compact('batch', 'snapshots'));
     }
 
     // ─────────────────────────────────────────────
@@ -43,6 +127,7 @@ class PrintingController extends Controller
         ]);
 
         $data['total_printed'] = 0;
+        $data['batch_id'] = ProductionBatch::current()->id;
         Book::create($data);
 
         return back()->with('success', "បន្ថែមសៀវភៅ '{$data['title']}' ដោយជោគជ័យ");
