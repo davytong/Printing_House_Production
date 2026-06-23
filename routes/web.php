@@ -11,6 +11,7 @@ use App\Http\Controllers\MachineController;
 use App\Http\Controllers\AnalyticsController;
 use App\Http\Controllers\NotificationController;
 use App\Http\Controllers\TelegramSetupController;
+use App\Http\Controllers\ScheduleController;
 use App\Http\Controllers\Stock\MaterialController;
 use App\Http\Controllers\Stock\MovementController;
 use App\Http\Controllers\Stock\StockReportController;
@@ -103,6 +104,17 @@ Route::prefix('machines')->name('machines.')->group(function () {
     Route::delete('/{machine}',                  [MachineController::class, 'destroy'])->name('destroy');
     Route::post('/{machine}/schedule',           [MachineController::class, 'scheduleMaintenance'])->name('schedule');
     Route::post('/maintenance/{schedule}/complete', [MachineController::class, 'completeMaintenance'])->name('complete');
+});
+
+// ── Production Schedule ───────────────────────────────────
+Route::prefix('schedule')->name('schedule.')->group(function () {
+    Route::get('/',          [ScheduleController::class, 'index'])->name('index');
+    Route::post('/store',    [ScheduleController::class, 'store'])->name('store');
+    Route::post('/bulk',     [ScheduleController::class, 'bulkSave'])->name('bulk');
+    Route::get('/export',    [ScheduleController::class, 'exportCalendar'])->name('export');
+    Route::post('/alert',    [ScheduleController::class, 'sendTelegramAlert'])->name('alert');
+    Route::post('/copy',     [ScheduleController::class, 'copyToMonth'])->name('copy');
+    Route::post('/clear',    [ScheduleController::class, 'clearMonth'])->name('clear');
 });
 
 // ── Analytics ─────────────────────────────────────────────

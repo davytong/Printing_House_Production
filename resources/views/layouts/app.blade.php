@@ -969,6 +969,12 @@ span, td, th, p, h1, h2, h3, h4, button, label, input, select {
           @endif
         </a>
       </li>
+      <li>
+        <a href="{{ route('schedule.index') }}" class="{{ request()->routeIs('schedule.*') ? 'active' : '' }}">
+          <i class="bi bi-calendar3 nav-icon"></i>
+          <span>កាលវិភាគផលិតកម្ម</span>
+        </a>
+      </li>
     </ul>
   </div>
 
