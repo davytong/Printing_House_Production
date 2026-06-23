@@ -53,7 +53,8 @@
           ['តម្លៃសរុប', '$'.number_format($inventoryItem->totalValue(),2), true],
           ['ទីតាំង', $inventoryItem->location??'—'],
           ['អ្នកផ្គត់ផ្គង់', $inventoryItem->supplier?->name??'—'],
-        ] as [$lbl,$val,$latin??false])
+        ] as $__row)
+          @php [$lbl, $val, $latin] = array_pad($__row, 3, false); @endphp
           <div>
             <div style="font-size:.72rem;font-weight:600;color:var(--text-muted);text-transform:uppercase;letter-spacing:.04em">{{ $lbl }}</div>
             <div style="font-size:.9rem;margin-top:.1rem;{{ $latin?'font-family:var(--font-latin)':'' }}">{{ $val }}</div>

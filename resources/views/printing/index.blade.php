@@ -855,15 +855,15 @@ function openBatchModal(mode) {
   listEl.innerHTML = books.map(b => {
     const pct = b.target > 0 ? Math.round(b.printed / b.target * 100) : 0;
     const rem = b.target - b.printed;
-    return \`<div style="display:flex;align-items:center;gap:.5rem;padding:.4rem 0;border-bottom:1px solid #f1f5f9;">
+    return `<div style="display:flex;align-items:center;gap:.5rem;padding:.4rem 0;border-bottom:1px solid #f1f5f9;">
       <div style="flex:1;min-width:0;">
         <div style="font-size:.82rem;font-weight:600;">${b.title}</div>
         <div style="font-size:.72rem;color:#64748b;">${b.printed.toLocaleString()} / ${b.target.toLocaleString()} (${pct}%)</div>
       </div>
       ${mode==='set_done'
-        ? \`<span style="background:#dcfce7;color:#15803d;border-radius:4px;padding:.1rem .4rem;font-size:.7rem;">+${rem.toLocaleString()} → Done</span>\`
+        ? `<span style="background:#dcfce7;color:#15803d;border-radius:4px;padding:.1rem .4rem;font-size:.7rem;">+${rem.toLocaleString()} → Done</span>`
         : ''}
-    </div>\`;
+    </div>`;
   }).join('');
 
   new bootstrap.Modal(document.getElementById('batchModal')).show();
@@ -882,12 +882,13 @@ function submitBatch() {
       inp.type = 'hidden'; inp.name = name; inp.value = val;
       fields.appendChild(inp);
     };
-    makeInput(\`updates[${i}][id]\`, b.id);
-    makeInput(\`updates[${i}][amount]\`, mode === 'set_done' ? b.target : amount);
+    makeInput(`updates[${i}][id]`, b.id);
+    makeInput(`updates[${i}][amount]`, mode === 'set_done' ? b.target : amount);
   });
 
-  document.getElementById('batchModal').querySelector('[data-bs-dismiss]').click();
-  document.getElementById('batchForm').submit();
+  const bm = bootstrap.Modal.getInstance(document.getElementById('batchModal'));
+  if (bm) bm.hide();
+  setTimeout(() => document.getElementById('batchForm').submit(), 350);
 }
 </script>
 @endpush

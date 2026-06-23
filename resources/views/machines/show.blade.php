@@ -54,7 +54,8 @@
           ['ថែទាំចុងក្រោយ', $machine->last_maintenance?->format('d/m/Y')??'—', true],
           ['ថែទាំបន្ទាប់', $machine->next_maintenance?->format('d/m/Y')??'—', true],
           ['រយៈថែទាំ', $machine->maintenance_interval_days.' days', true],
-        ] as [$lbl,$val,$latin??false])
+        ] as $__row)
+          @php [$lbl, $val, $latin] = array_pad($__row, 3, false); @endphp
           <div>
             <div style="font-size:.72rem;font-weight:600;color:var(--text-muted);text-transform:uppercase;letter-spacing:.04em">{{ $lbl }}</div>
             <div style="font-size:.88rem;margin-top:.1rem;{{ $latin?'font-family:var(--font-latin)':'' }}
