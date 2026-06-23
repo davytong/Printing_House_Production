@@ -772,6 +772,9 @@
                             <label class="form-label">Machine</label>
                             <select class="form-select" id="urgentMachine">
                                 <option value="">— Any —</option>
+                                @foreach(\App\Models\Machine::where('status','operational')->get() as $m)
+                                    <option value="{{ $m->id }}">{{ $m->code }} — {{ $m->name }}</option>
+                                @endforeach
                             </select>
                         </div>
                     </div>
@@ -810,6 +813,9 @@
                             <label class="form-label">Machine *</label>
                             <select class="form-select" id="downtimeMachine" required>
                                 <option value="">Select machine...</option>
+                                @foreach(\App\Models\Machine::all() as $m)
+                                    <option value="{{ $m->id }}">{{ $m->code }} — {{ $m->name }} ({{ $m->status }})</option>
+                                @endforeach
                             </select>
                         </div>
                         <div class="col-md-6">
