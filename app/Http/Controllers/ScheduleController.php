@@ -3,6 +3,7 @@
 namespace App\Http\Controllers;
 
 use App\Models\ProductionSchedule;
+use App\Models\ScheduleDelayLog;
 use App\Services\TelegramService;
 use Carbon\Carbon;
 use Illuminate\Http\Request;
@@ -349,6 +350,311 @@ class ScheduleController extends Controller
 
         return redirect()->route('schedule.index', ['year' => $request->year, 'month' => $request->month])
             ->with('success', "បានជម្រះ {$deleted} កិច្ចការសម្រាប់ខែនេះ!");
+    }
+
+    /**
+     * Handle Urgent Task — insert into grid and shift displaced tasks forward.
+     *
+     * Supports two modes:
+     *   mode=new    → brand-new urgent work inserted; existing planned tasks on those days pushed forward
+     *   mode=existing → an already-planned task on a specific day is made urgent (moved to urgentDay),
+     *                   everything between urgentDay and its original day is nudged one day forward
+     */
+    public function urgentTask(Request $request)
+    {
+        $request->validate([
+            'year'         => 'required|integer',
+            'month'        => 'required|integer|min:1|max:12',
+            'process'      => 'required|string',
+            'urgent_day'   => 'required|integer|min:1|max:31',
+            'duration_days'=> 'required|integer|min:1|max:30',
+            'task_name'    => 'required|string|max:255',
+            'note'         => 'nullable|string|max:255',
+            'reason'       => 'nullable|string|max:500',
+            'mode'         => 'nullable|in:new,existing',
+        ]);
+
+        $year    = (int) $request->year;
+        $month   = (int) $request->month;
+        $process = $request->process;
+        $startDay = (int) $request->urgent_day;
+        $duration = (int) $request->duration_days;
+        $taskName = $request->task_name;
+        $note     = $request->note ?? 'URGENT';
+        $reason   = $request->reason ?? 'Urgent task';
+        $mode     = $request->input('mode', 'new');
+        $daysInMonth = Carbon::createFromDate($year, $month, 1)->daysInMonth;
+
+        // Collect days this urgent task will occupy (skip weekends)
+        $urgentDays = $this->collectWorkingDays($year, $month, $startDay, $duration);
+
+        if ($mode === 'existing') {
+            // The task_name refers to an already-planned task that must move EARLIER to urgentDay.
+            // Find where it currently lives:
+            $existingEntry = ProductionSchedule::where('year', $year)
+                ->where('month', $month)
+                ->where('process', $process)
+                ->where(function ($q) use ($taskName) {
+                    $q->where('task', $taskName)
+                      ->orWhere('task', 'like', "%{$taskName}%");
+                })
+                ->where('day', '>=', $startDay)
+                ->orderBy('day')
+                ->first();
+
+            if ($existingEntry && $existingEntry->day > $startDay) {
+                $origDay = $existingEntry->day;
+
+                // Shift tasks between startDay and origDay-1 forward by 1 working day
+                $rangeDays = range($startDay, $origDay - 1);
+                foreach (array_reverse($rangeDays) as $d) {
+                    $cell = ProductionSchedule::where(['year'=>$year,'month'=>$month,'process'=>$process,'day'=>$d])->first();
+                    if ($cell) {
+                        $nextDay = $this->nextWorkingDay($year, $month, $d);
+                        if ($nextDay <= $daysInMonth) {
+                            $displaced = ProductionSchedule::where(['year'=>$year,'month'=>$month,'process'=>$process,'day'=>$nextDay])->first();
+                            if ($displaced) {
+                                // cascade — merge tasks
+                                $displaced->task = trim($displaced->task . ', ' . $cell->task, ', ');
+                                $displaced->save();
+                            } else {
+                                ProductionSchedule::create([
+                                    'year'=>$year,'month'=>$month,'process'=>$process,
+                                    'day'=>$nextDay,'task'=>$cell->task,
+                                    'note'=>$cell->note,'color'=>$cell->color,
+                                ]);
+                            }
+                            // Log the delay
+                            ScheduleDelayLog::create([
+                                'year'=>$year,'month'=>$month,'process'=>$process,
+                                'original_task'=>$cell->task,'original_day'=>$d,
+                                'shifted_to_day'=>$nextDay,
+                                'reason_type'=>'urgent_task',
+                                'reason_detail'=>"Urgent: {$taskName} — {$reason}",
+                            ]);
+                            $cell->delete();
+                        }
+                    }
+                }
+
+                // Move the existing task to startDay
+                $existingEntry->day = $startDay;
+                $existingEntry->note = 'URGENT — ' . ($existingEntry->note ?? '');
+                $existingEntry->save();
+
+            } else {
+                // Already at or before urgentDay — just mark it urgent
+                if ($existingEntry) {
+                    $existingEntry->note = 'URGENT — ' . ($existingEntry->note ?? '');
+                    $existingEntry->save();
+                }
+            }
+
+            return redirect()->route('schedule.index', ['year'=>$year,'month'=>$month])
+                ->with('success', "'{$taskName}' marked urgent on day {$startDay}!");
+        }
+
+        // ── MODE: new ─────────────────────────────────────────────────────────
+        // 1. Find any tasks currently in the urgent days and shift them forward
+        $lastUrgentDay = end($urgentDays);
+
+        // Collect all existing tasks in affected days, shift them beyond urgentDays
+        foreach ($urgentDays as $urgentDay) {
+            $existing = ProductionSchedule::where('year', $year)
+                ->where('month', $month)
+                ->where('process', $process)
+                ->where('day', $urgentDay)
+                ->first();
+
+            if ($existing) {
+                // Find next available day after the last urgent day
+                $shiftTo = $this->nextWorkingDay($year, $month, $lastUrgentDay);
+
+                // Check if shiftTo day already has a task — if so, merge
+                if ($shiftTo <= $daysInMonth) {
+                    $targetCell = ProductionSchedule::where(['year'=>$year,'month'=>$month,'process'=>$process,'day'=>$shiftTo])->first();
+                    if ($targetCell) {
+                        $targetCell->task = trim($targetCell->task . ', ' . $existing->task, ', ');
+                        $targetCell->save();
+                    } else {
+                        ProductionSchedule::create([
+                            'year'=>$year,'month'=>$month,'process'=>$process,
+                            'day'=>$shiftTo,'task'=>$existing->task,
+                            'note'=>$existing->note,'color'=>$existing->color,
+                        ]);
+                    }
+
+                    ScheduleDelayLog::create([
+                        'year'=>$year,'month'=>$month,'process'=>$process,
+                        'original_task'=>$existing->task,'original_day'=>$urgentDay,
+                        'shifted_to_day'=>$shiftTo,
+                        'reason_type'=>'urgent_task',
+                        'reason_detail'=>"New urgent task inserted: {$taskName} — {$reason}",
+                    ]);
+                }
+
+                $existing->delete();
+            }
+        }
+
+        // 2. Insert the urgent task across its days
+        $urgentColor = '#dc2626'; // red for urgent
+        foreach ($urgentDays as $idx => $urgentDay) {
+            if ($urgentDay > $daysInMonth) break;
+            $label = ($duration > 1) ? $taskName . ' (' . ($idx+1) . '/' . $duration . ')' : $taskName;
+            ProductionSchedule::updateOrCreate(
+                ['year'=>$year,'month'=>$month,'process'=>$process,'day'=>$urgentDay],
+                ['task'=>$label,'note'=>$note,'color'=>$urgentColor]
+            );
+        }
+
+        return redirect()->route('schedule.index', ['year'=>$year,'month'=>$month])
+            ->with('success', "Urgent task '{$taskName}' inserted! Displaced tasks shifted forward.");
+    }
+
+    /**
+     * Handle Machine Downtime — shift ALL tasks on the affected process(es) forward
+     * by the number of downtime days, starting from the downtime start day.
+     */
+    public function machineDowntime(Request $request)
+    {
+        $request->validate([
+            'year'            => 'required|integer',
+            'month'           => 'required|integer|min:1|max:12',
+            'process'         => 'required|string',
+            'downtime_day'    => 'required|integer|min:1|max:31',
+            'downtime_days'   => 'required|integer|min:1|max:30',
+            'reason'          => 'nullable|string|max:500',
+        ]);
+
+        $year         = (int) $request->year;
+        $month        = (int) $request->month;
+        $process      = $request->process;
+        $startDay     = (int) $request->downtime_day;
+        $downtimeDays = (int) $request->downtime_days;
+        $reason       = $request->reason ?? 'Machine downtime';
+        $daysInMonth  = Carbon::createFromDate($year, $month, 1)->daysInMonth;
+
+        // Collect the downtime working days (the days that are blocked)
+        $blockedDays = $this->collectWorkingDays($year, $month, $startDay, $downtimeDays);
+        $lastBlocked = end($blockedDays);
+
+        // Get all scheduled tasks on or after the downtime start day for this process
+        // We need to shift them ALL forward by downtimeDays (in working-day terms)
+        $affectedCells = ProductionSchedule::where('year', $year)
+            ->where('month', $month)
+            ->where('process', $process)
+            ->where('day', '>=', $startDay)
+            ->orderBy('day', 'desc') // process in reverse to avoid overwriting
+            ->get();
+
+        foreach ($affectedCells as $cell) {
+            // Calculate new day: shift forward by downtimeDays working days
+            $newDay = $cell->day;
+            $shifts = 0;
+            while ($shifts < $downtimeDays) {
+                $newDay++;
+                if ($newDay > $daysInMonth) break;
+                $dow = Carbon::createFromDate($year, $month, $newDay)->dayOfWeek;
+                if (!in_array($dow, [0, 6])) { // not weekend
+                    $shifts++;
+                }
+            }
+
+            if ($newDay > $daysInMonth) {
+                // Log it but can't shift within month — log as "pushed out of month"
+                ScheduleDelayLog::create([
+                    'year'=>$year,'month'=>$month,'process'=>$process,
+                    'original_task'=>$cell->task,'original_day'=>$cell->day,
+                    'shifted_to_day'=>$newDay, // will be > daysInMonth, just for record
+                    'reason_type'=>'machine_downtime',
+                    'reason_detail'=>"Machine downtime {$downtimeDays}d: {$reason}",
+                ]);
+                // Can't fit in this month — keep at last valid day with a note
+                $newDay = $daysInMonth;
+            }
+
+            ScheduleDelayLog::create([
+                'year'=>$year,'month'=>$month,'process'=>$process,
+                'original_task'=>$cell->task,'original_day'=>$cell->day,
+                'shifted_to_day'=>$newDay,
+                'reason_type'=>'machine_downtime',
+                'reason_detail'=>"Machine downtime {$downtimeDays}d: {$reason}",
+            ]);
+
+            // Move the cell
+            ProductionSchedule::where(['year'=>$year,'month'=>$month,'process'=>$process,'day'=>$cell->day])->delete();
+            ProductionSchedule::updateOrCreate(
+                ['year'=>$year,'month'=>$month,'process'=>$process,'day'=>$newDay],
+                ['task'=>$cell->task,'note'=>$cell->note ? $cell->note . ' (delayed)' : 'delayed by downtime','color'=>$cell->color]
+            );
+        }
+
+        // Mark the downtime days on the grid
+        foreach ($blockedDays as $bd) {
+            if ($bd > $daysInMonth) break;
+            $existing = ProductionSchedule::where(['year'=>$year,'month'=>$month,'process'=>$process,'day'=>$bd])->first();
+            if (!$existing) {
+                ProductionSchedule::create([
+                    'year'=>$year,'month'=>$month,'process'=>$process,
+                    'day'=>$bd,'task'=>'🔧 DOWNTIME','note'=>$reason,'color'=>'#78350f',
+                ]);
+            }
+        }
+
+        return redirect()->route('schedule.index', ['year'=>$year,'month'=>$month])
+            ->with('success', "Machine downtime logged! {$affectedCells->count()} tasks shifted forward by {$downtimeDays} working day(s).");
+    }
+
+    /**
+     * Show delay log for a month (for reporting).
+     */
+    public function delayReport(Request $request)
+    {
+        $year  = (int) $request->get('year', now()->year);
+        $month = (int) $request->get('month', now()->month);
+
+        $logs = ScheduleDelayLog::where('year', $year)
+            ->where('month', $month)
+            ->orderBy('original_day')
+            ->get();
+
+        return view('schedule.delay-report', compact('year', 'month', 'logs'));
+    }
+
+    /**
+     * Collect N consecutive working days (Mon–Fri) starting from startDay.
+     */
+    private function collectWorkingDays(int $year, int $month, int $startDay, int $count): array
+    {
+        $daysInMonth = Carbon::createFromDate($year, $month, 1)->daysInMonth;
+        $days = [];
+        $d = $startDay;
+        $collected = 0;
+        while ($collected < $count && $d <= $daysInMonth) {
+            $dow = Carbon::createFromDate($year, $month, $d)->dayOfWeek;
+            if (!in_array($dow, [0, 6])) {
+                $days[] = $d;
+                $collected++;
+            }
+            $d++;
+        }
+        return $days;
+    }
+
+    /**
+     * Get next working day after the given day.
+     */
+    private function nextWorkingDay(int $year, int $month, int $day): int
+    {
+        $daysInMonth = Carbon::createFromDate($year, $month, 1)->daysInMonth;
+        $d = $day + 1;
+        while ($d <= $daysInMonth) {
+            $dow = Carbon::createFromDate($year, $month, $d)->dayOfWeek;
+            if (!in_array($dow, [0, 6])) return $d;
+            $d++;
+        }
+        return $d; // may exceed month — caller must check
     }
 
     /**

@@ -373,6 +373,9 @@
             <button type="button" class="btn btn-sm btn-outline-dark" data-bs-toggle="modal" data-bs-target="#downtimeModal">
                 <i class="bi bi-tools"></i> Machine Downtime
             </button>
+            <a href="{{ route('schedule.delay-report', ['year'=>$year,'month'=>$month]) }}" class="btn btn-sm btn-outline-warning" target="_blank">
+                <i class="bi bi-journal-text"></i> Delay Log
+            </a>
             <button type="button" class="btn btn-sm btn-outline-warning" data-bs-toggle="modal" data-bs-target="#copyMonthModal">
                 <i class="bi bi-clipboard-plus"></i> Copy to Next Month
             </button>
@@ -738,68 +741,100 @@
 
 {{-- URGENT TASK MODAL --}}
 <div class="modal fade" id="urgentTaskModal" tabindex="-1">
-    <div class="modal-dialog modal-dialog-centered">
+    <div class="modal-dialog modal-dialog-centered modal-lg">
         <div class="modal-content" style="border-radius:16px;border:none">
             <div class="modal-header" style="background:#fee2e2;border-radius:16px 16px 0 0">
-                <h6 class="modal-title"><i class="bi bi-exclamation-triangle-fill text-danger"></i> Add Urgent Task</h6>
+                <h6 class="modal-title"><i class="bi bi-exclamation-triangle-fill text-danger"></i> Urgent Task / ការងារបន្ទាន់</h6>
                 <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
             </div>
             <div class="modal-body">
-                <form id="urgentTaskForm">
+                {{-- Mode selector --}}
+                <div class="mb-3">
+                    <label class="form-label fw-bold">Mode</label>
+                    <div class="d-flex gap-3">
+                        <div class="form-check">
+                            <input class="form-check-input" type="radio" name="urgentMode" id="modeNew" value="new" checked onchange="toggleUrgentMode()">
+                            <label class="form-check-label" for="modeNew">
+                                <strong>New Urgent Work</strong> — New job arrives, push planned work forward
+                            </label>
+                        </div>
+                        <div class="form-check">
+                            <input class="form-check-input" type="radio" name="urgentMode" id="modeExisting" value="existing" onchange="toggleUrgentMode()">
+                            <label class="form-check-label" for="modeExisting">
+                                <strong>Existing Work is Urgent</strong> — Move already-planned work to an earlier day
+                            </label>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="row g-3 mb-3">
+                    <div class="col-md-6">
+                        <label class="form-label">Process *</label>
+                        <select class="form-select" id="urgentProcess">
+                            <option value="Design">Design</option>
+                            <option value="Press" selected>Press</option>
+                            <option value="Folding">Folding</option>
+                            <option value="Gathering">Gathering</option>
+                            <option value="Staple">Staple</option>
+                            <option value="Binding">Binding</option>
+                            <option value="Cutting">Cutting</option>
+                            <option value="Packaging">Packaging</option>
+                            <option value="Delivery">Delivery</option>
+                            <option value="Other">Other</option>
+                        </select>
+                    </div>
+                    <div class="col-md-6" id="urgentDayWrap">
+                        <label class="form-label" id="urgentDayLabel">Start Day (in this month) *</label>
+                        <input type="number" class="form-control" id="urgentDay" value="{{ now()->day }}"
+                               min="1" max="{{ $daysInMonth }}" style="font-family:var(--font-latin)">
+                    </div>
+                </div>
+
+                {{-- New mode fields --}}
+                <div id="newModeFields">
                     <div class="mb-3">
                         <label class="form-label">Task Name *</label>
-                        <input type="text" class="form-control" id="urgentName" required placeholder="e.g. Emergency Reprint Level 1">
-                    </div>
-                    <div class="row g-3 mb-3">
-                        <div class="col-md-6">
-                            <label class="form-label">Process *</label>
-                            <select class="form-select" id="urgentProcess">
-                                <option value="Design">Design</option>
-                                <option value="Press" selected>Press</option>
-                                <option value="Folding">Folding</option>
-                                <option value="Gathering">Gathering</option>
-                                <option value="Staple">Staple</option>
-                                <option value="Binding">Binding</option>
-                                <option value="Cutting">Cutting</option>
-                                <option value="Packaging">Packaging</option>
-                                <option value="Delivery">Delivery</option>
-                                <option value="Other">Other</option>
-                            </select>
-                        </div>
-                        <div class="col-md-6">
-                            <label class="form-label">Duration (days) *</label>
-                            <input type="number" class="form-control" id="urgentDuration" value="1" min="1" max="30" style="font-family:var(--font-latin)">
-                        </div>
-                    </div>
-                    <div class="row g-3 mb-3">
-                        <div class="col-md-6">
-                            <label class="form-label">Start Date *</label>
-                            <input type="date" class="form-control" id="urgentStart" value="2026-06-23" style="font-family:var(--font-latin)">
-                        </div>
-                        <div class="col-md-6">
-                            <label class="form-label">Machine</label>
-                            <select class="form-select" id="urgentMachine">
-                                <option value="">— Any —</option>
-                                @foreach(\App\Models\Machine::where('status','operational')->get() as $m)
-                                    <option value="{{ $m->id }}">{{ $m->code }} — {{ $m->name }}</option>
-                                @endforeach
-                            </select>
-                        </div>
+                        <input type="text" class="form-control" id="urgentName"
+                               placeholder="e.g. Emergency Reprint Level 1" list="taskSuggestions2">
+                        <datalist id="taskSuggestions2">
+                            <option value="Listening Textbook"><option value="Listening Workbook">
+                            <option value="Reading Textbook"><option value="Reading Workbook">
+                            <option value="Writing Textbook"><option value="Test Book">
+                            <option value="All Cover"><option value="Song">
+                        </datalist>
                     </div>
                     <div class="mb-3">
-                        <label class="form-label">Notes</label>
-                        <input type="text" class="form-control" id="urgentNotes" placeholder="Why is this urgent?">
+                        <label class="form-label">Duration (working days) *</label>
+                        <input type="number" class="form-control" id="urgentDuration" value="1" min="1" max="30"
+                               style="font-family:var(--font-latin);width:100px">
                     </div>
-                    <div style="background:#fef2f2;border:1px solid #fca5a5;border-radius:8px;padding:.75rem;font-size:.82rem;color:#991b1b">
-                        <i class="bi bi-info-circle me-1"></i>
-                        <strong>Auto-shift:</strong> Standard tasks on the same days will automatically be paused and rescheduled after this urgent task completes.
+                </div>
+
+                {{-- Existing mode fields --}}
+                <div id="existingModeFields" style="display:none">
+                    <div class="mb-3">
+                        <label class="form-label">Which task to make urgent? *</label>
+                        <input type="text" class="form-control" id="urgentExistingName"
+                               placeholder="Type exact task name as on the grid (e.g. Listening Textbook)">
+                        <div class="form-text">This task will be moved to the day above. Work between that day and its current position will shift forward.</div>
                     </div>
-                </form>
+                </div>
+
+                <div class="mb-3">
+                    <label class="form-label">Reason / Why urgent?</label>
+                    <input type="text" class="form-control" id="urgentReason"
+                           placeholder="e.g. Customer order, Deadline moved up">
+                </div>
+
+                <div style="background:#fef2f2;border:1px solid #fca5a5;border-radius:8px;padding:.75rem;font-size:.82rem;color:#991b1b">
+                    <i class="bi bi-info-circle me-1"></i>
+                    <strong>Auto-shift:</strong> Tasks on the same process that are displaced will automatically move to the next available working day, and a delay log is recorded for the monthly report.
+                </div>
             </div>
             <div class="modal-footer">
                 <button type="button" class="btn btn-secondary btn-sm" data-bs-dismiss="modal">Cancel</button>
                 <button type="button" class="btn btn-danger btn-sm" onclick="submitUrgentTask()">
-                    <i class="bi bi-exclamation-triangle-fill"></i> Schedule Urgent
+                    <i class="bi bi-exclamation-triangle-fill"></i> Apply Urgent
                 </button>
             </div>
         </div>
@@ -811,44 +846,67 @@
     <div class="modal-dialog modal-dialog-centered">
         <div class="modal-content" style="border-radius:16px;border:none">
             <div class="modal-header" style="background:#fef3c7;border-radius:16px 16px 0 0">
-                <h6 class="modal-title"><i class="bi bi-tools text-warning"></i> Log Machine Downtime</h6>
+                <h6 class="modal-title"><i class="bi bi-tools text-warning"></i> Machine Downtime / ម៉ាស៊ីនខូច</h6>
                 <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
             </div>
             <div class="modal-body">
-                <form id="downtimeForm">
-                    <div class="row g-3 mb-3">
-                        <div class="col-md-6">
-                            <label class="form-label">Machine *</label>
-                            <select class="form-select" id="downtimeMachine" required>
-                                <option value="">Select machine...</option>
-                                @foreach(\App\Models\Machine::all() as $m)
-                                    <option value="{{ $m->id }}">{{ $m->code }} — {{ $m->name }} ({{ $m->status }})</option>
-                                @endforeach
-                            </select>
-                        </div>
-                        <div class="col-md-6">
-                            <label class="form-label">Duration (hours) *</label>
-                            <input type="number" class="form-control" id="downtimeHours" value="8" min="1" max="720" style="font-family:var(--font-latin)">
-                        </div>
+                <div class="row g-3 mb-3">
+                    <div class="col-md-6">
+                        <label class="form-label">Process (Row) *</label>
+                        <select class="form-select" id="downtimeProcess">
+                            <option value="Design">Design</option>
+                            <option value="Press" selected>Press</option>
+                            <option value="Folding">Folding</option>
+                            <option value="Gathering">Gathering</option>
+                            <option value="Staple">Staple</option>
+                            <option value="Binding">Binding</option>
+                            <option value="Cutting">Cutting</option>
+                            <option value="Packaging">Packaging</option>
+                            <option value="Delivery">Delivery</option>
+                            <option value="Other">Other</option>
+                        </select>
+                        <div class="form-text">Which production row is affected?</div>
                     </div>
-                    <div class="mb-3">
-                        <label class="form-label">Start Time *</label>
-                        <input type="datetime-local" class="form-control" id="downtimeStart" style="font-family:var(--font-latin)">
+                    <div class="col-md-6">
+                        <label class="form-label">Start Day (in this month) *</label>
+                        <input type="number" class="form-control" id="downtimeDay" value="{{ now()->day }}"
+                               min="1" max="{{ $daysInMonth }}" style="font-family:var(--font-latin)">
                     </div>
-                    <div class="mb-3">
-                        <label class="form-label">Reason</label>
-                        <input type="text" class="form-control" id="downtimeReason" placeholder="e.g. Maintenance, Breakdown, Repair">
+                </div>
+                <div class="row g-3 mb-3">
+                    <div class="col-md-6">
+                        <label class="form-label">Downtime Duration (working days) *</label>
+                        <input type="number" class="form-control" id="downtimeDays" value="1" min="1" max="30"
+                               style="font-family:var(--font-latin)">
+                        <div class="form-text">1 day = 1 full working day blocked</div>
                     </div>
-                    <div style="background:#fffbeb;border:1px solid #fde68a;border-radius:8px;padding:.75rem;font-size:.82rem;color:#92400e">
-                        <i class="bi bi-info-circle me-1"></i>
-                        <strong>Cascade shift:</strong> All tasks on this machine during the downtime will automatically shift forward.
+                    <div class="col-md-6">
+                        <label class="form-label">Machine (for record)</label>
+                        <select class="form-select" id="downtimeMachine">
+                            <option value="">— None / Unknown —</option>
+                            @foreach(\App\Models\Machine::all() as $m)
+                                <option value="{{ $m->code }}">{{ $m->code }} — {{ $m->name }}</option>
+                            @endforeach
+                        </select>
                     </div>
-                </form>
+                </div>
+                <div class="mb-3">
+                    <label class="form-label">Reason *</label>
+                    <input type="text" class="form-control" id="downtimeReason"
+                           placeholder="e.g. Press breakdown, Maintenance, Power outage">
+                </div>
+                <div style="background:#fffbeb;border:1px solid #fde68a;border-radius:8px;padding:.75rem;font-size:.82rem;color:#92400e">
+                    <i class="bi bi-info-circle me-1"></i>
+                    <strong>Cascade shift:</strong> ALL tasks on the selected process row from this day forward will shift by the downtime duration. A delay log entry is recorded for each shifted task.
+                </div>
             </div>
             <div class="modal-footer">
+                <a href="{{ route('schedule.delay-report', ['year'=>$year,'month'=>$month]) }}" class="btn btn-sm btn-outline-secondary me-auto" target="_blank">
+                    <i class="bi bi-journal-text"></i> View Delay Log
+                </a>
                 <button type="button" class="btn btn-secondary btn-sm" data-bs-dismiss="modal">Cancel</button>
                 <button type="button" class="btn btn-warning btn-sm" onclick="submitDowntime()">
-                    <i class="bi bi-tools"></i> Log Downtime
+                    <i class="bi bi-tools"></i> Apply Downtime
                 </button>
             </div>
         </div>
@@ -986,79 +1044,105 @@ document.addEventListener('DOMContentLoaded', function() {
 });
 
 
-// ── Urgent Task + Downtime API integration ──────────────
+// ── Urgent Task — operates on production_schedules grid ──────────────────
+function toggleUrgentMode() {
+    const mode = document.querySelector('input[name="urgentMode"]:checked').value;
+    document.getElementById('newModeFields').style.display = (mode === 'new') ? '' : 'none';
+    document.getElementById('existingModeFields').style.display = (mode === 'existing') ? '' : 'none';
+    document.getElementById('urgentDayLabel').textContent =
+        (mode === 'existing') ? 'Move TO this day *' : 'Start Day (in this month) *';
+}
+
 function submitUrgentTask() {
-    const data = {
-        name: document.getElementById("urgentName").value,
-        process: document.getElementById("urgentProcess").value,
-        duration_days: parseInt(document.getElementById("urgentDuration").value),
-        priority: "urgent",
-        scheduled_start_date: document.getElementById("urgentStart").value,
-        assigned_machine_id: document.getElementById("urgentMachine").value || null,
-        notes: document.getElementById("urgentNotes").value,
-    };
-    
-    if (!data.name || !data.scheduled_start_date) {
-        showToast("warning", "Please fill in task name and start date");
+    const mode    = document.querySelector('input[name="urgentMode"]:checked').value;
+    const process = document.getElementById('urgentProcess').value;
+    const day     = parseInt(document.getElementById('urgentDay').value);
+    const reason  = document.getElementById('urgentReason').value;
+
+    if (!process || !day) {
+        showToast('warning', 'Please select process and day');
         return;
     }
 
-    fetch("/api/tasks", {
-        method: "POST",
-        headers: {"Content-Type": "application/json", "Accept": "application/json"},
-        body: JSON.stringify(data)
-    })
-    .then(r => r.json())
-    .then(res => {
-        if (res.ok) {
-            showToast("success", res.message || "Urgent task scheduled!");
-            bootstrap.Modal.getInstance(document.getElementById("urgentTaskModal")).hide();
-            setTimeout(() => location.reload(), 1500);
-        } else {
-            showToast("error", res.message || "Failed to schedule");
-        }
-    })
-    .catch(err => showToast("error", "Connection error: " + err.message));
+    let taskName = '';
+    let duration = 1;
+
+    if (mode === 'new') {
+        taskName = document.getElementById('urgentName').value.trim();
+        duration = parseInt(document.getElementById('urgentDuration').value) || 1;
+        if (!taskName) { showToast('warning', 'Please enter a task name'); return; }
+    } else {
+        taskName = document.getElementById('urgentExistingName').value.trim();
+        if (!taskName) { showToast('warning', 'Please enter the task name to make urgent'); return; }
+    }
+
+    const form = document.createElement('form');
+    form.method = 'POST';
+    form.action = '/schedule/urgent';
+
+    const fields = {
+        _token:        document.querySelector('meta[name="csrf-token"]').content,
+        year:          '{{ $year }}',
+        month:         '{{ $month }}',
+        process:       process,
+        urgent_day:    day,
+        duration_days: duration,
+        task_name:     taskName,
+        note:          'URGENT',
+        reason:        reason,
+        mode:          mode,
+    };
+
+    Object.entries(fields).forEach(([k, v]) => {
+        const inp = document.createElement('input');
+        inp.type = 'hidden'; inp.name = k; inp.value = v;
+        form.appendChild(inp);
+    });
+
+    document.body.appendChild(form);
+    form.submit();
 }
 
+// ── Machine Downtime — operates on production_schedules grid ──────────────
 function submitDowntime() {
-    const data = {
-        machine_id: parseInt(document.getElementById("downtimeMachine").value),
-        start_time: document.getElementById("downtimeStart").value,
-        duration_hours: parseInt(document.getElementById("downtimeHours").value),
-        reason: document.getElementById("downtimeReason").value,
-    };
-    
-    if (!data.machine_id || !data.start_time) {
-        showToast("warning", "Please select machine and start time");
+    const process  = document.getElementById('downtimeProcess').value;
+    const day      = parseInt(document.getElementById('downtimeDay').value);
+    const days     = parseInt(document.getElementById('downtimeDays').value) || 1;
+    const reason   = document.getElementById('downtimeReason').value.trim();
+    const machine  = document.getElementById('downtimeMachine').value;
+
+    if (!process || !day) {
+        showToast('warning', 'Please select process and start day');
+        return;
+    }
+    if (!reason) {
+        showToast('warning', 'Please provide a reason for the downtime');
         return;
     }
 
-    fetch("/api/downtime", {
-        method: "POST",
-        headers: {"Content-Type": "application/json", "Accept": "application/json"},
-        body: JSON.stringify(data)
-    })
-    .then(r => r.json())
-    .then(res => {
-        if (res.ok) {
-            showToast("success", res.message || "Downtime logged — tasks rescheduled!");
-            bootstrap.Modal.getInstance(document.getElementById("downtimeModal")).hide();
-            setTimeout(() => location.reload(), 1500);
-        } else {
-            showToast("error", res.message || "Failed");
-        }
-    })
-    .catch(err => showToast("error", "Connection error: " + err.message));
+    const form = document.createElement('form');
+    form.method = 'POST';
+    form.action = '/schedule/downtime';
+
+    const fields = {
+        _token:         document.querySelector('meta[name="csrf-token"]').content,
+        year:           '{{ $year }}',
+        month:          '{{ $month }}',
+        process:        process,
+        downtime_day:   day,
+        downtime_days:  days,
+        reason:         (machine ? machine + ' — ' : '') + reason,
+    };
+
+    Object.entries(fields).forEach(([k, v]) => {
+        const inp = document.createElement('input');
+        inp.type = 'hidden'; inp.name = k; inp.value = v;
+        form.appendChild(inp);
+    });
+
+    document.body.appendChild(form);
+    form.submit();
 }
-
-// Load machines into dropdowns
-fetch("/api/tasks?from=2026-06-01&to=2026-06-30")
-    .then(r => r.json())
-    .catch(() => {});
-
-// Set default datetime for downtime
-document.getElementById("downtimeStart").value = new Date().toISOString().slice(0,16);
 
 </script>
 @endsection

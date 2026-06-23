@@ -108,13 +108,16 @@ Route::prefix('machines')->name('machines.')->group(function () {
 
 // ── Production Schedule ───────────────────────────────────
 Route::prefix('schedule')->name('schedule.')->group(function () {
-    Route::get('/',          [ScheduleController::class, 'index'])->name('index');
-    Route::post('/store',    [ScheduleController::class, 'store'])->name('store');
-    Route::post('/bulk',     [ScheduleController::class, 'bulkSave'])->name('bulk');
-    Route::get('/export',    [ScheduleController::class, 'exportCalendar'])->name('export');
-    Route::post('/alert',    [ScheduleController::class, 'sendTelegramAlert'])->name('alert');
-    Route::post('/copy',     [ScheduleController::class, 'copyToMonth'])->name('copy');
-    Route::post('/clear',    [ScheduleController::class, 'clearMonth'])->name('clear');
+    Route::get('/',               [ScheduleController::class, 'index'])->name('index');
+    Route::post('/store',         [ScheduleController::class, 'store'])->name('store');
+    Route::post('/bulk',          [ScheduleController::class, 'bulkSave'])->name('bulk');
+    Route::get('/export',         [ScheduleController::class, 'exportCalendar'])->name('export');
+    Route::post('/alert',         [ScheduleController::class, 'sendTelegramAlert'])->name('alert');
+    Route::post('/copy',          [ScheduleController::class, 'copyToMonth'])->name('copy');
+    Route::post('/clear',         [ScheduleController::class, 'clearMonth'])->name('clear');
+    Route::post('/urgent',        [ScheduleController::class, 'urgentTask'])->name('urgent');
+    Route::post('/downtime',      [ScheduleController::class, 'machineDowntime'])->name('downtime');
+    Route::get('/delay-report',   [ScheduleController::class, 'delayReport'])->name('delay-report');
 });
 
 // ── Analytics ─────────────────────────────────────────────
