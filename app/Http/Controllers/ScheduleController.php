@@ -22,6 +22,7 @@ class ScheduleController extends Controller
         'Cutting',
         'Packaging',
         'Delivery',
+        'Other',
     ];
 
     /**

@@ -19,6 +19,7 @@
         'Cutting'   => '#009688',  // teal
         'Packaging' => '#4caf50',  // green
         'Delivery'  => '#ff5722',  // deep orange
+        'Other'     => '#607d8b',  // blue-grey
     ];
 
     // Build day info
@@ -353,7 +354,7 @@
             </a>
         </div>
         <div class="d-flex gap-2 flex-wrap">
-            <a href="{{ route('schedule.index', ['year' => now()->year, 'month' => now()->month]) }}" class="btn btn-sm btn-outline-primary">
+            <a href="{{ route('schedule.index', ['year' => now()->year, 'month' => now()->month]) }}#today-col" id="todayBtn"  class="btn btn-sm btn-outline-primary">
                 <i class="bi bi-calendar-event"></i> ថ្ងៃនេះ
             </a>
             <a href="{{ route('schedule.export', ['year' => $year, 'month' => $month, 'format' => 'html']) }}" target="_blank" class="btn btn-sm btn-outline-success">
@@ -441,7 +442,9 @@
                         Process \ Date
                     </th>
                     @foreach($days as $dayInfo)
-                        <th class="{{ in_array($dayInfo['dow'], [0, 6]) ? 'weekend' : '' }}">
+                        @php $isTodayHeader = ($year == now()->year && $month == now()->month && $dayInfo['day'] == now()->day); @endphp
+                        <th class="{{ in_array($dayInfo['dow'], [0, 6]) ? 'weekend' : '' }} {{ $isTodayHeader ? 'today' : '' }}"
+                            {!! $isTodayHeader ? 'id="today-col"' : '' !!}>
                             {{ $dayInfo['label'] }}
                         </th>
                     @endforeach
@@ -464,6 +467,7 @@
                                 $entry = $procByDay->get($d);
                                 $isWeekend = in_array($dayInfo['dow'], [0, 6]);
                                 $isToday = ($year == now()->year && $month == now()->month && $d == now()->day);
+                                $todayId = $isToday ? 'id="today-col"' : '';
                                 $cellClass = 'day-cell';
                                 if ($isWeekend) $cellClass .= ' weekend';
                                 if ($isToday) $cellClass .= ' today';
@@ -804,5 +808,20 @@
         const daySelect = document.querySelector('[name="day"]');
         if (daySelect) daySelect.dispatchEvent(new Event('change'));
     });
+
+// ── Scroll to Today column on page load ──────────────────
+document.addEventListener('DOMContentLoaded', function() {
+    const todayCol = document.getElementById('today-col');
+    if (todayCol) {
+        const wrapper = document.querySelector('.schedule-grid-wrapper');
+        if (wrapper) {
+            // Calculate scroll position: center today in viewport
+            const colLeft = todayCol.offsetLeft;
+            const wrapperWidth = wrapper.clientWidth;
+            const scrollTo = colLeft - (wrapperWidth / 3);
+            wrapper.scrollLeft = Math.max(0, scrollTo);
+        }
+    }
+});
 </script>
 @endsection
