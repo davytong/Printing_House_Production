@@ -389,77 +389,105 @@ class ScheduleController extends Controller
         $urgentDays = $this->collectWorkingDays($year, $month, $startDay, $duration);
 
         if ($mode === 'existing') {
-            // The task_name refers to ONE task inside a cell (possibly multi-task comma list).
-            // Find the cell that contains it:
-            $existingEntry = ProductionSchedule::where('year', $year)
+            // ── Find ALL cells containing this task (it may span multiple days) ──
+            // e.g. "Listening Textbook" might appear on day 28 AND day 29 if span=2
+            $sourceCells = ProductionSchedule::where('year', $year)
                 ->where('month', $month)
                 ->where('process', $process)
                 ->where('task', 'like', "%{$taskName}%")
                 ->where('day', '>=', $startDay)
                 ->orderBy('day')
-                ->first();
+                ->get();
 
-            if ($existingEntry && $existingEntry->day > $startDay) {
-                $origDay = $existingEntry->day;
+            if ($sourceCells->isEmpty()) {
+                return redirect()->route('schedule.index', ['year'=>$year,'month'=>$month])
+                    ->with('error', "Task '{$taskName}' not found on or after day {$startDay} for {$process}.");
+            }
 
-                // ── STEP 1: Remove ONLY $taskName from the source cell's comma list ──
-                $remainingTasks = array_values(array_filter(
-                    array_map('trim', explode(',', $existingEntry->task)),
-                    fn($t) => strcasecmp($t, $taskName) !== 0
-                ));
+            $firstSourceDay = $sourceCells->first()->day;
 
-                if (empty($remainingTasks)) {
-                    // Cell only had this one task — delete the cell
-                    $existingEntry->delete();
-                } else {
-                    // Other tasks remain — keep the cell, just remove this task
-                    $existingEntry->task = implode(', ', $remainingTasks);
-                    $existingEntry->save();
+            // Auto-detect span: how many consecutive cells contain this task
+            $detectedSpan = $sourceCells->count();
+            // Use the user-supplied duration if given, otherwise use detected span
+            $effectiveDuration = max($duration, $detectedSpan);
+
+            // Target days where the urgent task will be placed
+            $targetDays = $this->collectWorkingDays($year, $month, $startDay, $effectiveDuration);
+
+            if ($firstSourceDay <= $startDay) {
+                // Task is already at or before the target day — just mark it urgent in place
+                foreach ($sourceCells as $cell) {
+                    $tasks = array_map('trim', explode(',', $cell->task));
+                    $tasks = array_map(fn($t) =>
+                        (strcasecmp(trim($t), $taskName) === 0 ||
+                         strcasecmp(trim($t), $taskName . ' (URGENT)') === 0)
+                            ? $taskName . ' (URGENT)' : $t,
+                        $tasks
+                    );
+                    $cell->task = implode(', ', $tasks);
+                    $cell->color = '#dc2626';
+                    $cell->save();
                 }
+                return redirect()->route('schedule.index', ['year'=>$year,'month'=>$month])
+                    ->with('success', "'{$taskName}' marked as urgent in place.");
+            }
 
-                // ── STEP 2: Insert just this task into the target day ──────────
+            // ── STEP 1: Remove this task from ALL its source cells ─────────────
+            foreach ($sourceCells as $cell) {
+                $remaining = array_values(array_filter(
+                    array_map('trim', explode(',', $cell->task)),
+                    fn($t) => strcasecmp(trim($t), $taskName) !== 0
+                        && strcasecmp(trim($t), $taskName . ' (URGENT)') !== 0
+                ));
+                if (empty($remaining)) {
+                    $cell->delete();
+                } else {
+                    $cell->task = implode(', ', $remaining);
+                    $cell->save();
+                }
+                // Log each moved day
+                ScheduleDelayLog::create([
+                    'year'         => $year,
+                    'month'        => $month,
+                    'process'      => $process,
+                    'original_task'=> $taskName,
+                    'original_day' => $cell->day,
+                    'shifted_to_day' => $startDay,
+                    'reason_type'  => 'urgent_task',
+                    'reason_detail'=> "Made urgent — moved from day {$cell->day} to day {$startDay}: {$reason}",
+                ]);
+            }
+
+            // ── STEP 2: Place the urgent task on target days (one cell per day) ─
+            foreach ($targetDays as $idx => $targetDay) {
+                if ($targetDay > $daysInMonth) break;
+                $label = ($effectiveDuration > 1)
+                    ? $taskName . ' (' . ($idx + 1) . '/' . $effectiveDuration . ') URGENT'
+                    : $taskName . ' (URGENT)';
+
                 $targetCell = ProductionSchedule::where([
-                    'year'=>$year,'month'=>$month,'process'=>$process,'day'=>$startDay
+                    'year'=>$year,'month'=>$month,'process'=>$process,'day'=>$targetDay
                 ])->first();
 
                 if ($targetCell) {
-                    // Add this task to the front of the existing tasks on target day
-                    $targetTasks = array_map('trim', explode(',', $targetCell->task));
-                    array_unshift($targetTasks, $taskName . ' (URGENT)');
-                    $targetCell->task = implode(', ', $targetTasks);
+                    // Prepend urgent task to whatever is already there
+                    $existing = array_map('trim', explode(',', $targetCell->task));
+                    array_unshift($existing, $label);
+                    $targetCell->task  = implode(', ', $existing);
+                    $targetCell->color = '#dc2626';
                     $targetCell->save();
                 } else {
                     ProductionSchedule::create([
                         'year'=>$year,'month'=>$month,'process'=>$process,
-                        'day'=>$startDay,'task'=>$taskName . ' (URGENT)',
+                        'day'=>$targetDay,'task'=>$label,
                         'note'=>'URGENT','color'=>'#dc2626',
                     ]);
                 }
-
-                ScheduleDelayLog::create([
-                    'year'=>$year,'month'=>$month,'process'=>$process,
-                    'original_task'=>$taskName,'original_day'=>$origDay,
-                    'shifted_to_day'=>$startDay,
-                    'reason_type'=>'urgent_task',
-                    'reason_detail'=>"Made urgent — moved earlier: {$reason}",
-                ]);
-
-            } else {
-                // Already at or before urgentDay — just mark it urgent in place
-                if ($existingEntry) {
-                    // Replace just this task name with "task (URGENT)" in the comma list
-                    $tasks = array_map('trim', explode(',', $existingEntry->task));
-                    $tasks = array_map(fn($t) =>
-                        strcasecmp($t, $taskName) === 0 ? $taskName . ' (URGENT)' : $t,
-                        $tasks
-                    );
-                    $existingEntry->task = implode(', ', $tasks);
-                    $existingEntry->save();
-                }
             }
 
+            $daysWord = $effectiveDuration > 1 ? "{$effectiveDuration} days" : "day {$startDay}";
             return redirect()->route('schedule.index', ['year'=>$year,'month'=>$month])
-                ->with('success', "'{$taskName}' moved to day {$startDay} as urgent. Other tasks on original day are unchanged.");
+                ->with('success', "'{$taskName}' moved to {$daysWord} as urgent. Other tasks on original day(s) unchanged.");
         }
 
         // ── MODE: new ─────────────────────────────────────────────────────────
@@ -570,38 +598,54 @@ class ScheduleController extends Controller
                 $newDay++;
                 if ($newDay > $daysInMonth) break;
                 $dow = Carbon::createFromDate($year, $month, $newDay)->dayOfWeek;
-                if (!in_array($dow, [0, 6])) { // not weekend
+                if (!in_array($dow, [0, 6])) {
                     $shifts++;
                 }
             }
 
-            if ($newDay > $daysInMonth) {
-                // Log it but can't shift within month — log as "pushed out of month"
-                ScheduleDelayLog::create([
-                    'year'=>$year,'month'=>$month,'process'=>$process,
-                    'original_task'=>$cell->task,'original_day'=>$cell->day,
-                    'shifted_to_day'=>$newDay, // will be > daysInMonth, just for record
-                    'reason_type'=>'machine_downtime',
-                    'reason_detail'=>"Machine downtime {$downtimeDays}d: {$reason}",
-                ]);
-                // Can't fit in this month — keep at last valid day with a note
-                $newDay = $daysInMonth;
-            }
+            $loggedDay = min($newDay, $daysInMonth);
 
             ScheduleDelayLog::create([
-                'year'=>$year,'month'=>$month,'process'=>$process,
-                'original_task'=>$cell->task,'original_day'=>$cell->day,
-                'shifted_to_day'=>$newDay,
-                'reason_type'=>'machine_downtime',
-                'reason_detail'=>"Machine downtime {$downtimeDays}d: {$reason}",
+                'year'         => $year,
+                'month'        => $month,
+                'process'      => $process,
+                'original_task'=> $cell->task,
+                'original_day' => $cell->day,
+                'shifted_to_day'=> $loggedDay,
+                'reason_type'  => 'machine_downtime',
+                'reason_detail'=> "Machine downtime {$downtimeDays}d: {$reason}",
             ]);
 
-            // Move the cell
-            ProductionSchedule::where(['year'=>$year,'month'=>$month,'process'=>$process,'day'=>$cell->day])->delete();
-            ProductionSchedule::updateOrCreate(
-                ['year'=>$year,'month'=>$month,'process'=>$process,'day'=>$newDay],
-                ['task'=>$cell->task,'note'=>$cell->note ? $cell->note . ' (delayed)' : 'delayed by downtime','color'=>$cell->color]
-            );
+            // Delete the original cell
+            ProductionSchedule::where([
+                'year'=>$year,'month'=>$month,'process'=>$process,'day'=>$cell->day
+            ])->delete();
+
+            if ($newDay <= $daysInMonth) {
+                // Merge with whatever is already on the target day (another shifted cell)
+                $targetCell = ProductionSchedule::where([
+                    'year'=>$year,'month'=>$month,'process'=>$process,'day'=>$newDay
+                ])->first();
+
+                if ($targetCell) {
+                    $existingTasks = array_map('trim', explode(',', $targetCell->task));
+                    $incomingTasks = array_map('trim', explode(',', $cell->task));
+                    $merged = array_unique(array_merge($existingTasks, $incomingTasks));
+                    $targetCell->task = implode(', ', $merged);
+                    $targetCell->save();
+                } else {
+                    ProductionSchedule::create([
+                        'year'    => $year,
+                        'month'   => $month,
+                        'process' => $process,
+                        'day'     => $newDay,
+                        'task'    => $cell->task,
+                        'note'    => ($cell->note ? $cell->note . ' — ' : '') . 'delayed: ' . $reason,
+                        'color'   => $cell->color,
+                    ]);
+                }
+            }
+            // If newDay > daysInMonth the task falls outside this month — logged above
         }
 
         // Mark the downtime days on the grid
@@ -621,7 +665,7 @@ class ScheduleController extends Controller
     }
 
     /**
-     * Show delay log for a month (for reporting).
+     * Show delay log + monthly work summary for reporting.
      */
     public function delayReport(Request $request)
     {
@@ -633,7 +677,49 @@ class ScheduleController extends Controller
             ->orderBy('original_day')
             ->get();
 
-        return view('schedule.delay-report', compact('year', 'month', 'logs'));
+        // Monthly work summary from production_schedules
+        $allCells = ProductionSchedule::where('year', $year)
+            ->where('month', $month)
+            ->whereNotNull('task')
+            ->orderBy('process')
+            ->orderBy('day')
+            ->get();
+
+        // Build per-process summary
+        $processSummary = [];
+        foreach ($allCells as $cell) {
+            $proc = $cell->process;
+            if (!isset($processSummary[$proc])) {
+                $processSummary[$proc] = ['tasks' => [], 'days' => 0];
+            }
+            $processSummary[$proc]['days']++;
+            foreach (array_map('trim', explode(',', $cell->task)) as $t) {
+                if ($t && !str_starts_with($t, '🔧')) {
+                    $clean = preg_replace('/\s*\(\d+\/\d+\)\s*(URGENT)?/', '', $t);
+                    $clean = str_replace(' (URGENT)', '', $clean);
+                    $processSummary[$proc]['tasks'][$clean] = ($processSummary[$proc]['tasks'][$clean] ?? 0) + 1;
+                }
+            }
+        }
+
+        // Stats
+        $today = now()->day;
+        $daysInMonth = Carbon::createFromDate($year, $month, 1)->daysInMonth;
+        $completedCells = ProductionSchedule::where('year', $year)
+            ->where('month', $month)
+            ->where('day', '<', ($year == now()->year && $month == now()->month) ? $today : $daysInMonth + 1)
+            ->whereNotNull('task')
+            ->count();
+
+        $delayedTasks   = $logs->where('reason_type', 'urgent_task')->count();
+        $downtimeEvents = $logs->where('reason_type', 'machine_downtime')->groupBy('reason_detail')->count();
+        $totalDelayDays = $logs->sum(fn($l) => max(0, $l->shifted_to_day - $l->original_day));
+
+        return view('schedule.delay-report', compact(
+            'year', 'month', 'logs',
+            'processSummary', 'completedCells', 'allCells',
+            'delayedTasks', 'downtimeEvents', 'totalDelayDays', 'daysInMonth'
+        ));
     }
 
     /**
