@@ -120,6 +120,9 @@ Route::prefix('schedule')->name('schedule.')->group(function () {
 // ── Analytics ─────────────────────────────────────────────
 Route::get('/analytics', [AnalyticsController::class, 'index'])->name('analytics.index');
 
+// ── Production Tasks (advanced scheduling) ────────────────
+Route::get('/tasks', [App\Http\Controllers\ProductionTaskController::class, 'index'])->name('tasks.index');
+
 // ── Stock Management ──────────────────────────────────────
 Route::prefix('stock')->name('stock.')->group(function () {
     // Materials CRUD
