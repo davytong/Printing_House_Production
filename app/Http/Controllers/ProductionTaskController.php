@@ -245,4 +245,55 @@ class ProductionTaskController extends Controller
 
         return response()->json(['ok' => true, 'logs' => $logs]);
     }
+
+    /**
+     * GET /api/tasks/today — Today's active work queue per machine.
+     */
+    public function todayQueue(): JsonResponse
+    {
+        $queue = $this->scheduler->getTodaysWorkQueue();
+        return response()->json(['ok' => true, 'queue' => $queue]);
+    }
+
+    /**
+     * GET /api/tasks/track/{jobName} — Track a job through the pipeline.
+     */
+    public function trackJob(string $jobName): JsonResponse
+    {
+        $tracking = $this->scheduler->trackJob($jobName);
+        return response()->json(['ok' => true, 'data' => $tracking]);
+    }
+
+    /**
+     * GET /api/machines/utilization — Machine utilization this month.
+     */
+    public function machineUtilization(Request $request): JsonResponse
+    {
+        $from = Carbon::parse($request->input('from', now()->startOfMonth()));
+        $to   = Carbon::parse($request->input('to', now()->endOfMonth()));
+
+        $utilization = $this->scheduler->getMachineUtilization($from, $to);
+        return response()->json(['ok' => true, 'data' => $utilization]);
+    }
+
+    /**
+     * GET /api/tasks/upcoming — Tasks in next 7 days.
+     */
+    public function upcoming(Request $request): JsonResponse
+    {
+        $days = (int) $request->input('days', 7);
+        $tasks = $this->scheduler->getUpcoming($days);
+
+        return response()->json(['ok' => true, 'tasks' => $tasks->map(fn($t) => [
+            'id'       => $t->id,
+            'name'     => $t->name,
+            'process'  => $t->process,
+            'priority' => $t->priority,
+            'status'   => $t->status,
+            'start'    => $t->scheduled_start_date->format('Y-m-d'),
+            'end'      => $t->scheduled_end_date?->format('Y-m-d'),
+            'machine'  => $t->machine?->name,
+            'days_until'=> max(0, now()->diffInDays($t->scheduled_start_date, false)),
+        ])]);
+    }
 }

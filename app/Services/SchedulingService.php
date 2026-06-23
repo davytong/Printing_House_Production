@@ -268,6 +268,147 @@ class SchedulingService
     // ── Helpers ──────────────────────────────────────────
 
     /**
+     * PRODUCTION TRACKING: Get today's active work for each machine.
+     */
+    public function getTodaysWorkQueue(): array
+    {
+        $today = now()->toDateString();
+
+        $tasks = ProductionTask::with('machine')
+            ->where('scheduled_start_date', '<=', $today)
+            ->where(function ($q) use ($today) {
+                $q->where('scheduled_end_date', '>=', $today)
+                  ->orWhereNull('scheduled_end_date');
+            })
+            ->whereNotIn('status', ['completed', 'cancelled'])
+            ->orderByRaw("FIELD(priority, 'urgent', 'standard')")
+            ->orderBy('sort_order')
+            ->get();
+
+        // Group by machine
+        $queue = [];
+        foreach ($tasks as $task) {
+            $machineKey = $task->assigned_machine_id ?? 'unassigned';
+            $queue[$machineKey][] = [
+                'id'       => $task->id,
+                'name'     => $task->name,
+                'process'  => $task->process,
+                'status'   => $task->status,
+                'priority' => $task->priority,
+                'days_remaining' => $task->scheduled_end_date
+                    ? max(0, now()->diffInDays($task->scheduled_end_date, false))
+                    : 0,
+            ];
+        }
+
+        return $queue;
+    }
+
+    /**
+     * PRODUCTION TRACKING: Track a job through the production pipeline.
+     * Returns the current stage and progress of a job (e.g. book title).
+     */
+    public function trackJob(string $jobName): array
+    {
+        $stages = ['Design', 'Press', 'Folding', 'Gathering', 'Staple', 'Binding', 'Cutting', 'Packaging', 'Delivery'];
+
+        $tasks = ProductionTask::where('name', 'like', "%{$jobName}%")
+            ->orderBy('scheduled_start_date')
+            ->get();
+
+        $pipeline = [];
+        foreach ($stages as $stage) {
+            $stageTask = $tasks->firstWhere('process', $stage);
+            $pipeline[] = [
+                'stage'  => $stage,
+                'status' => $stageTask?->status ?? 'not_scheduled',
+                'start'  => $stageTask?->scheduled_start_date?->format('d/m'),
+                'end'    => $stageTask?->scheduled_end_date?->format('d/m'),
+                'machine'=> $stageTask?->machine?->name,
+            ];
+        }
+
+        $completedStages = collect($pipeline)->where('status', 'completed')->count();
+        $totalStages = count($stages);
+        $progress = $totalStages > 0 ? round(($completedStages / $totalStages) * 100) : 0;
+
+        return [
+            'job_name'    => $jobName,
+            'pipeline'    => $pipeline,
+            'progress'    => $progress,
+            'current_stage' => collect($pipeline)->firstWhere('status', 'in_progress')['stage']
+                           ?? collect($pipeline)->firstWhere('status', 'pending')['stage']
+                           ?? 'Done',
+        ];
+    }
+
+    /**
+     * MACHINE UTILIZATION: Calculate how busy each machine is this month.
+     */
+    public function getMachineUtilization(Carbon $from, Carbon $to): Collection
+    {
+        $machines = \App\Models\Machine::where('status', '!=', 'retired')->get();
+        $totalWorkingDays = $this->countWorkingDays($from, $to);
+
+        return $machines->map(function ($machine) use ($from, $to, $totalWorkingDays) {
+            $bookedDays = ProductionTask::where('assigned_machine_id', $machine->id)
+                ->whereNotIn('status', ['cancelled'])
+                ->where('scheduled_start_date', '<=', $to)
+                ->where(function ($q) use ($from) {
+                    $q->where('scheduled_end_date', '>=', $from)
+                      ->orWhereNull('scheduled_end_date');
+                })
+                ->sum('duration_days');
+
+            $utilization = $totalWorkingDays > 0 ? min(100, round(($bookedDays / $totalWorkingDays) * 100)) : 0;
+
+            $downtimeHours = MachineDowntime::where('machine_id', $machine->id)
+                ->whereBetween('start_time', [$from, $to])
+                ->sum('duration_hours');
+
+            return [
+                'id'             => $machine->id,
+                'name'           => $machine->name,
+                'code'           => $machine->code,
+                'type'           => $machine->type,
+                'status'         => $machine->status,
+                'booked_days'    => (int) $bookedDays,
+                'total_days'     => $totalWorkingDays,
+                'utilization_pct'=> $utilization,
+                'downtime_hours' => (int) $downtimeHours,
+            ];
+        });
+    }
+
+    /**
+     * UPCOMING: Get tasks starting in the next N days.
+     */
+    public function getUpcoming(int $days = 7): Collection
+    {
+        return ProductionTask::with('machine')
+            ->where('scheduled_start_date', '>=', now())
+            ->where('scheduled_start_date', '<=', now()->addDays($days))
+            ->whereNotIn('status', ['completed', 'cancelled'])
+            ->orderBy('scheduled_start_date')
+            ->orderByRaw("FIELD(priority, 'urgent', 'standard')")
+            ->get();
+    }
+
+    /**
+     * Count working days between two dates.
+     */
+    private function countWorkingDays(Carbon $from, Carbon $to): int
+    {
+        $count = 0;
+        $current = $from->copy();
+        while ($current <= $to) {
+            if (! $current->isWeekend()) $count++;
+            $current->addDay();
+        }
+        return $count;
+    }
+
+    /**
      * Find the next available date for a machine (no existing task).
      */
     private function nextAvailableDate(Carbon $from, ?int $machineId): Carbon
