@@ -605,6 +605,7 @@ class ScheduleController extends Controller
             }
 
             $loggedDay = min($newDay, $daysInMonth);
+            $overflow  = $newDay > $daysInMonth;
 
             ScheduleDelayLog::create([
                 'year'         => $year,
@@ -614,7 +615,8 @@ class ScheduleController extends Controller
                 'original_day' => $cell->day,
                 'shifted_to_day'=> $loggedDay,
                 'reason_type'  => 'machine_downtime',
-                'reason_detail'=> "Machine downtime {$downtimeDays}d: {$reason}",
+                'reason_detail'=> "Machine downtime {$downtimeDays}d: {$reason}"
+                    . ($overflow ? " [overflows to next month]" : ""),
             ]);
 
             // Delete the original cell

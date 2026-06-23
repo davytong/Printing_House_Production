@@ -711,7 +711,7 @@
   /* ── Row click → select book ─────── */
   document.querySelectorAll('#booksTable tbody tr.row-select').forEach(row => {
     row.addEventListener('click', e => {
-      if (e.target.closest('.edit-book-btn, form')) return; // don't trigger on action buttons
+      if (e.target.closest('.edit-book-btn, form, .row-check')) return; // don't trigger on action buttons
       document.querySelectorAll('#booksTable tbody tr.row-select')
               .forEach(r => r.classList.remove('row-selected'));
       row.classList.add('row-selected');

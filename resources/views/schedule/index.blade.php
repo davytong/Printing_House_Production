@@ -1286,5 +1286,210 @@ function submitDowntime() {
     form.submit();
 }
 
+
+// ── Cell click: batch mode vs normal edit ────────────────────────────────
+function handleCellClick(e, cell) {
+    if (document.body.classList.contains("batch-mode")) {
+        const cb = cell.querySelector(".batch-check");
+        if (cb) { cb.checked = !cb.checked; updateBatchCount(); }
+        return;
+    }
+    openCellModal(cell);
+}
+
+// ── Batch mode toggle ─────────────────────────────────────────────────────
+let _batchActive = false;
+
+function toggleBatchMode() {
+    _batchActive = !_batchActive;
+    document.body.classList.toggle("batch-mode", _batchActive);
+    const btn = document.getElementById("batchModeBtn");
+    if (!btn) return;
+    if (_batchActive) {
+        btn.classList.remove("btn-outline-success");
+        btn.classList.add("btn-success");
+        btn.innerHTML = '<i class="bi bi-x-square"></i> <span class="d-none d-md-inline ms-1">Exit Mark</span>';
+    } else {
+        btn.classList.remove("btn-success");
+        btn.classList.add("btn-outline-success");
+        btn.innerHTML = '<i class="bi bi-check2-square"></i> <span class="d-none d-md-inline ms-1">Mark</span>';
+        document.querySelectorAll(".batch-check").forEach(cb => cb.checked = false);
+        updateBatchCount();
+    }
+}
+
+function updateBatchCount() {
+    const n = document.querySelectorAll(".batch-check:checked").length;
+    const el = document.getElementById("batchCount");
+    if (el) el.textContent = n + " selected";
+}
+
+document.addEventListener("change", function(e) {
+    if (e.target.classList.contains("batch-check")) updateBatchCount();
+});
+
+// ── Apply batch status to selected cells ─────────────────────────────────
+function applyBatchStatus(status) {
+    const checks = document.querySelectorAll(".batch-check:checked");
+    if (!checks.length) { showToast("warning", "No cells selected"); return; }
+
+    const csrf = document.querySelector('meta[name="csrf-token"]').content;
+    const year  = "{{ $year }}";
+    const month = "{{ $month }}";
+
+    const promises = Array.from(checks).map(cb => {
+        return fetch("/schedule/status", {
+            method: "POST",
+            headers: {
+                "Content-Type": "application/json",
+                "X-CSRF-TOKEN": csrf,
+                "Accept": "application/json"
+            },
+            body: JSON.stringify({
+                year: year, month: month,
+                process: cb.dataset.process,
+                day: cb.dataset.day,
+                status: status
+            })
+        }).then(r => r.json());
+    });
+
+    Promise.all(promises).then(results => {
+        const ok = results.filter(r => r.ok).length;
+        const fail = results.length - ok;
+        if (fail > 0) {
+            showToast("warning", ok + " updated, " + fail + " failed (empty cells cannot be marked)");
+        } else {
+            showToast("success", ok + " cell(s) marked as " + status.replace("_", " "));
+        }
+        setTimeout(() => location.reload(), 900);
+    }).catch(() => showToast("error", "Network error — please try again"));
+}
+
+// ── Delay log modal ───────────────────────────────────────────────────────
+const _processColors = {
+    Design:"#4285f4", Press:"#ea4335", Folding:"#9c27b0",
+    Gathering:"#ff9800", Staple:"#00bcd4", Binding:"#e91e63",
+    Cutting:"#009688", Packaging:"#4caf50", Delivery:"#ff5722", Other:"#607d8b"
+};
+
+function openDelayModal() {
+    const modalEl = document.getElementById("delayLogModal");
+    if (!modalEl) {
+        // Fallback: open full page
+        window.location.href = "/schedule/delay-report?year={{ $year }}&month={{ $month }}";
+        return;
+    }
+    new bootstrap.Modal(modalEl).show();
+    loadDelayLog();
+}
+
+function loadDelayLog() {
+    const body = document.getElementById("delayLogBody");
+    if (!body) return;
+    body.innerHTML = '<div class="text-center py-4"><div class="spinner-border text-warning"></div><div class="mt-2 text-muted" style="font-size:.82rem;">Loading...</div></div>';
+
+    fetch("/schedule/delay-json?year={{ $year }}&month={{ $month }}")
+    .then(r => r.json())
+    .then(data => {
+        const s = data.stats;
+        let html = "";
+
+        // Stats
+        html += `<div class="d-flex flex-wrap gap-3 mb-3">
+            <div class="p-3 rounded border text-center flex-fill">
+                <div style="font-size:1.5rem;font-weight:800;color:#3b82f6;">${s.total}</div>
+                <div style="font-size:.72rem;color:#64748b;">Scheduled</div>
+            </div>
+            <div class="p-3 rounded border text-center flex-fill">
+                <div style="font-size:1.5rem;font-weight:800;color:#ef4444;">${s.urgent}</div>
+                <div style="font-size:.72rem;color:#64748b;">Urgent Events</div>
+            </div>
+            <div class="p-3 rounded border text-center flex-fill">
+                <div style="font-size:1.5rem;font-weight:800;color:#f59e0b;">${s.downtime}</div>
+                <div style="font-size:.72rem;color:#64748b;">Downtime Events</div>
+            </div>
+            <div class="p-3 rounded border text-center flex-fill">
+                <div style="font-size:1.5rem;font-weight:800;color:#7c3aed;">+${s.delayDays}</div>
+                <div style="font-size:.72rem;color:#64748b;">Days Delayed</div>
+            </div>
+        </div>`;
+
+        // Process summary
+        if (Object.keys(data.processSummary).length) {
+            html += `<div style="font-size:.75rem;font-weight:700;color:#64748b;text-transform:uppercase;
+                                  border-bottom:2px solid #e2e8f0;padding-bottom:.3rem;margin-bottom:.75rem;">
+                        Work by Process</div><div class="row g-2 mb-3">`;
+            for (const [proc, info] of Object.entries(data.processSummary)) {
+                const clr = _processColors[proc] || "#475569";
+                const chips = Object.entries(info.tasks).map(([t,d]) =>
+                    `<span style="background:#f1f5f9;border:1px solid #e2e8f0;border-radius:20px;
+                                  padding:.1rem .5rem;font-size:.7rem;margin:2px;display:inline-block;">${
+                        t.replace(/</g,"&lt;")
+                    }${d>1?` <span style="background:${clr};color:#fff;border-radius:10px;
+                                            padding:0 5px;font-size:.62rem;">×${d}d</span>`:""}</span>`
+                ).join("");
+                html += `<div class="col-md-6"><div style="border-left:4px solid ${clr};border:1px solid ${clr}30;
+                            border-radius:8px;padding:.6rem .8rem;background:#fff;">
+                    <div class="d-flex justify-content-between align-items-center mb-1">
+                        <span style="background:${clr};color:#fff;border-radius:4px;
+                               padding:.1rem .4rem;font-size:.7rem;font-weight:700;">${proc}</span>
+                        <span style="font-size:.7rem;color:#64748b;">${info.days}d</span>
+                    </div><div>${chips}</div></div></div>`;
+            }
+            html += `</div>`;
+        }
+
+        // Delay log table
+        if (data.logs.length) {
+            html += `<div style="font-size:.75rem;font-weight:700;color:#64748b;text-transform:uppercase;
+                                  border-bottom:2px solid #e2e8f0;padding-bottom:.3rem;margin-bottom:.75rem;">
+                        Delay & Shift Log (${data.logs.length})</div>
+                     <div class="table-responsive">
+                     <table class="table table-sm table-hover" style="font-size:.78rem;">
+                     <thead class="table-light"><tr>
+                        <th>Process</th><th>Task</th>
+                        <th class="text-center">Was Day</th><th class="text-center">Moved To</th>
+                        <th class="text-center">+Days</th><th>Reason</th>
+                     </tr></thead><tbody>`;
+            data.logs.forEach(log => {
+                const clr   = _processColors[log.process] || "#475569";
+                const delay = log.shifted_to_day - log.original_day;
+                const badge = log.reason_type === "urgent_task"
+                    ? `<span class="badge bg-danger">Urgent</span>`
+                    : `<span class="badge bg-warning text-dark">Downtime</span>`;
+                html += `<tr>
+                    <td><span style="background:${clr};color:#fff;border-radius:3px;
+                               padding:.1rem .4rem;font-size:.7rem;">${log.process}</span></td>
+                    <td><strong>${(log.original_task||"").replace(/</g,"&lt;")}</strong></td>
+                    <td class="text-center"><span class="badge bg-secondary">Day ${log.original_day}</span></td>
+                    <td class="text-center"><span class="badge bg-primary">Day ${log.shifted_to_day}</span></td>
+                    <td class="text-center"><span class="badge ${delay>3?"bg-danger":"bg-warning text-dark"}">
+                        ${delay>0?"+":""}${delay}d</span></td>
+                    <td>${badge}</td>
+                </tr>`;
+            });
+            html += `</tbody></table></div>`;
+        } else {
+            html += `<div class="alert alert-success mb-0">
+                <i class="bi bi-check-circle me-2"></i>No delays recorded this month.
+            </div>`;
+        }
+
+        body.innerHTML = html;
+    })
+    .catch(() => {
+        body.innerHTML = `<div class="alert alert-danger">Failed to load.
+            <a href="/schedule/delay-report?year={{ $year }}&month={{ $month }}">Open full page</a></div>`;
+    });
+}
+
+// ── Clear month confirm ───────────────────────────────────────────────────
+function confirmClearMonth() {
+    if (confirm("⚠️ Clear ALL schedule data for this month? This cannot be undone.")) {
+        document.getElementById("clearMonthForm").submit();
+    }
+}
+
 </script>
 @endsection
