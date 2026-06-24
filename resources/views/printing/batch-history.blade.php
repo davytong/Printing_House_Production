@@ -43,6 +43,15 @@
     <button onclick="window.print()" class="btn btn-outline-primary btn-sm">
       <i class="bi bi-printer"></i> Print / PDF
     </button>
+    @if($batch->status !== 'active')
+    <form action="{{ route('printing.batch-delete', $batch) }}" method="POST" class="m-0"
+          onsubmit="return confirm('⚠️ លុប {{ $batch->name }} ជាអចិន្ត្រៃយ៍? សៀវភៅ និងលទ្ធផលរបស់វានឹងបាត់បង់ទាំងស្រុង។')">
+      @csrf @method('DELETE')
+      <button type="submit" class="btn btn-outline-danger btn-sm">
+        <i class="bi bi-trash3"></i> លុប Batch
+      </button>
+    </form>
+    @endif
   </div>
 </div>
 

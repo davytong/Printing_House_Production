@@ -52,13 +52,22 @@
                 <i class="bi bi-layers me-1"></i>{{ $b->name }}
                 <span style="font-size:.68rem;color:#94a3b8">{{ $b->completed_at?->format('d/m/y') }}</span>
               </a>
-              <form action="{{ route('printing.batch-restore', $b) }}" method="POST" class="m-0"
-                    onsubmit="return confirm('ប្ដូរទៅ {{ $b->name }}? Batch បច្ចុប្បន្ននឹងត្រូវរក្សាទុក។')">
-                @csrf
-                <button class="btn btn-sm btn-outline-success py-0 px-2" type="submit" title="Switch to this batch">
-                  <i class="bi bi-box-arrow-in-left"></i> Switch
-                </button>
-              </form>
+              <div class="d-flex gap-1">
+                <form action="{{ route('printing.batch-restore', $b) }}" method="POST" class="m-0"
+                      onsubmit="return confirm('ប្ដូរទៅ {{ $b->name }}? Batch បច្ចុប្បន្ននឹងត្រូវរក្សាទុក។')">
+                  @csrf
+                  <button class="btn btn-sm btn-outline-success py-0 px-2" type="submit" title="Switch to this batch">
+                    <i class="bi bi-box-arrow-in-left"></i> Switch
+                  </button>
+                </form>
+                <form action="{{ route('printing.batch-delete', $b) }}" method="POST" class="m-0"
+                      onsubmit="return confirm('⚠️ លុប {{ $b->name }} ជាអចិន្ត្រៃយ៍? សៀវភៅ និងលទ្ធផលរបស់វានឹងបាត់បង់ទាំងស្រុង។')">
+                  @csrf @method('DELETE')
+                  <button class="btn btn-sm btn-outline-danger py-0 px-2" type="submit" title="Delete this batch">
+                    <i class="bi bi-trash3"></i>
+                  </button>
+                </form>
+              </div>
             </div>
           </li>
         @endforeach
