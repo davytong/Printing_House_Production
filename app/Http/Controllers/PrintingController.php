@@ -14,11 +14,13 @@ use Illuminate\View\View;
 class PrintingController extends Controller
 {
     // ─────────────────────────────────────────────
-    // Shared sort: category → level number → title
+    // Shared sort: scoped to the ACTIVE batch's books
     // ─────────────────────────────────────────────
     private function booksOrdered()
     {
-        return Book::orderBy('category')
+        $activeId = ProductionBatch::current()->id;
+        return Book::where('batch_id', $activeId)
+            ->orderBy('category')
             ->orderByRaw("CAST(SUBSTRING_INDEX(COALESCE(grade,'0'), ' ', -1) AS UNSIGNED)")
             ->orderBy('title');
     }
@@ -37,10 +39,10 @@ class PrintingController extends Controller
 
     // ─────────────────────────────────────────────
     // Start a NEW batch (printing round)
-    //   - snapshots current books into the finishing batch
-    //   - marks current batch completed
-    //   - creates a new active batch
-    //   - resets all books' printed count to 0 (keeps targets)
+    //   Each batch owns its own book rows.
+    //   - keep_targets       → clone active books (same targets, printed reset to 0)
+    //   - keep_targets_zero  → clone active books (targets = 0, set later)
+    //   - fresh              → start EMPTY so you add brand-new books
     // ─────────────────────────────────────────────
     public function startNewBatch(Request $request): RedirectResponse
     {
@@ -50,28 +52,12 @@ class PrintingController extends Controller
         ]);
 
         $current = ProductionBatch::current();
-        $books   = Book::all();
+        $mode    = $request->reset_mode;
 
-        // 1. Snapshot every book's current result into the finishing batch
-        foreach ($books as $book) {
-            BatchSnapshot::create([
-                'batch_id'    => $current->id,
-                'book_id'     => $book->id,
-                'title'       => $book->title,
-                'grade'       => $book->grade,
-                'category'    => $book->category,
-                'target_qty'  => $book->target_qty,
-                'printed_qty' => $book->total_printed,
-            ]);
-        }
+        // 1. Complete the current batch (its book rows stay intact as history)
+        $current->update(['status' => 'completed', 'completed_at' => now()]);
 
-        // 2. Complete the current batch
-        $current->update([
-            'status'       => 'completed',
-            'completed_at' => now(),
-        ]);
-
-        // 3. Create the new active batch
+        // 2. Create the new active batch
         $count = ProductionBatch::count();
         $newBatch = ProductionBatch::create([
             'name'       => $request->name ?: ('Batch ' . ($count + 1)),
@@ -80,99 +66,69 @@ class PrintingController extends Controller
             'started_at' => now(),
         ]);
 
-        // 4. Reset books for the new round
-        //    keep_targets       → reset printed to 0, keep same targets
-        //    keep_targets_zero  → reset printed to 0 AND set target to 0 (set later)
-        //    fresh              → keep targets, reset printed to 0 (same as keep_targets)
-        foreach ($books as $book) {
-            $book->batch_id      = $newBatch->id;
-            $book->total_printed = 0;
-            if ($request->reset_mode === 'keep_targets_zero') {
-                $book->target_qty = 0;
+        // 3. Populate the new batch's books based on mode
+        if ($mode === 'keep_targets' || $mode === 'keep_targets_zero') {
+            $oldBooks = Book::where('batch_id', $current->id)->get();
+            foreach ($oldBooks as $b) {
+                Book::create([
+                    'batch_id'      => $newBatch->id,
+                    'title'         => $b->title,
+                    'category'      => $b->category,
+                    'grade'         => $b->grade,
+                    'target_qty'    => $mode === 'keep_targets_zero' ? 0 : $b->target_qty,
+                    'total_printed' => 0,
+                ]);
             }
-            $book->save();
+            $msg = "បានចាប់ផ្ដើម {$newBatch->name} ថ្មី (សៀវភៅដដែល)! {$current->name} ត្រូវបានរក្សាទុក។";
+        } else {
+            // fresh → no books; user adds new ones
+            $msg = "បានចាប់ផ្ដើម {$newBatch->name} ទទេ — សូមបន្ថែមសៀវភៅថ្មី! {$current->name} ត្រូវបានរក្សាទុក។";
         }
 
-        // Clear daily prints (they belonged to the completed batch — already snapshotted)
-        DailyPrint::query()->delete();
-
-        return redirect()->route('printing.index')
-            ->with('success', "បានចាប់ផ្ដើម {$newBatch->name} ថ្មី! ({$current->name} ត្រូវបានរក្សាទុកក្នុងប្រវត្តិ)");
+        return redirect()->route('printing.index')->with('success', $msg);
     }
 
     // ─────────────────────────────────────────────
-    // View a past (completed) batch's snapshot
+    // View a past batch's books (read-only)
     // ─────────────────────────────────────────────
     public function showBatch(ProductionBatch $batch): View
     {
-        $snapshots = $batch->snapshots()
+        $snapshots = Book::where('batch_id', $batch->id)
             ->orderBy('category')
             ->orderByRaw("CAST(SUBSTRING_INDEX(COALESCE(grade,'0'), ' ', -1) AS UNSIGNED)")
             ->orderBy('title')
-            ->get();
+            ->get()
+            ->map(function ($b) {
+                // adapt Book to the shape the history view expects
+                $b->printed_qty = $b->total_printed;
+                return $b;
+            });
 
         return view('printing.batch-history', compact('batch', 'snapshots'));
     }
 
     // ─────────────────────────────────────────────
-    // Switch BACK to an old batch (make it active again)
-    //   - freezes the current active batch to history
-    //   - thaws the chosen batch's snapshot back into the books table
+    // Switch to another batch — just flip which one is active.
+    // Each batch keeps its own book rows, so no data movement needed.
     // ─────────────────────────────────────────────
     public function restoreBatch(ProductionBatch $batch): RedirectResponse
     {
         $current = ProductionBatch::current();
 
-        // Already active — nothing to do
         if ($batch->id === $current->id) {
             return redirect()->route('printing.index')
                 ->with('success', "{$batch->name} គឺកំពុងសកម្មរួចហើយ។");
         }
 
-        // 1. FREEZE current active batch → overwrite its snapshots with live data
-        BatchSnapshot::where('batch_id', $current->id)->delete();
-        foreach (Book::all() as $book) {
-            BatchSnapshot::create([
-                'batch_id'    => $current->id,
-                'book_id'     => $book->id,
-                'title'       => $book->title,
-                'grade'       => $book->grade,
-                'category'    => $book->category,
-                'target_qty'  => $book->target_qty,
-                'printed_qty' => $book->total_printed,
-            ]);
-        }
         $current->update(['status' => 'completed', 'completed_at' => now()]);
-
-        // 2. THAW chosen batch → restore its snapshot into the books table
-        foreach ($batch->snapshots as $snap) {
-            if ($snap->book_id) {
-                $book = Book::find($snap->book_id);
-                if ($book) {
-                    $book->target_qty    = $snap->target_qty;
-                    $book->total_printed = $snap->printed_qty;
-                    $book->batch_id      = $batch->id;
-                    $book->save();
-                }
-            }
-        }
-        // Books that didn't exist in that batch's snapshot → attach with 0 printed
-        $snapBookIds = $batch->snapshots->pluck('book_id')->filter()->all();
-        Book::whereNotIn('id', $snapBookIds)->update(['batch_id' => $batch->id, 'total_printed' => 0]);
-
-        // 3. Mark chosen batch active + clear its now-live snapshots
         $batch->update(['status' => 'active', 'completed_at' => null]);
-        BatchSnapshot::where('batch_id', $batch->id)->delete();
-
-        // Daily prints belong to whatever was active; clear for clean slate
-        DailyPrint::query()->delete();
 
         return redirect()->route('printing.index')
             ->with('success', "បានប្ដូរទៅ {$batch->name}! ({$current->name} ត្រូវបានរក្សាទុក)");
     }
 
     // ─────────────────────────────────────────────
-    // Delete a batch created by mistake (history only, never the active one)
+    // Delete a batch created by mistake (never the active one / last one)
     // ─────────────────────────────────────────────
     public function deleteBatch(ProductionBatch $batch): RedirectResponse
     {
@@ -186,7 +142,8 @@ class PrintingController extends Controller
         }
 
         $name = $batch->name;
-        $batch->snapshots()->delete();
+        Book::where('batch_id', $batch->id)->delete(); // remove that batch's book rows
+        $batch->snapshots()->delete();                 // legacy snapshots, if any
         $batch->delete();
 
         return redirect()->route('printing.index')
@@ -246,6 +203,8 @@ class PrintingController extends Controller
         $request->validate([
             'csv_file' => 'required|file|mimes:csv,txt|max:20480', // 20 MB
         ]);
+
+        $activeBatchId = ProductionBatch::current()->id;
 
         $path   = $request->file('csv_file')->getRealPath();
         $handle = fopen($path, 'r');
@@ -316,6 +275,7 @@ class PrintingController extends Controller
 
             $existing = Book::where('title', $title)
                 ->where('grade', $grade ?: null)
+                ->where('batch_id', $activeBatchId)
                 ->first();
 
             if ($existing) {
@@ -327,6 +287,7 @@ class PrintingController extends Controller
                 $updated++;
             } else {
                 Book::create([
+                    'batch_id'      => $activeBatchId,
                     'title'         => $title,
                     'category'      => $category,
                     'grade'         => $grade ?: null,

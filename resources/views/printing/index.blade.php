@@ -709,6 +709,12 @@
                 <strong>កំណត់គោលដៅឡើងវិញ</strong> — សៀវភៅដដែល តែគោលដៅ = 0 (set new targets after)
               </label>
             </div>
+            <div class="form-check">
+              <input class="form-check-input" type="radio" name="reset_mode" id="rm3" value="fresh">
+              <label class="form-check-label" for="rm3" style="font-size:.85rem">
+                <strong>ចាប់ផ្ដើមទទេ (សៀវភៅថ្មី)</strong> — គ្មានសៀវភៅ បន្ថែមសៀវភៅថ្មីដោយខ្លួនឯង (start empty / new books)
+              </label>
+            </div>
           </div>
           <div class="mb-0">
             <label class="form-label">កំណត់ចំណាំ (Notes)</label>
