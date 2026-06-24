@@ -164,7 +164,7 @@
           <div class="ph-icon" style="background:#fef3c7;color:#d97706">
             <i class="bi bi-file-earmark-spreadsheet"></i>
           </div>
-          <span>Import CSV</span>
+          <span>Import Excel / CSV</span>
         </div>
         <button class="btn btn-ghost btn-icon" type="button"
                 data-bs-toggle="collapse" data-bs-target="#csvPanel">
@@ -183,7 +183,7 @@
               Category: <code style="font-family:var(--font-latin);background:#f1f5f9;padding:.1em .35em;border-radius:3px">perfect_binding</code>
               ឬ <code style="font-family:var(--font-latin);background:#f1f5f9;padding:.1em .35em;border-radius:3px">staple</code>
               &nbsp;·&nbsp; Max file size: 20 MB
-              &nbsp;·&nbsp; Encoding: UTF-8
+              &nbsp;·&nbsp; Encoding: UTF-8 &nbsp;·&nbsp; <strong>.xlsx</strong> ក៏ទទួលយកដែរ
             </span>
           </p>
 
@@ -204,11 +204,11 @@
           <form action="{{ route('books.import') }}" method="POST" enctype="multipart/form-data">
             @csrf
             <div class="mb-3">
-              <label class="form-label">ជ្រើសឯកសារ (.csv / .txt)</label>
-              <input type="file" name="csv_file" class="form-control" accept=".csv,.txt" required>
+              <label class="form-label">ជ្រើសឯកសារ (.xlsx / .csv / .txt)</label>
+              <input type="file" name="csv_file" class="form-control" accept=".xlsx,.xls,.csv,.txt" required>
             </div>
             <button class="btn btn-warning w-100" type="submit">
-              <i class="bi bi-upload"></i> Import CSV
+              <i class="bi bi-upload"></i> Import (Excel / CSV)
             </button>
           </form>
         </div>

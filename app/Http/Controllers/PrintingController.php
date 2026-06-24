@@ -201,56 +201,43 @@ class PrintingController extends Controller
     public function importCsv(Request $request): RedirectResponse
     {
         $request->validate([
-            'csv_file' => 'required|file|mimes:csv,txt|max:20480', // 20 MB
+            'csv_file' => 'required|file|mimes:csv,txt,xlsx,xls|max:20480', // 20 MB
         ]);
 
         $activeBatchId = ProductionBatch::current()->id;
+        $file = $request->file('csv_file');
+        $ext  = strtolower($file->getClientOriginalExtension());
 
-        $path   = $request->file('csv_file')->getRealPath();
-        $handle = fopen($path, 'r');
-
-        // Strip UTF-8 BOM if present (common in Excel exports)
-        $bom = fread($handle, 3);
-        if ($bom !== "\xEF\xBB\xBF") {
-            rewind($handle); // not a BOM — go back to start
+        // Build a uniform array of data rows (header row skipped) from CSV or XLSX
+        try {
+            $dataRows = ($ext === 'xlsx' || $ext === 'xls')
+                ? $this->readSpreadsheetRows($file->getRealPath())
+                : $this->readCsvRows($file->getRealPath());
+        } catch (\Throwable $e) {
+            return back()->with('error', 'មិនអាចអានឯកសារបានទេ: ' . $e->getMessage());
         }
-
-        // Auto-detect delimiter (comma vs semicolon vs tab)
-        $firstLine = fgets($handle);
-        rewind($handle);
-        if ($bom === "\xEF\xBB\xBF") fread($handle, 3); // skip BOM again
-
-        $delimiters = [
-            ','  => substr_count($firstLine, ','),
-            ';'  => substr_count($firstLine, ';'),
-            "\t" => substr_count($firstLine, "\t"),
-        ];
-        arsort($delimiters);
-        $delimiter = array_key_first($delimiters);
-
-        fgetcsv($handle, 0, $delimiter); // skip header row
 
         $created  = 0;
         $updated  = 0;
         $skipped  = [];
         $lineNum  = 1; // header was line 1
 
-        while (($row = fgetcsv($handle, 0, $delimiter)) !== false) {
+        foreach ($dataRows as $row) {
             $lineNum++;
 
             // Skip completely empty rows
-            if (count(array_filter($row, fn($v) => trim($v) !== '')) === 0) continue;
+            if (count(array_filter($row, fn($v) => trim((string) $v) !== '')) === 0) continue;
 
             if (count($row) < 3) {
                 $skipped[] = "Line {$lineNum}: too few columns (" . count($row) . ")";
                 continue;
             }
 
-            $title     = trim($row[0]);
-            $category  = strtolower(trim($row[1]));
-            $targetQty = (int) str_replace([',', ' '], '', $row[2] ?? '0');
-            $printed   = (int) str_replace([',', ' '], '', $row[3] ?? '0');
-            $grade     = trim($row[4] ?? '');
+            $title     = trim((string) ($row[0] ?? ''));
+            $category  = strtolower(trim((string) ($row[1] ?? '')));
+            $targetQty = (int) str_replace([',', ' '], '', (string) ($row[2] ?? '0'));
+            $printed   = (int) str_replace([',', ' '], '', (string) ($row[3] ?? '0'));
+            $grade     = trim((string) ($row[4] ?? ''));
 
             // Validate
             if (empty($title)) {
@@ -298,8 +285,6 @@ class PrintingController extends Controller
             }
         }
 
-        fclose($handle);
-
         // Build detailed feedback message
         $parts = [];
         if ($created > 0) $parts[] = "✅ បន្ថែម {$created} ចំណងជើងថ្មី";
@@ -316,6 +301,68 @@ class PrintingController extends Controller
         }
 
         return back()->with('success', $message);
+    }
+
+    // ─────────────────────────────────────────────
+    // Read CSV/TXT into array of rows (header skipped, BOM + delimiter handled)
+    // ─────────────────────────────────────────────
+    private function readCsvRows(string $path): array
+    {
+        $handle = fopen($path, 'r');
+
+        // Strip UTF-8 BOM if present
+        $bom = fread($handle, 3);
+        if ($bom !== "\xEF\xBB\xBF") {
+            rewind($handle);
+        }
+
+        // Auto-detect delimiter
+        $firstLine = fgets($handle);
+        rewind($handle);
+        if ($bom === "\xEF\xBB\xBF") fread($handle, 3);
+
+        $delimiters = [
+            ','  => substr_count($firstLine, ','),
+            ';'  => substr_count($firstLine, ';'),
+            "\t" => substr_count($firstLine, "\t"),
+        ];
+        arsort($delimiters);
+        $delimiter = array_key_first($delimiters);
+
+        fgetcsv($handle, 0, $delimiter); // skip header
+
+        $rows = [];
+        while (($row = fgetcsv($handle, 0, $delimiter)) !== false) {
+            $rows[] = $row;
+        }
+        fclose($handle);
+
+        return $rows;
+    }
+
+    // ─────────────────────────────────────────────
+    // Read XLSX/XLS first sheet into array of rows (header skipped)
+    // ─────────────────────────────────────────────
+    private function readSpreadsheetRows(string $path): array
+    {
+        $reader = new \OpenSpout\Reader\XLSX\Reader();
+        $reader->open($path);
+
+        $rows = [];
+        foreach ($reader->getSheetIterator() as $sheet) {
+            foreach ($sheet->getRowIterator() as $row) {
+                $rows[] = $row->toArray();
+            }
+            break; // only the first sheet
+        }
+        $reader->close();
+
+        // Drop the header row
+        if (!empty($rows)) {
+            array_shift($rows);
+        }
+
+        return $rows;
     }
 
     // ─────────────────────────────────────────────
