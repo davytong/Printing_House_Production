@@ -159,7 +159,7 @@ class PrintingController extends Controller
             'title'      => 'required|string|max:255',
             'category'   => 'required|in:perfect_binding,staple',
             'grade'      => 'nullable|string|max:50',
-            'target_qty' => 'required|integer|min:1',
+            'target_qty' => 'required|integer|min:0',
         ]);
 
         $data['total_printed'] = 0;
@@ -178,7 +178,7 @@ class PrintingController extends Controller
             'title'      => 'required|string|max:255',
             'category'   => 'required|in:perfect_binding,staple',
             'grade'      => 'nullable|string|max:50',
-            'target_qty' => 'required|integer|min:1',
+            'target_qty' => 'required|integer|min:0',
         ]);
 
         $book->update($data);
@@ -239,15 +239,13 @@ class PrintingController extends Controller
             $printed   = (int) str_replace([',', ' '], '', (string) ($row[3] ?? '0'));
             $grade     = trim((string) ($row[4] ?? ''));
 
-            // Validate
+            // Validate — title is required; target may be 0 (set later)
             if (empty($title)) {
                 $skipped[] = "Line {$lineNum}: empty title";
                 continue;
             }
-            if ($targetQty <= 0) {
-                $skipped[] = "Line {$lineNum}: '{$title}' — target_qty must be > 0 (got {$targetQty})";
-                continue;
-            }
+            $targetQty = max(0, $targetQty);
+            $printed   = max(0, $printed);
 
             // Normalise category — accept many formats
             if (str_contains($category, 'perfect') || str_contains($category, 'bind') ||
@@ -269,7 +267,7 @@ class PrintingController extends Controller
                 $existing->update([
                     'category'      => $category,
                     'target_qty'    => $targetQty,
-                    'total_printed' => min($printed, $targetQty),
+                    'total_printed' => $targetQty > 0 ? min($printed, $targetQty) : $printed,
                 ]);
                 $updated++;
             } else {
@@ -279,7 +277,7 @@ class PrintingController extends Controller
                     'category'      => $category,
                     'grade'         => $grade ?: null,
                     'target_qty'    => $targetQty,
-                    'total_printed' => min($printed, $targetQty),
+                    'total_printed' => $targetQty > 0 ? min($printed, $targetQty) : $printed,
                 ]);
                 $created++;
             }

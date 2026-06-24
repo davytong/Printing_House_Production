@@ -579,9 +579,9 @@
                      placeholder="1, 2, ... 12, មត្តេយ្យ">
             </div>
             <div class="col-12">
-              <label class="form-label">គោលដៅ (Target Qty) *</label>
+              <label class="form-label">គោលដៅ (Target Qty)</label>
               <input type="number" name="target_qty" class="form-control"
-                     placeholder="0" min="1"
+                     placeholder="0 (អាចកំណត់ក្រោយ)" min="0" value="0"
                      style="font-family:var(--font-latin)" required>
             </div>
           </div>
@@ -628,9 +628,9 @@
               <input type="text" id="editGrade" name="grade" class="form-control">
             </div>
             <div class="col-12">
-              <label class="form-label">គោលដៅ *</label>
+              <label class="form-label">គោលដៅ</label>
               <input type="number" id="editTarget" name="target_qty" class="form-control"
-                     min="1" style="font-family:var(--font-latin)" required>
+                     min="0" style="font-family:var(--font-latin)" required>
             </div>
           </div>
         </div>
