@@ -174,6 +174,8 @@ Route::prefix('telegram')->name('telegram.')->group(function () {
     Route::delete('/groups/{group}',         [TelegramSetupController::class, 'removeGroup'])->name('remove-group');
     Route::post('/groups/{group}/test',      [TelegramSetupController::class, 'testGroup'])->name('test-group');
     Route::post('/groups/{group}/purpose',   [TelegramSetupController::class, 'updatePurpose'])->name('update-purpose');
+    Route::post('/alert-template',            [TelegramSetupController::class, 'saveAlertTemplate'])->name('alert-template');
+    Route::post('/alert-template/reset',      [TelegramSetupController::class, 'resetAlertTemplate'])->name('alert-template-reset');
 });
 
 

@@ -393,6 +393,77 @@ TELEGRAM_ALERT_COOLDOWN_HOURS={{ $alertHours }}</pre>
 </div>
 
 {{-- ════════════════════════════════════════════
+     LOW-STOCK ALERT CAPTION TEMPLATE (editable)
+════════════════════════════════════════════ --}}
+<div class="panel mb-4">
+  <div class="panel-header">
+    <div class="ph-title">
+      <div class="ph-icon" style="background:#fef9c3;color:#ca8a04"><i class="bi bi-pencil-square"></i></div>
+      <span>Template ការជូនដំណឹង Stock ទាប</span>
+    </div>
+    <button class="btn btn-ghost btn-icon" type="button"
+            data-bs-toggle="collapse" data-bs-target="#alertTplPanel">
+      <i class="bi bi-chevron-down" id="alertTplChevron" style="transition:transform .2s"></i>
+    </button>
+  </div>
+  <div class="collapse show" id="alertTplPanel">
+    <div class="panel-body">
+      <p style="font-size:.8rem;color:var(--text-muted);margin-bottom:1rem;line-height:1.7">
+        កែសម្រួលសារ Telegram ដែលផ្ញើពេល Stock ទាប។ ប្រើ placeholder ខាងក្រោម —
+        ពួកវានឹងត្រូវជំនួសដោយតម្លៃពិត។
+      </p>
+
+      <div class="row g-3">
+        <div class="col-lg-7">
+          <form action="{{ route('telegram.alert-template') }}" method="POST">
+            @csrf
+            <label class="form-label" style="font-weight:600;font-size:.82rem">Template</label>
+            <textarea name="alert_template" id="alertTemplateInput" class="form-control"
+                      rows="9" style="font-family:var(--font-latin);font-size:.85rem;line-height:1.6"
+                      required>{{ $alertTemplate }}</textarea>
+            <div class="d-flex gap-2 mt-3">
+              <button type="submit" class="btn btn-primary btn-sm">
+                <i class="bi bi-save2"></i> រក្សាទុក Template
+              </button>
+              <button type="button" class="btn btn-outline-secondary btn-sm" onclick="previewAlertTpl()">
+                <i class="bi bi-eye"></i> មើលជាមុន
+              </button>
+            </div>
+          </form>
+          <form action="{{ route('telegram.alert-template-reset') }}" method="POST" class="mt-2"
+                onsubmit="return confirm('កំណត់ Template ត្រឡប់ទៅលំនាំដើម?')">
+            @csrf
+            <button type="submit" class="btn btn-outline-danger btn-sm">
+              <i class="bi bi-arrow-counterclockwise"></i> លំនាំដើម (Reset)
+            </button>
+          </form>
+        </div>
+
+        <div class="col-lg-5">
+          <label class="form-label" style="font-weight:600;font-size:.82rem">Placeholders</label>
+          <div style="background:#f8fafc;border:1px solid var(--border);border-radius:8px;padding:.75rem;font-size:.74rem;line-height:1.9">
+            <code>{status_emoji}</code> — ⚠️ ឬ 🔴<br>
+            <code>{status}</code> — Stock ទាប / Stock អស់<br>
+            <code>{name}</code> — ឈ្មោះ (English)<br>
+            <code>{name_km}</code> — ឈ្មោះ (ខ្មែរ)<br>
+            <code>{category}</code> — ប្រភេទ<br>
+            <code>{sub_type}</code> — ប្រភេទរង<br>
+            <code>{stock}</code> — ចំនួន Stock<br>
+            <code>{unit}</code> — ឯកតា<br>
+            <code>{min}</code> — Min Stock<br>
+            <code>{date}</code> — 24/06/2026<br>
+            <code>{datetime}</code> — 24/06/2026 14:30
+          </div>
+          <label class="form-label mt-3" style="font-weight:600;font-size:.82rem">មើលជាមុន (Preview)</label>
+          <pre id="alertTplPreview" style="background:#0f172a;color:#e2e8f0;border-radius:8px;
+               padding:.85rem;font-size:.78rem;white-space:pre-wrap;word-break:break-word;min-height:120px;margin:0"></pre>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+{{-- ════════════════════════════════════════════
      REGISTERED GROUPS & TOPICS
 ════════════════════════════════════════════ --}}
 <div class="panel">
@@ -674,6 +745,50 @@ function hideAddTopic() {
 // Close on backdrop click
 document.getElementById('addTopicModal').addEventListener('click', function(e) {
   if (e.target === this) hideAddTopic();
+});
+
+// ── Low-stock alert template preview ──────────────────────────
+const alertTplChevron = document.getElementById('alertTplChevron');
+const alertTplPanel   = document.getElementById('alertTplPanel');
+if (alertTplPanel && alertTplChevron) {
+  alertTplChevron.style.transform = 'rotate(180deg)';
+  alertTplPanel.addEventListener('show.bs.collapse', () => alertTplChevron.style.transform = 'rotate(180deg)');
+  alertTplPanel.addEventListener('hide.bs.collapse', () => alertTplChevron.style.transform = 'rotate(0deg)');
+}
+
+function previewAlertTpl() {
+  const tpl = document.getElementById('alertTemplateInput').value;
+  const now = new Date();
+  const dd = String(now.getDate()).padStart(2,'0');
+  const mm = String(now.getMonth()+1).padStart(2,'0');
+  const yyyy = now.getFullYear();
+  const hh = String(now.getHours()).padStart(2,'0');
+  const mi = String(now.getMinutes()).padStart(2,'0');
+
+  // Sample material values
+  const sample = {
+    '{status_emoji}': '⚠️',
+    '{status}': 'Stock ទាប',
+    '{name}': 'Plate Cleaner',
+    '{name_km}': 'សាបូជូតផ្លាក',
+    '{category}': 'Cleaning',
+    '{sub_type}': 'Cleaning',
+    '{stock}': '3',
+    '{unit}': 'bottle',
+    '{min}': '5',
+    '{date}': `${dd}/${mm}/${yyyy}`,
+    '{datetime}': `${dd}/${mm}/${yyyy} ${hh}:${mi}`,
+  };
+  let out = tpl;
+  for (const [k,v] of Object.entries(sample)) out = out.split(k).join(v);
+  out = out.replace(/\(\s*\)/g, '').replace(/[ \t]+\n/g, '\n').replace(/[ \t]{2,}/g,' ').trim();
+  document.getElementById('alertTplPreview').textContent = out;
+}
+
+// Auto-preview on load + as you type
+document.addEventListener('DOMContentLoaded', () => {
+  const inp = document.getElementById('alertTemplateInput');
+  if (inp) { previewAlertTpl(); inp.addEventListener('input', previewAlertTpl); }
 });
 </script>
 @endpush

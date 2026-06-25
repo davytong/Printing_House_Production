@@ -79,10 +79,37 @@ class TelegramSetupController extends Controller
 
         $appUrl  = config('app.url');
 
+        $alertTemplate = \App\Models\Setting::get('stock_alert_template', \App\Services\AlertService::DEFAULT_TEMPLATE);
+
         return view('telegram.setup', compact(
             'token', 'botInfo', 'webhookInfo', 'botError',
-            'groups', 'groupedChats', 'appUrl'
+            'groups', 'groupedChats', 'appUrl', 'alertTemplate'
         ));
+    }
+
+    // ─────────────────────────────────────────────
+    // Save the low-stock alert caption template
+    // ─────────────────────────────────────────────
+    public function saveAlertTemplate(Request $request): RedirectResponse
+    {
+        $data = $request->validate([
+            'alert_template' => 'required|string|max:2000',
+        ]);
+
+        \App\Models\Setting::set('stock_alert_template', $data['alert_template']);
+
+        return redirect()->route('telegram.setup')
+            ->with('success', 'បានរក្សាទុក Template ការជូនដំណឹង Stock!');
+    }
+
+    // ─────────────────────────────────────────────
+    // Reset alert template to default
+    // ─────────────────────────────────────────────
+    public function resetAlertTemplate(): RedirectResponse
+    {
+        \App\Models\Setting::set('stock_alert_template', \App\Services\AlertService::DEFAULT_TEMPLATE);
+        return redirect()->route('telegram.setup')
+            ->with('success', 'បានកំណត់ Template ត្រឡប់ទៅលំនាំដើម!');
     }
 
     // ─────────────────────────────────────────────

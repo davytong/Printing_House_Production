@@ -3,11 +3,57 @@
 namespace App\Services;
 
 use App\Models\Material;
+use App\Models\Setting;
 use App\Models\SystemNotification;
 use Illuminate\Support\Facades\Log;
 
 class AlertService
 {
+    /**
+     * Default low-stock Telegram caption template.
+     * Editable via the Telegram setup page (saved in settings table).
+     * Placeholders: {status_emoji} {status} {name} {name_km} {category}
+     *               {sub_type} {stock} {unit} {min} {date} {datetime}
+     */
+    public const DEFAULT_TEMPLATE =
+        "{status_emoji} {status}\n"
+        . "📦 {name} ({name_km})\n"
+        . "📂 {category}\n"
+        . "━━━━━━━━━━━━━━━━\n"
+        . "📊 Stock: {stock} {unit}\n"
+        . "━━━━━━━━━━━━━━━━\n"
+        . "🕐 {date}";
+
+    /**
+     * Render the alert template with a material's values.
+     */
+    public static function renderTemplate(string $template, Material $material, float $stock, float $min): string
+    {
+        $isOut = $stock <= 0;
+
+        $replacements = [
+            '{status_emoji}' => $isOut ? '🔴' : '⚠️',
+            '{status}'       => $isOut ? 'Stock អស់' : 'Stock ទាប',
+            '{name}'         => $material->name,
+            '{name_km}'      => $material->name_km ?? '',
+            '{category}'     => $material->categoryLabelShort(),
+            '{sub_type}'     => $material->sub_type ?? '',
+            '{stock}'        => rtrim(rtrim(number_format($stock, 2), '0'), '.'),
+            '{unit}'         => $material->unit,
+            '{min}'          => rtrim(rtrim(number_format($min, 2), '0'), '.'),
+            '{date}'         => now()->format('d/m/Y'),
+            '{datetime}'     => now()->format('d/m/Y H:i'),
+        ];
+
+        $msg = strtr($template, $replacements);
+
+        // Clean up empty parentheses left by a missing name_km, and stray double spaces
+        $msg = preg_replace('/\(\s*\)/', '', $msg);
+        $msg = preg_replace('/[ \t]+\n/', "\n", $msg);
+        $msg = preg_replace('/[ \t]{2,}/', ' ', $msg);
+
+        return trim($msg);
+    }
     /**
      * Check a material after a stock movement and alert if low/out.
      *
@@ -66,18 +112,8 @@ class AlertService
         $token = config('services.telegram.bot_token');
         if (! $token) return;
 
-        $isOut = $stock <= 0;
-
-        $message = ($isOut ? "🔴 Stock អស់!" : "⚠️ Stock ទាប") . "\n\n"
-            . "📦 {$material->name}"
-            . ($material->name_km ? " ({$material->name_km})" : '') . "\n"
-            . "📂 {$material->categoryLabelShort()}"
-            . ($material->sub_type ? " · {$material->sub_type}" : '') . "\n"
-            . "━━━━━━━━━━━━━━━━\n"
-            . "📊 Stock: {$stock} {$material->unit}\n"
-            . ($isOut ? "❌ អស់ Stock!\n" : "🔴 Min: {$min} {$material->unit}\n")
-            . "━━━━━━━━━━━━━━━━\n"
-            . "🕐 " . now()->format('d/m/Y H:i');
+        $template = Setting::get('stock_alert_template', self::DEFAULT_TEMPLATE);
+        $message  = self::renderTemplate($template, $material, $stock, $min);
 
         $params = ['chat_id' => $chatId, 'text' => $message];
         if ($threadId) $params['message_thread_id'] = $threadId;
