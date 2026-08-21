@@ -130,9 +130,9 @@
           </tr>
         @empty
           <tr><td colspan="9">
-            <div class="empty-state">
-              <div class="empty-icon"><i class="bi bi-inbox"></i></div>
-              <p style="font-weight:600;margin:0">មិនទាន់មានស្នើរសុំ</p>
+            <div class="empty-box">
+              <i class="bi bi-inbox"></i>
+              <div class="empty-text">មិនទាន់មានស្នើរសុំទេ</div>
             </div>
           </td></tr>
         @endforelse

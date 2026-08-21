@@ -310,7 +310,7 @@ class SchedulingService
      */
     public function trackJob(string $jobName): array
     {
-        $stages = ['Design', 'Press', 'Folding', 'Gathering', 'Staple', 'Binding', 'Cutting', 'Packaging', 'Delivery'];
+        $stages = ['Design', 'Press', 'Digital', 'Folding', 'Gathering', 'Staple', 'Binding', 'Cutting', 'Packaging', 'Delivery'];
 
         $tasks = ProductionTask::where('name', 'like', "%{$jobName}%")
             ->orderBy('scheduled_start_date')

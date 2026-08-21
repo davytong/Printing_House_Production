@@ -44,6 +44,30 @@ class ProductionTaskController extends Controller
         return view('tasks.index', compact('tasks', 'stats'));
     }
 
+    public function kanban(Request $request): View
+    {
+        $query = ProductionTask::query()
+            ->when($request->machine, fn($q, $m) => $q->where('assigned_machine_id', $m))
+            ->when($request->process, fn($q, $p) => $q->where('process', $p))
+            ->whereNotIn('status', ['cancelled']);
+
+        // Limit to a rolling window (e.g. past 7 days to next 14 days) or all active
+        // For shop floor, it's best to show everything not cancelled, but we can group them.
+        
+        $tasks = $query->orderByRaw("FIELD(priority, 'urgent', 'standard')")
+            ->orderBy('scheduled_start_date')
+            ->get();
+
+        $columns = [
+            'pending'     => $tasks->where('status', 'pending'),
+            'in_progress' => $tasks->where('status', 'in_progress'),
+            'paused'      => $tasks->where('status', 'paused'),
+            'completed'   => $tasks->where('status', 'completed')->take(20), // Show only recent 20 completed on board
+        ];
+
+        return view('tasks.kanban', compact('columns'));
+    }
+
     // ═══════════════════════════════════════════════════════
     // API ENDPOINTS (JSON)
     // ═══════════════════════════════════════════════════════

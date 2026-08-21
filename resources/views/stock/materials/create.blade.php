@@ -1,4 +1,4 @@
-﻿@extends('layouts.app')
+@extends('layouts.app')
 @section('title','បន្ថែម Material')
 @section('page-title','New Material')
 
@@ -33,10 +33,10 @@
             <div class="col-md-4">
               <label class="form-label">ប្រភេទ *</label>
               <select name="category" id="catSelect" class="form-select" required>
-                <option value="paper"      {{ old('category')==='paper'?'selected':'' }}>📄 ក្រដាស (Paper)</option>
-                <option value="film"       {{ old('category')==='film'?'selected':'' }}>🎞️ Film (ហ្វីម)</option>
-                <option value="consumable" {{ old('category')==='consumable'?'selected':'' }}>🧴 Consumable (សម្ភារៈប្រើប្រាស់)</option>
-                <option value="other"      {{ old('category')==='other'?'selected':'' }}>➕ ផ្សេងទៀត (Other)</option>
+                <option value="paper"      {{ old('category')==='paper'?'selected':'' }}>ក្រដាស (Paper)</option>
+                <option value="film"       {{ old('category')==='film'?'selected':'' }}>Laminate (ស្គុត)</option>
+                <option value="consumable" {{ old('category')==='consumable'?'selected':'' }}>Consumable (សម្ភារៈប្រើប្រាស់)</option>
+                <option value="other"      {{ old('category')==='other'?'selected':'' }}>ផ្សេងទៀត (Other)</option>
               </select>
             </div>
 

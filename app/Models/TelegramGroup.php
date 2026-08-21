@@ -37,7 +37,7 @@ class TelegramGroup extends Model
 
     /**
      * Find the assigned group/topic for a specific purpose.
-     * Purposes: paper_stock, press_report, finishing_report, consumable_stock, general, procurement
+     * Purposes: paper_stock, press_report, finishing_report, consumable_stock, general, procurement, production_briefing, stock_usage
      */
     public static function forPurpose(string $purpose): ?self
     {

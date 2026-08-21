@@ -3,6 +3,7 @@
 namespace App\Http\Controllers;
 
 use App\Models\ProductionSchedule;
+use App\Models\ProductionTaskProgress;
 use App\Models\ScheduleDelayLog;
 use App\Services\TelegramService;
 use Carbon\Carbon;
@@ -16,6 +17,7 @@ class ScheduleController extends Controller
     private array $processes = [
         'Design',
         'Press',
+        'Digital',
         'Folding',
         'Gathering',
         'Staple',
@@ -41,14 +43,20 @@ class ScheduleController extends Controller
         $todayTasks = ProductionSchedule::where('year', now()->year)
             ->where('month', now()->month)
             ->where('day', now()->day)
-            ->get();
+            ->get()
+            ->sortBy(function($task) {
+                return array_search($task->process, $this->processes);
+            });
 
         // Tomorrow's tasks for upcoming alert
         $tomorrow = now()->addDay();
         $tomorrowTasks = ProductionSchedule::where('year', $tomorrow->year)
             ->where('month', $tomorrow->month)
             ->where('day', $tomorrow->day)
-            ->get();
+            ->get()
+            ->sortBy(function($task) {
+                return array_search($task->process, $this->processes);
+            });
 
         // Progress: how many days have tasks vs total days in month
         $totalCells = $daysInMonth * count($this->processes);
@@ -79,11 +87,16 @@ class ScheduleController extends Controller
             'month'   => 'required|integer|min:1|max:12',
             'process' => 'required|string',
             'day'     => 'required|integer|min:1|max:31',
-            'task'    => 'nullable|string|max:255',
+            'task'    => 'nullable|string|max:500',
             'note'    => 'nullable|string|max:255',
             'color'   => 'nullable|string|max:30',
             'status'  => 'nullable|in:planned,in_progress,done',
+            'copy_processes'   => 'nullable|array',
+            'copy_processes.*' => 'string',
+            'include_sundays'  => 'nullable|boolean',
         ]);
+
+        $includeSundays = $request->boolean('include_sundays');
 
         if (empty($request->task) && empty($request->note)) {
             ProductionSchedule::where([
@@ -97,25 +110,200 @@ class ScheduleController extends Controller
                 ->with('success', 'ជម្រះទិន្នន័យបានជោគជ័យ!');
         }
 
-        // Multi-day span support
-        $spanDays = max(1, (int) $request->input('span_days', 1));
-        $daysInMonth = \Carbon\Carbon::createFromDate($request->year, $request->month, 1)->daysInMonth;
+        $parser = app(\App\Services\ScheduleParserService::class);
+        $parsedData = $parser->parseTasks(
+            $request->task ?? '',
+            (int)$request->year,
+            (int)$request->month,
+            (int)$request->day,
+            $includeSundays
+        );
+        
+        $cellsToCreate = $parsedData['cells'];
+        $startDay = $parsedData['startDay'];
+        $tasks = $parsedData['tasks'];
         $saved = 0;
 
-        for ($i = 0; $i < $spanDays; $i++) {
-            $targetDay = $request->day + $i;
-            if ($targetDay > $daysInMonth) break;
+        // Clear any existing cells for this process starting from the input day
+        // This ensures we replace old data when editing
+        $affectedDays = array_keys($cellsToCreate);
+        if (!empty($affectedDays)) {
+            ProductionSchedule::where([
+                'year'    => $request->year,
+                'month'   => $request->month,
+                'process' => $request->process,
+            ])
+            ->whereIn('day', $affectedDays)
+            ->delete();
+        }
 
-            ProductionSchedule::updateOrCreate(
-                ['year' => $request->year, 'month' => $request->month, 'process' => $request->process, 'day' => $targetDay],
-                ['task' => $request->task, 'note' => $request->note, 'color' => $request->color, 'status' => $request->input('status', 'planned')]
-            );
+        // Save all cells
+        $insertData = [];
+        $now = now();
+        foreach ($cellsToCreate as $targetDay => $taskLabels) {
+            $insertData[] = [
+                'year'       => $request->year,
+                'month'      => $request->month,
+                'process'    => $request->process,
+                'day'        => $targetDay,
+                'task'       => implode(', ', $taskLabels),
+                'note'       => $request->note,
+                'color'      => $request->color,
+                'status'     => $request->input('status', 'planned'),
+                'created_at' => $now,
+                'updated_at' => $now,
+            ];
             $saved++;
         }
 
-        $msg = $saved > 1 ? "Saved across {$saved} days" : 'Saved!';
+        if (!empty($insertData)) {
+            ProductionSchedule::insert($insertData);
+        }
+
+        // Copy/Append to other processes safely
+        if (!empty($request->copy_processes)) {
+            $copy1Day = $request->has('copy_1_day');
+            
+            foreach ($request->copy_processes as $copyProcess) {
+                if ($copy1Day) {
+                    // Extract only the base task names (strip duration/children metadata)
+                    $baseNames = [];
+                    foreach ($tasks as $taskStr) {
+                        if (empty(trim($taskStr))) continue;
+                        $taskName = trim(preg_replace('/\[\d+d\]|\{[^}]+\}/', '', $taskStr));
+                        if (!empty($taskName)) {
+                            $baseNames[] = $taskName;
+                        }
+                    }
+                    
+                    if (!empty($baseNames)) {
+                        $existing = ProductionSchedule::where([
+                            'year'    => $request->year,
+                            'month'   => $request->month,
+                            'process' => $copyProcess,
+                            'day'     => $startDay, // Only copy to the very first day!
+                        ])->first();
+                        
+                        $newTasksStr = implode(', ', $baseNames);
+                        
+                        if ($existing) {
+                            $currentTasks = array_filter(array_map('trim', explode(',', $existing->task)));
+                            foreach ($baseNames as $bn) {
+                                if (!in_array($bn, $currentTasks)) {
+                                    $currentTasks[] = $bn;
+                                }
+                            }
+                            $existing->update(['task' => implode(', ', $currentTasks)]);
+                        } else {
+                            ProductionSchedule::create([
+                                'year'    => $request->year,
+                                'month'   => $request->month,
+                                'process' => $copyProcess,
+                                'day'     => $startDay, // Only 1 day!
+                                'task'    => $newTasksStr,
+                                'note'    => null,
+                                'color'   => $request->color,
+                                'status'  => 'planned',
+                            ]);
+                        }
+                    }
+                } else {
+                    // Exact Clone (Spans multiple days, keeps [2d] string)
+                    foreach ($cellsToCreate as $targetDay => $taskLabels) {
+                        $existing = ProductionSchedule::where([
+                            'year'    => $request->year,
+                            'month'   => $request->month,
+                            'process' => $copyProcess,
+                            'day'     => $targetDay,
+                        ])->first();
+
+                        $newTasksStr = implode(', ', $taskLabels);
+
+                        if ($existing) {
+                            // Append to existing tasks safely
+                            $currentTasks = array_filter(array_map('trim', explode(',', $existing->task)));
+                            // Don't append if it perfectly matches (prevents double copying by accident)
+                            if (!in_array($newTasksStr, $currentTasks)) {
+                                $currentTasks[] = $newTasksStr;
+                                $existing->update(['task' => implode(', ', $currentTasks)]);
+                            }
+                        } else {
+                            // Create new entry
+                            ProductionSchedule::create([
+                                'year'    => $request->year,
+                                'month'   => $request->month,
+                                'process' => $copyProcess,
+                                'day'     => $targetDay,
+                                'task'    => $newTasksStr,
+                                'note'    => null, // Don't copy specific notes
+                                'color'   => $request->color, // Do copy the color tag
+                                'status'  => 'planned',
+                            ]);
+                        }
+                    }
+                }
+            }
+        }
+
+        $msg = $saved > 1 ? "បានរក្សាទុក {$saved} ថ្ងៃ (ឈប់សម្រាកថ្ងៃអាទិត្យ)" : 'រក្សាទុកបានជោគជ័យ!';
         return redirect()->route('schedule.index', ['year' => $request->year, 'month' => $request->month])
             ->with('success', $msg);
+    }
+
+    /**
+     * Move an entire cell's tasks to another day/process without giving a reason.
+     */
+    public function moveCell(Request $request)
+    {
+        $request->validate([
+            'year'         => 'required|integer',
+            'month'        => 'required|integer',
+            'from_process' => 'required|string',
+            'from_day'     => 'required|integer',
+            'to_process'   => 'required|string',
+            'to_day'       => 'required|integer',
+        ]);
+
+        $original = ProductionSchedule::where([
+            'year'    => $request->year,
+            'month'   => $request->month,
+            'process' => $request->from_process,
+            'day'     => $request->from_day,
+        ])->first();
+
+        if (!$original) {
+            return back()->with('error', 'រកមិនឃើញទិន្នន័យដើម (Original data not found)');
+        }
+
+        $existing = ProductionSchedule::where([
+            'year'    => $request->year,
+            'month'   => $request->month,
+            'process' => $request->to_process,
+            'day'     => $request->to_day,
+        ])->first();
+
+        if ($existing) {
+            // Merge tasks if destination already has tasks
+            $currentTasks = array_filter(array_map('trim', explode(',', $existing->task)));
+            $newTasks = array_filter(array_map('trim', explode(',', $original->task)));
+            foreach ($newTasks as $nt) {
+                if (!in_array($nt, $currentTasks)) {
+                    $currentTasks[] = $nt;
+                }
+            }
+            $existing->update([
+                'task' => implode(', ', $currentTasks),
+            ]);
+            $original->delete();
+        } else {
+            // Just update the original to the new cell
+            $original->update([
+                'process' => $request->to_process,
+                'day'     => $request->to_day,
+            ]);
+        }
+
+        return back()->with('success', 'បានផ្លាស់ប្តូរដោយជោគជ័យ! (Moved successfully)');
     }
 
     /**
@@ -137,29 +325,53 @@ class ScheduleController extends Controller
         $year  = $request->year;
         $month = $request->month;
 
+        $upsertData = [];
+        $deleteConditions = [];
+        $now = now();
+
         foreach ($request->cells as $cell) {
             if (empty($cell['task']) && empty($cell['note'])) {
-                ProductionSchedule::where([
-                    'year'    => $year,
-                    'month'   => $month,
+                $deleteConditions[] = [
                     'process' => $cell['process'],
                     'day'     => $cell['day'],
-                ])->delete();
+                ];
             } else {
-                ProductionSchedule::updateOrCreate(
-                    [
-                        'year'    => $year,
-                        'month'   => $month,
-                        'process' => $cell['process'],
-                        'day'     => $cell['day'],
-                    ],
-                    [
-                        'task'  => $cell['task'] ?? null,
-                        'note'  => $cell['note'] ?? null,
-                        'color' => $cell['color'] ?? null,
-                    ]
-                );
+                $upsertData[] = [
+                    'year'       => $year,
+                    'month'      => $month,
+                    'process'    => $cell['process'],
+                    'day'        => $cell['day'],
+                    'task'       => $cell['task'] ?? null,
+                    'note'       => $cell['note'] ?? null,
+                    'color'      => $cell['color'] ?? null,
+                    'status'     => 'planned',
+                    'created_at' => $now,
+                    'updated_at' => $now,
+                ];
             }
+        }
+
+        // Process deletions in bulk
+        if (!empty($deleteConditions)) {
+            $query = ProductionSchedule::where('year', $year)->where('month', $month);
+            $query->where(function ($q) use ($deleteConditions) {
+                foreach ($deleteConditions as $cond) {
+                    $q->orWhere(function ($sub) use ($cond) {
+                        $sub->where('process', $cond['process'])
+                            ->where('day', $cond['day']);
+                    });
+                }
+            });
+            $query->delete();
+        }
+
+        // Process upserts in bulk
+        if (!empty($upsertData)) {
+            ProductionSchedule::upsert(
+                $upsertData,
+                ['year', 'month', 'process', 'day'],
+                ['task', 'note', 'color', 'updated_at']
+            );
         }
 
         return redirect()->route('schedule.index', ['year' => $year, 'month' => $month])
@@ -178,9 +390,9 @@ class ScheduleController extends Controller
         $entries = ProductionSchedule::where('year', $year)
             ->where('month', $month)
             ->whereNotNull('task')
-            ->orderBy('day')
-            ->orderBy('process')
-            ->get();
+            ->get()
+            ->sortBy(fn($task) => [$task->day, array_search($task->process, $this->processes)])
+            ->values();
 
         return view('schedule.export-calendar', [
             'year'      => $year,
@@ -188,6 +400,62 @@ class ScheduleController extends Controller
             'entries'   => $entries,
             'processes' => $this->processes,
         ]);
+    }
+
+    /**
+     * Send calendar image export to Telegram.
+     */
+    public function sendExportTelegram(Request $request, TelegramService $telegramService)
+    {
+        $request->validate([
+            'image' => 'required|string',
+            'monthName' => 'required|string',
+            'group_id' => 'nullable|string'
+        ]);
+
+        $base64Image = $request->input('image');
+        $monthName = $request->input('monthName');
+        $groupId = $request->input('group_id', 'all');
+
+        if (preg_match('/^data:image\/(\w+);base64,/', $base64Image, $type)) {
+            $base64Image = substr($base64Image, strpos($base64Image, ',') + 1);
+            $type = strtolower($type[1]);
+            
+            if (!in_array($type, ['jpg', 'jpeg', 'png', 'webp'])) {
+                return response()->json(['error' => 'Invalid image type'], 400);
+            }
+            
+            $base64Image = str_replace(' ', '+', $base64Image);
+            $imageData = base64_decode($base64Image);
+        } else {
+            return response()->json(['error' => 'Invalid image format'], 400);
+        }
+
+        $filename = 'monthly_calendar_' . uniqid() . '.' . $type;
+        $path = 'temp/' . $filename;
+        
+        \Illuminate\Support\Facades\Storage::disk('public')->put($path, $imageData);
+
+        $caption = "📅 Production Schedule — {$monthName}";
+        
+        if ($groupId === 'all') {
+            $sent = $telegramService->broadcastPhoto($path, $caption);
+        } else {
+            $group = \App\Models\TelegramGroup::find($groupId);
+            if ($group) {
+                $sent = $telegramService->sendPhoto($group->chat_id, $path, $caption, $group->message_thread_id) ? 1 : 0;
+            } else {
+                $sent = 0;
+            }
+        }
+
+        \Illuminate\Support\Facades\Storage::disk('public')->delete($path);
+
+        if ($sent > 0) {
+            return response()->json(['success' => true, 'message' => "Sent to {$sent} groups."]);
+        }
+
+        return response()->json(['success' => false, 'error' => 'Failed to send to Telegram'], 500);
     }
 
     /**
@@ -210,50 +478,75 @@ class ScheduleController extends Controller
             ->where('month', $month)
             ->where('day', $day)
             ->whereNotNull('task')
-            ->orderBy('process')
-            ->get();
+            ->get()
+            ->sortBy(fn($task) => array_search($task->process, $this->processes))
+            ->values();
 
         if ($tasks->isEmpty()) {
             return redirect()->route('schedule.index', ['year' => $year, 'month' => $month])
                 ->with('error', 'មិនមានកិច្ចការសម្រាប់ថ្ងៃនេះ!');
         }
 
-        $date = Carbon::createFromDate($year, $month, $day)->format('d/m/Y');
         $dayName = Carbon::createFromDate($year, $month, $day)->locale('km')->dayName;
+        $monthNameKm = Carbon::createFromDate($year, $month, 1)->locale('km')->translatedFormat('F');
+        
+        $targetDate = Carbon::createFromDate($year, $month, $day)->startOfDay();
+        $today = now()->startOfDay();
+        $relativeDay = '';
+        if ($targetDate->equalTo($today)) {
+            $relativeDay = ' (ថ្ងៃនេះ)';
+        } elseif ($targetDate->equalTo($today->copy()->addDay())) {
+            $relativeDay = ' (ថ្ងៃស្អែក)';
+        }
 
-        $message = "📅 កាលវិភាគផលិតកម្ម — {$date} ({$dayName})\n";
+        $message = "<b>📅 កាលវិភាគផលិតកម្ម</b>\n";
+        $message .= " ថ្ងៃ {$dayName} ទី {$day} ខែ {$monthNameKm} ឆ្នាំ {$year}{$relativeDay}\n";
         $message .= "━━━━━━━━━━━━━━━━━━\n\n";
 
         foreach ($tasks as $task) {
             $emoji = $this->processEmoji($task->process);
-            $message .= "{$emoji} {$task->process}: {$task->task}";
+            $cleanTask = preg_replace('/\s*\(\d+\/\d+\)\s*(URGENT)?/', '', $task->task);
+            $cleanTask = str_replace(' (URGENT)', '', $cleanTask);
+            $cleanTask = str_replace(' URGENT', '', $cleanTask);
+            $isUrgent = str_contains(strtoupper($task->task), 'URGENT');
+            $isDowntime = str_starts_with($task->task, '🔧');
+            
+            $taskLabel = $cleanTask;
+            if ($isUrgent) {
+                $taskLabel = "🔴 <u>" . $taskLabel . " [បន្ទាន់]</u>";
+            }
+            if ($isDowntime) {
+                $taskLabel = "<b>" . $taskLabel . "</b>";
+            }
+
+            $message .= "{$emoji} <b>{$task->process}:</b> {$taskLabel}";
             if ($task->note) {
-                $message .= " ({$task->note})";
+                $message .= " <i>({$task->note})</i>";
             }
             $message .= "\n";
         }
 
         $message .= "\n━━━━━━━━━━━━━━━━━━\n";
-        $message .= "✅ សរុប: {$tasks->count()} ដំណើរការ";
+        $message .= "📊 <b>សរុប:</b> {$tasks->count()} ដំណើរការ";
 
         $telegram = new TelegramService();
         $sent = 0;
 
         if ($request->group_id === 'all') {
             // Send to all groups
-            $sent = $telegram->broadcastMessage($message);
+            $sent = $telegram->broadcastMessage($message, 'HTML');
         } else {
             // Send to specific group
             $group = \App\Models\TelegramGroup::find($request->group_id);
             if ($group) {
-                $success = $telegram->sendMessage($group->chat_id, $message, $group->message_thread_id);
+                $success = $telegram->sendMessage($group->chat_id, $message, $group->message_thread_id, 'HTML');
                 if ($success) $sent = 1;
             }
         }
 
         if ($sent > 0) {
             return redirect()->route('schedule.index', ['year' => $year, 'month' => $month])
-                ->with('success', "បានផ្ញើការជូនដំណឹង ថ្ងៃ {$date} ទៅ {$sent} group(s)!");
+                ->with('success', "បានផ្ញើការជូនដំណឹង ថ្ងៃ {$targetDate->format('d/m/Y')} ទៅ {$sent} group(s)!");
         }
 
         return redirect()->route('schedule.index', ['year' => $year, 'month' => $month])
@@ -499,10 +792,13 @@ class ScheduleController extends Controller
         // the whole production day for that process is blocked.
         $lastUrgentDay = end($urgentDays);
 
+        // Pre-fetch existing cells for the blocked days
+        $existingCells = ProductionSchedule::where([
+            'year'=>$year,'month'=>$month,'process'=>$process
+        ])->whereIn('day', $urgentDays)->get()->keyBy('day');
+
         foreach ($urgentDays as $urgentDay) {
-            $existing = ProductionSchedule::where([
-                'year'=>$year,'month'=>$month,'process'=>$process,'day'=>$urgentDay
-            ])->first();
+            $existing = $existingCells->get($urgentDay);
 
             if ($existing) {
                 $shiftTo = $this->nextWorkingDay($year, $month, $lastUrgentDay);
@@ -559,99 +855,87 @@ class ScheduleController extends Controller
      * Handle Machine Downtime — shift ALL tasks on the affected process(es) forward
      * by the number of downtime days, starting from the downtime start day.
      */
-    public function machineDowntime(Request $request)
+    public function machineDowntime(Request $request, TelegramService $telegramService)
     {
         $request->validate([
             'year'            => 'required|integer',
             'month'           => 'required|integer|min:1|max:12',
             'process'         => 'required|string',
             'downtime_day'    => 'required|integer|min:1|max:31',
-            'downtime_days'   => 'required|integer|min:1|max:30',
+            'downtime_days'   => 'required|numeric|min:0.5|max:30',
             'reason'          => 'nullable|string|max:500',
+            'strategy'        => 'nullable|in:shift_workflow,shift_single',
+            'machine_id'      => 'nullable|integer',
         ]);
 
         $year         = (int) $request->year;
         $month        = (int) $request->month;
         $process      = $request->process;
         $startDay     = (int) $request->downtime_day;
-        $downtimeDays = (int) $request->downtime_days;
+        $downtimeDays = (float) $request->downtime_days;
         $reason       = $request->reason ?? 'Machine downtime';
+        $strategy     = $request->input('strategy', 'shift_workflow');
+        $machineId    = $request->input('machine_id');
         $daysInMonth  = Carbon::createFromDate($year, $month, 1)->daysInMonth;
 
         // Collect the downtime working days (the days that are blocked)
         $blockedDays = $this->collectWorkingDays($year, $month, $startDay, $downtimeDays);
         $lastBlocked = end($blockedDays);
 
-        // Get all scheduled tasks on or after the downtime start day for this process
-        // We need to shift them ALL forward by downtimeDays (in working-day terms)
+        if (empty($blockedDays)) {
+            return redirect()->route('schedule.index', ['year'=>$year,'month'=>$month])
+                ->with('error', 'No working days affected by this downtime.');
+        }
+
+        // Record machine downtime if machine is specified
+        if ($machineId) {
+            $startDate = Carbon::createFromDate($year, $month, $startDay)->startOfDay();
+            \App\Models\MachineDowntime::create([
+                'machine_id'     => $machineId,
+                'start_time'     => $startDate,
+                'duration_hours' => $downtimeDays * 8, // assuming 8 hours per working day
+                'reason'         => $reason,
+                'resolved'       => false,
+            ]);
+            // Update machine status
+            $machine = \App\Models\Machine::find($machineId);
+            if ($machine) {
+                $machine->update(['status' => 'breakdown']);
+            }
+        }
+
+        $shiftedTasksSet = []; // Keep track of base task names that were shifted
+        $totalAffectedTasks = 0;
+
+        // Shift primary process
         $affectedCells = ProductionSchedule::where('year', $year)
             ->where('month', $month)
             ->where('process', $process)
             ->where('day', '>=', $startDay)
-            ->orderBy('day', 'desc') // process in reverse to avoid overwriting
+            ->orderBy('day', 'desc')
             ->get();
 
         foreach ($affectedCells as $cell) {
-            // Calculate new day: shift forward by downtimeDays working days
-            $newDay = $cell->day;
-            $shifts = 0;
-            while ($shifts < $downtimeDays) {
-                $newDay++;
-                if ($newDay > $daysInMonth) break;
-                $dow = Carbon::createFromDate($year, $month, $newDay)->dayOfWeek;
-                if (!in_array($dow, [0, 6])) {
-                    $shifts++;
+            $totalAffectedTasks++;
+            
+            // Collect task names for workflow shifting
+            $cellTasks = array_filter(array_map('trim', explode(',', $cell->task)));
+            foreach ($cellTasks as $t) {
+                if ($t && !str_starts_with($t, '🔧')) {
+                    $clean = preg_replace('/\[\d+d\]|\{[^}]+\}|\(\d+\/\d+\)/', '', $t);
+                    $clean = trim(str_replace(['(URGENT)', 'URGENT'], '', $clean));
+                    if ($clean) {
+                        $shiftedTasksSet[] = $clean;
+                    }
                 }
             }
 
-            $loggedDay = min($newDay, $daysInMonth);
-            $overflow  = $newDay > $daysInMonth;
-
-            ScheduleDelayLog::create([
-                'year'         => $year,
-                'month'        => $month,
-                'process'      => $process,
-                'original_task'=> $cell->task,
-                'original_day' => $cell->day,
-                'shifted_to_day'=> $loggedDay,
-                'reason_type'  => 'machine_downtime',
-                'reason_detail'=> "Machine downtime {$downtimeDays}d: {$reason}"
-                    . ($overflow ? " [overflows to next month]" : ""),
-            ]);
-
-            // Delete the original cell
-            ProductionSchedule::where([
-                'year'=>$year,'month'=>$month,'process'=>$process,'day'=>$cell->day
-            ])->delete();
-
-            if ($newDay <= $daysInMonth) {
-                // Merge with whatever is already on the target day (another shifted cell)
-                $targetCell = ProductionSchedule::where([
-                    'year'=>$year,'month'=>$month,'process'=>$process,'day'=>$newDay
-                ])->first();
-
-                if ($targetCell) {
-                    $existingTasks = array_map('trim', explode(',', $targetCell->task));
-                    $incomingTasks = array_map('trim', explode(',', $cell->task));
-                    $merged = array_unique(array_merge($existingTasks, $incomingTasks));
-                    $targetCell->task = implode(', ', $merged);
-                    $targetCell->save();
-                } else {
-                    ProductionSchedule::create([
-                        'year'    => $year,
-                        'month'   => $month,
-                        'process' => $process,
-                        'day'     => $newDay,
-                        'task'    => $cell->task,
-                        'note'    => ($cell->note ? $cell->note . ' — ' : '') . 'delayed: ' . $reason,
-                        'color'   => $cell->color,
-                    ]);
-                }
-            }
-            // If newDay > daysInMonth the task falls outside this month — logged above
+            // Shift forward
+            $newDay = $this->shiftDayForward($year, $month, $cell->day, $downtimeDays, $daysInMonth);
+            $this->moveScheduleCell($cell, $newDay, $year, $month, $process, $daysInMonth, $downtimeDays, $reason, 'machine_downtime');
         }
 
-        // Mark the downtime days on the grid
+        // Mark the downtime days on the grid for the primary process
         foreach ($blockedDays as $bd) {
             if ($bd > $daysInMonth) break;
             $existing = ProductionSchedule::where(['year'=>$year,'month'=>$month,'process'=>$process,'day'=>$bd])->first();
@@ -663,8 +947,140 @@ class ScheduleController extends Controller
             }
         }
 
+        // Shift downstream processes if strategy is shift_workflow
+        if ($strategy === 'shift_workflow' && !empty($shiftedTasksSet)) {
+            $shiftedTasksSet = array_unique($shiftedTasksSet);
+            $processIndex = array_search($process, $this->processes);
+            
+            if ($processIndex !== false) {
+                $downstreamProcesses = array_slice($this->processes, $processIndex + 1);
+                
+                foreach ($downstreamProcesses as $dsProcess) {
+                    // Find cells in downstream processes that contain the shifted tasks
+                    $dsCells = ProductionSchedule::where('year', $year)
+                        ->where('month', $month)
+                        ->where('process', $dsProcess)
+                        ->where('day', '>=', $startDay)
+                        ->orderBy('day', 'desc')
+                        ->get();
+                        
+                    foreach ($dsCells as $dsCell) {
+                        $cellTasks = array_filter(array_map('trim', explode(',', $dsCell->task)));
+                        $hasMatch = false;
+                        foreach ($cellTasks as $t) {
+                            $clean = preg_replace('/\[\d+d\]|\{[^}]+\}|\(\d+\/\d+\)/', '', $t);
+                            $clean = trim(str_replace(['(URGENT)', 'URGENT'], '', $clean));
+                            if (in_array($clean, $shiftedTasksSet)) {
+                                $hasMatch = true;
+                                break;
+                            }
+                        }
+                        
+                        if ($hasMatch) {
+                            $totalAffectedTasks++;
+                            $newDay = $this->shiftDayForward($year, $month, $dsCell->day, $downtimeDays, $daysInMonth);
+                            $this->moveScheduleCell($dsCell, $newDay, $year, $month, $dsProcess, $daysInMonth, $downtimeDays, 'Cascade from ' . $process . ' delay', 'machine_downtime');
+                        }
+                    }
+                }
+            }
+        }
+
+        // Send Telegram Notification
+        $machineName = $machineId ? (\App\Models\Machine::find($machineId)?->name ?? 'Unknown Machine') : $process;
+        $downtimeDate = Carbon::createFromDate($year, $month, $startDay)->format('d/m/Y');
+        $telegramMessage = "🚨 <b>MACHINE DOWNTIME ALERT</b> 🚨\n\n" .
+                           "<b>Machine/Process:</b> {$machineName} ({$process})\n" .
+                           "<b>Date:</b> {$downtimeDate}\n" .
+                           "<b>Duration:</b> {$downtimeDays} working day(s)\n" .
+                           "<b>Reason:</b> {$reason}\n\n" .
+                           "<b>Impact:</b> {$totalAffectedTasks} schedule(s) affected.\n" .
+                           ($strategy === 'shift_workflow' ? "🔄 <i>Workflow Cascade Rescheduling Applied</i>" : "⚠️ <i>Only {$process} shifted</i>");
+        
+        $mainGroup = \App\Models\TelegramGroup::whereNull('topic_name')->first();
+        if ($mainGroup) {
+            $telegramService->sendMessage($mainGroup->chat_id, $telegramMessage, $mainGroup->message_thread_id, 'HTML');
+        }
+
+        // Conflict Detection
+        $conflictCount = 0;
+        $monthCells = ProductionSchedule::where('year', $year)->where('month', $month)->get();
+        foreach ($monthCells as $c) {
+            $tasksInCell = array_filter(array_map('trim', explode(',', $c->task)));
+            // Avoid counting downtime cells as conflicts
+            $isDowntimeOnly = count($tasksInCell) === 1 && str_starts_with(reset($tasksInCell), '🔧');
+            if (count($tasksInCell) > 3 && !$isDowntimeOnly) {
+                $conflictCount++;
+            }
+        }
+
+        $successMsg = "Machine downtime logged! {$totalAffectedTasks} tasks shifted forward by {$downtimeDays} working day(s).";
+        if ($conflictCount > 0) {
+            $successMsg .= " ⚠️ Warning: Possible machine overload detected ({$conflictCount} days have > 3 tasks).";
+        }
+
         return redirect()->route('schedule.index', ['year'=>$year,'month'=>$month])
-            ->with('success', "Machine downtime logged! {$affectedCells->count()} tasks shifted forward by {$downtimeDays} working day(s).");
+            ->with('success', $successMsg);
+    }
+
+    private function shiftDayForward($year, $month, $currentDay, float $daysToShift, $daysInMonth)
+    {
+        $newDay = $currentDay;
+        $shifts = 0;
+        while ($shifts < $daysToShift) {
+            $newDay++;
+            if ($newDay > $daysInMonth) break;
+            $dow = Carbon::createFromDate($year, $month, $newDay)->dayOfWeek;
+            if ($dow !== 0) { // Skip Sunday only
+                $shifts++;
+            }
+        }
+        return $newDay;
+    }
+
+    private function moveScheduleCell($cell, $newDay, $year, $month, $process, $daysInMonth, $downtimeDays, $reason, $reasonType)
+    {
+        $loggedDay = min($newDay, $daysInMonth);
+        $overflow  = $newDay > $daysInMonth;
+
+        ScheduleDelayLog::create([
+            'year'         => $year,
+            'month'        => $month,
+            'process'      => $process,
+            'original_task'=> $cell->task,
+            'original_day' => $cell->day,
+            'shifted_to_day'=> $loggedDay,
+            'reason_type'  => $reasonType,
+            'reason_detail'=> "Shifted {$downtimeDays}d: {$reason}" . ($overflow ? " [overflows to next month]" : ""),
+        ]);
+
+        ProductionSchedule::where([
+            'year'=>$year,'month'=>$month,'process'=>$process,'day'=>$cell->day
+        ])->delete();
+
+        if ($newDay <= $daysInMonth) {
+            $targetCell = ProductionSchedule::where([
+                'year'=>$year,'month'=>$month,'process'=>$process,'day'=>$newDay
+            ])->first();
+
+            if ($targetCell) {
+                $existingTasks = array_map('trim', explode(',', $targetCell->task));
+                $incomingTasks = array_map('trim', explode(',', $cell->task));
+                $merged = array_unique(array_merge($existingTasks, $incomingTasks));
+                $targetCell->task = implode(', ', $merged);
+                $targetCell->save();
+            } else {
+                ProductionSchedule::create([
+                    'year'    => $year,
+                    'month'   => $month,
+                    'process' => $process,
+                    'day'     => $newDay,
+                    'task'    => $cell->task,
+                    'note'    => ($cell->note ? $cell->note . ' — ' : '') . 'delayed: ' . $reason,
+                    'color'   => $cell->color,
+                ]);
+            }
+        }
     }
 
     /**
@@ -714,8 +1130,13 @@ class ScheduleController extends Controller
         $allCells = ProductionSchedule::where('year', $year)
             ->where('month', $month)
             ->whereNotNull('task')
-            ->orderBy('process')->orderBy('day')
-            ->get();
+            ->get()
+            ->sort(function($a, $b) {
+                if ($a->day !== $b->day) {
+                    return $a->day <=> $b->day;
+                }
+                return array_search($a->process, $this->processes) <=> array_search($b->process, $this->processes);
+            })->values();
 
         // Process summary
         $processSummary = [];
@@ -733,6 +1154,15 @@ class ScheduleController extends Controller
                 }
             }
         }
+
+        // Reorder processSummary according to standard process list
+        $sortedProcessSummary = [];
+        foreach ($this->processes as $proc) {
+            if (isset($processSummary[$proc])) {
+                $sortedProcessSummary[$proc] = $processSummary[$proc];
+            }
+        }
+        $processSummary = $sortedProcessSummary;
 
         return response()->json([
             'ok'             => true,
@@ -767,9 +1197,13 @@ class ScheduleController extends Controller
         $allCells = ProductionSchedule::where('year', $year)
             ->where('month', $month)
             ->whereNotNull('task')
-            ->orderBy('process')
-            ->orderBy('day')
-            ->get();
+            ->get()
+            ->sort(function($a, $b) {
+                if ($a->day !== $b->day) {
+                    return $a->day <=> $b->day;
+                }
+                return array_search($a->process, $this->processes) <=> array_search($b->process, $this->processes);
+            })->values();
 
         // Build per-process summary
         $processSummary = [];
@@ -787,6 +1221,15 @@ class ScheduleController extends Controller
                 }
             }
         }
+
+        // Reorder processSummary according to standard process list
+        $sortedProcessSummary = [];
+        foreach ($this->processes as $proc) {
+            if (isset($processSummary[$proc])) {
+                $sortedProcessSummary[$proc] = $processSummary[$proc];
+            }
+        }
+        $processSummary = $sortedProcessSummary;
 
         // Stats
         $today = now()->day;
@@ -809,17 +1252,31 @@ class ScheduleController extends Controller
     }
 
     /**
-     * Collect N consecutive working days (Mon–Fri) starting from startDay.
+     * Delete a delay log entry.
      */
-    private function collectWorkingDays(int $year, int $month, int $startDay, int $count): array
+    public function destroyDelayLog($id)
+    {
+        $log = ScheduleDelayLog::findOrFail($id);
+        $log->delete();
+
+        return back()->with('success', 'Delay log entry removed successfully.');
+    }
+
+    /**
+     * Collect N consecutive working days (Mon–Sat) starting from startDay.
+     */
+    private function collectWorkingDays(int $year, int $month, int $startDay, float $count): array
     {
         $daysInMonth = Carbon::createFromDate($year, $month, 1)->daysInMonth;
         $days = [];
         $d = $startDay;
         $collected = 0;
-        while ($collected < $count && $d <= $daysInMonth) {
+        $target = max(1, ceil($count)); // Ensure we collect at least 1 day for the visual grid
+        
+        while ($collected < $target && $d <= $daysInMonth) {
             $dow = Carbon::createFromDate($year, $month, $d)->dayOfWeek;
-            if (!in_array($dow, [0, 6])) {
+            // Skip Sunday (0) only - Work Mon-Sat (1-6)
+            if ($dow !== 0) {
                 $days[] = $d;
                 $collected++;
             }
@@ -837,28 +1294,428 @@ class ScheduleController extends Controller
         $d = $day + 1;
         while ($d <= $daysInMonth) {
             $dow = Carbon::createFromDate($year, $month, $d)->dayOfWeek;
-            if (!in_array($dow, [0, 6])) return $d;
+            // Skip Sunday (0) only
+            if ($dow !== 0) return $d;
             $d++;
         }
         return $d; // may exceed month — caller must check
     }
 
-    /**
-     * Emoji for each process.
-     */
     private function processEmoji(string $process): string
     {
         return match ($process) {
-            'Design'    => '🎨',
-            'Press'     => '🖨️',
-            'Folding'   => '📐',
-            'Gathering' => '📚',
-            'Staple'    => '📎',
-            'Binding'   => '📖',
-            'Cutting'   => '✂️',
-            'Packaging' => '📦',
-            'Delivery'  => '🚚',
-            default     => '📌',
+            'Design'    => '🖥️', // Digital design / CTP
+            'Press'     => '🖨️', // Press
+            'Digital'   => '🖨️', // Digital
+            'Folding'   => '📑', // Folding
+            'Gathering' => '📚', // Gathering
+            'Staple'    => '🖇️', // Stapling
+            'Binding'   => '📕', // Binding
+            'Cutting'   => '✂️',  // Cutting machine
+            'Packaging' => '📦', // Packaging boxes
+            'Delivery'  => '🚛', // Heavy transport truck
+            default     => '⚙️', // Gear for generic process
         };
     }
+
+    /**
+     * Show daily progress tracking modal (AJAX).
+     * GET /schedule/progress?year=X&month=Y&day=Z&process=Press
+     */
+    public function showProgress(Request $request)
+    {
+        $year = (int) $request->get('year');
+        $month = (int) $request->get('month');
+        $day = (int) $request->get('day');
+        $process = $request->get('process');
+
+        // Get scheduled tasks for this cell
+        $schedule = ProductionSchedule::where([
+            'year' => $year,
+            'month' => $month,
+            'day' => $day,
+            'process' => $process,
+        ])->first();
+
+        if (!$schedule || !$schedule->task) {
+            return response()->json([
+                'ok' => false,
+                'message' => 'No tasks scheduled for this day',
+            ], 404);
+        }
+
+        // Parse tasks and get progress for each
+        $tasks = array_map('trim', explode(',', $schedule->task));
+        $progressData = [];
+
+        foreach ($tasks as $taskStr) {
+            // Extract task name and total quantity from format: "Task [2d] {100}"
+            $qtyMatch = null;
+            preg_match('/\{([^}]+)\}/', $taskStr, $qtyMatch);
+            $totalQty = $qtyMatch ? (int) $qtyMatch[1] : null;
+
+            // Clean task name
+            $taskName = preg_replace('/\[\d+d\]|\{[^}]+\}|\(\d+\/\d+\)/', '', $taskStr);
+            $taskName = trim($taskName);
+
+            // Get existing progress
+            $progress = ProductionTaskProgress::where([
+                'year' => $year,
+                'month' => $month,
+                'day' => $day,
+                'process' => $process,
+                'task_name' => $taskName,
+            ])->first();
+
+            $progressData[] = [
+                'task_name' => $taskName,
+                'total_quantity' => $progress->total_quantity ?? $totalQty,
+                'printed_quantity' => $progress->printed_quantity ?? 0,
+                'note' => $progress->note ?? '',
+                'progress_percentage' => $progress ? $progress->progress_percentage : 0,
+            ];
+        }
+
+        return response()->json([
+            'ok' => true,
+            'year' => $year,
+            'month' => $month,
+            'day' => $day,
+            'process' => $process,
+            'tasks' => $progressData,
+        ]);
+    }
+
+    /**
+     * Update daily progress (AJAX).
+     * POST /schedule/progress
+     */
+    public function updateProgress(Request $request)
+    {
+        $request->validate([
+            'year' => 'required|integer',
+            'month' => 'required|integer|min:1|max:12',
+            'day' => 'required|integer|min:1|max:31',
+            'process' => 'required|string',
+            'task_name' => 'required|string',
+            'total_quantity' => 'nullable|integer|min:0',
+            'printed_quantity' => 'required|integer|min:0',
+            'note' => 'nullable|string|max:255',
+        ]);
+
+        $progress = ProductionTaskProgress::updateOrCreate(
+            [
+                'year' => $request->year,
+                'month' => $request->month,
+                'day' => $request->day,
+                'process' => $request->process,
+                'task_name' => $request->task_name,
+            ],
+            [
+                'total_quantity' => $request->total_quantity,
+                'printed_quantity' => $request->printed_quantity,
+                'note' => $request->note,
+            ]
+        );
+
+        return response()->json([
+            'ok' => true,
+            'progress' => $progress,
+            'progress_percentage' => $progress->progress_percentage,
+            'remaining_quantity' => $progress->remaining_quantity,
+            'is_completed' => $progress->is_completed,
+        ]);
+    }
+
+    /**
+     * Show Weekly Schedule Report View
+     */
+    public function weeklyReport(Request $request): \Illuminate\View\View
+    {
+        $telegramGroups = \App\Models\TelegramGroup::orderBy('name')->get();
+        
+        $weekStart = now()->startOfWeek();
+        $weekEnd = now()->endOfWeek();
+
+        // Get schedule entries for the current week
+        // Note: ProductionSchedule stores year, month, and day.
+        $entries = collect();
+        $currentDate = $weekStart->copy();
+        
+        while ($currentDate <= $weekEnd) {
+            $dayEntries = \App\Models\ProductionSchedule::where('year', $currentDate->year)
+                ->where('month', $currentDate->month)
+                ->where('day', $currentDate->day)
+                ->whereNotNull('task')
+                ->where('task', '!=', '')
+                ->get();
+            
+            $entries = $entries->merge($dayEntries);
+            $currentDate->addDay();
+        }
+
+        // Group entries by day then by process
+        $groupedEntries = [];
+        $currentDate = $weekStart->copy();
+        while ($currentDate <= $weekEnd) {
+            $dateStr = $currentDate->format('Y-m-d');
+            $dayLabel = $currentDate->format('l, d/m/Y');
+            
+            $dayEntries = $entries->filter(function($entry) use ($currentDate) {
+                return $entry->year == $currentDate->year && 
+                       $entry->month == $currentDate->month && 
+                       $entry->day == $currentDate->day;
+            });
+            
+            $groupedByProcess = [];
+            foreach ($this->processes as $process) {
+                $processEntries = $dayEntries->where('process', $process)->values();
+                if ($processEntries->isNotEmpty()) {
+                    $groupedByProcess[$process] = $processEntries;
+                }
+            }
+            
+            $groupedEntries[$dateStr] = [
+                'label' => $dayLabel,
+                'processes' => $groupedByProcess,
+            ];
+            
+            $currentDate->addDay();
+        }
+
+        // Calculate statistics
+        $stats = [
+            'total' => $entries->count(),
+            'done' => $entries->where('status', 'done')->count(),
+            'in_progress' => $entries->where('status', 'in-progress')->count(),
+            'delayed' => $entries->where('status', 'delayed')->count(),
+        ];
+        
+        $stats['done_percent'] = $stats['total'] > 0 ? round(($stats['done'] / $stats['total']) * 100) : 0;
+
+        return view('schedule.weekly-report', compact(
+            'groupedEntries', 
+            'telegramGroups', 
+            'weekStart', 
+            'weekEnd',
+            'stats'
+        ));
+    }
+
+    /**
+     * Generate weekly schedule report json (for copy to clipboard or view)
+     */
+    public function generateWeeklyReportJson(Request $request)
+    {
+        $weekStart = now()->startOfWeek();
+        $weekEnd = now()->endOfWeek();
+        
+        $report = $this->buildWeeklyReportText($weekStart, $weekEnd);
+        
+        return response()->json([
+            'success' => true,
+            'report' => $report,
+            'weekStart' => $weekStart->toDateString(),
+            'weekEnd' => $weekEnd->toDateString(),
+        ]);
+    }
+
+    /**
+     * Send Weekly Schedule report to Telegram
+     */
+    public function sendWeeklyReportTelegram(Request $request)
+    {
+        $groupId = $request->input('group_id');
+        
+        $weekStart = now()->startOfWeek();
+        $weekEnd = now()->endOfWeek();
+        
+        // Prevent double-send: lock on group for 15s.
+        $lockKey = 'tg-schedule-weekly:' . md5($weekStart->toDateString() . '|' . ($groupId ?? 'all'));
+        $lock = \Illuminate\Support\Facades\Cache::lock($lockKey, 15);
+
+        if (!$lock->get()) {
+            $msg = 'កំពុងផ្ញើរួចហើយ សូមរង់ចាំបន្តិច... / A send is already in progress.';
+            return $request->expectsJson()
+                ? response()->json(['success' => false, 'message' => $msg], 429)
+                : back()->with('error', $msg);
+        }
+
+        try {
+            $report = $this->buildWeeklyReportText($weekStart, $weekEnd, true);
+            
+            // Inline Keyboard Button to view the full report on Web
+            $replyMarkup = [
+                'inline_keyboard' => [
+                    [
+                        ['text' => '🌐 មើលកាលវិភាគពេញលេញ (View Full)', 'url' => url(route('schedule.weekly-report'))]
+                    ]
+                ]
+            ];
+            
+            // Send to Telegram
+            $telegramService = app(\App\Services\TelegramService::class);
+            if ($groupId) {
+                $success = $telegramService->sendMessage($groupId, $report, null, 'HTML', $replyMarkup);
+            } else {
+                $groups = \App\Models\TelegramGroup::where('is_active', true)->get();
+                $success = true;
+                foreach ($groups as $group) {
+                    if (!$telegramService->sendMessage($group->chat_id, $report, null, 'HTML', $replyMarkup)) {
+                        $success = false;
+                    }
+                }
+            }
+            
+            $okMsg  = 'របាយការណ៍កាលវិភាគសប្តាហ៍ត្រូវបានផ្ញើទៅ Telegram ជោគជ័យ!';
+            $errMsg = 'មិនអាចផ្ញើរបាយការណ៍បានទេ។ សូមពិនិត្យ Telegram Bot ឬ Group។';
+
+            if ($request->expectsJson()) {
+                return response()->json([
+                    'success' => $success,
+                    'message' => $success ? $okMsg : $errMsg,
+                ], $success ? 200 : 422);
+            }
+
+            return back()->with($success ? 'success' : 'error', $success ? $okMsg : $errMsg);
+
+        } catch (\Exception $e) {
+            \Log::error('Telegram Weekly Schedule Send Error: ' . $e->getMessage());
+            
+            if ($request->expectsJson()) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'មានបញ្ហាបច្ចេកទេស៖ ' . $e->getMessage(),
+                ], 500);
+            }
+            
+            return back()->with('error', 'មានបញ្ហាបច្ចេកទេស៖ ' . $e->getMessage());
+        }
+    }
+
+    /**
+     * Helper to build the text for the weekly schedule report
+     */
+    private function buildWeeklyReportText($weekStart, $weekEnd, $forTelegram = false): string
+    {
+        $dateRangeStr = $weekStart->format('d/m/Y') . ' - ' . $weekEnd->format('d/m/Y');
+        
+        $b = $forTelegram ? '<b>' : '';
+        $bb = $forTelegram ? '</b>' : '';
+        
+        $report = "📅 {$b}កាលវិភាគផលិតកម្មប្រចាំសប្តាហ៍{$bb}\n";
+        $report .= "🗓 សប្តាហ៍ទី: {$dateRangeStr}\n";
+        $report .= "━━━━━━━━━━━━━━━━━━━━\n\n";
+        
+        $currentDate = $weekStart->copy();
+        $hasAnyTasks = false;
+        
+        while ($currentDate <= $weekEnd) {
+            $dayEntries = \App\Models\ProductionSchedule::where('year', $currentDate->year)
+                ->where('month', $currentDate->month)
+                ->where('day', $currentDate->day)
+                ->whereNotNull('task')
+                ->where('task', '!=', '')
+                ->get();
+            
+            if ($dayEntries->isNotEmpty()) {
+                $hasAnyTasks = true;
+                $dayName = match($currentDate->dayOfWeek) {
+                    0 => 'អាទិត្យ (Sunday)',
+                    1 => 'ច័ន្ទ (Monday)',
+                    2 => 'អង្គារ (Tuesday)',
+                    3 => 'ពុធ (Wednesday)',
+                    4 => 'ព្រហស្បតិ៍ (Thursday)',
+                    5 => 'សុក្រ (Friday)',
+                    6 => 'សៅរ៍ (Saturday)',
+                    default => $currentDate->format('l')
+                };
+                
+                $report .= "🔹 {$b}{$dayName}, " . $currentDate->format('d/m/Y') . "{$bb}\n";
+                
+                foreach ($this->processes as $process) {
+                    $processEntries = $dayEntries->where('process', $process)->values();
+                    if ($processEntries->isNotEmpty()) {
+                        $report .= "  • {$b}{$process}:{$bb}\n";
+                        foreach ($processEntries as $entry) {
+                            // Check for done/in-progress status
+                            $icon = '🔸';
+                            if ($entry->status === 'done') $icon = '✅';
+                            if ($entry->status === 'in-progress') $icon = '⏳';
+                            if ($entry->status === 'delayed') $icon = '⚠️';
+                            
+                            $parsed = self::parseTaskShortcuts($entry->task);
+                            $taskText = $forTelegram ? $parsed['original'] : $parsed['textFormat'];
+                            
+                            $report .= "    {$icon} {$taskText}\n";
+                            if (!empty($entry->note)) {
+                                $report .= "      └ ចំណាំ: {$entry->note}\n";
+                            }
+                        }
+                    }
+                }
+                $report .= "\n";
+            }
+            
+            $currentDate->addDay();
+        }
+        
+        if (!$hasAnyTasks) {
+            $report .= "មិនមានការងារកំណត់ក្នុងកាលវិភាគសម្រាប់សប្តាហ៍នេះទេ។\n";
+        }
+        
+        $report .= "━━━━━━━━━━━━━━━━━━━━\n";
+        $report .= "🤖 បង្កើតដោយប្រព័ន្ធ Printing Tracker";
+        
+        return $report;
+    }
+
+    /**
+     * Parse task shortcuts into readable badges and text
+     */
+    public static function parseTaskShortcuts($taskStr)
+    {
+        $subject = null;
+        $type = null;
+        $original = $taskStr;
+        
+        // Subject mappings
+        $subjects = [];
+        if (preg_match('/\bWG\b/i', $taskStr)) { $subjects[] = 'Writing and Grammar'; $taskStr = preg_replace('/\bWG\b/i', '', $taskStr); }
+        if (preg_match('/\bRSS\b/i', $taskStr)) { $subjects[] = 'Reading and Social'; $taskStr = preg_replace('/\bRSS\b/i', '', $taskStr); }
+        if (preg_match('/\bLS\b/i', $taskStr)) { $subjects[] = 'Listening and Speaking'; $taskStr = preg_replace('/\bLS\b/i', '', $taskStr); }
+        
+        // Type mappings
+        $types = [];
+        if (preg_match('/\bTX\b/i', $taskStr)) { $types[] = 'Textbook'; $taskStr = preg_replace('/\bTX\b/i', '', $taskStr); }
+        if (preg_match('/\bWB\b/i', $taskStr)) { $types[] = 'Workbook'; $taskStr = preg_replace('/\bWB\b/i', '', $taskStr); }
+        
+        $subjectStr = !empty($subjects) ? implode(' & ', $subjects) : null;
+        $typeStr = !empty($types) ? implode(' & ', $types) : null;
+        
+        $bookName = trim(implode(' ', array_filter([$subjectStr, $typeStr])));
+        $bookName = $bookName ?: null;
+
+        // Common level expansions
+        $taskStr = preg_replace('/\bPre6\b/i', 'Pre School 6', $taskStr);
+        $taskStr = preg_replace('/\bPre5\b/i', 'Pre School 5', $taskStr);
+        $taskStr = preg_replace('/\bPre4\b/i', 'Pre School 4', $taskStr);
+        $taskStr = preg_replace('/\bL([1-6])\b/i', 'Level $1', $taskStr);
+        
+        $rest = trim(preg_replace('/\s+/', ' ', $taskStr));
+        
+        // Text format for Telegram:
+        $parts = array_filter([$bookName, $rest]);
+        $textFormat = !empty($parts) ? implode(' | ', $parts) : $original;
+        
+        return [
+            'original' => $original,
+            'subject' => $subject,
+            'type' => $type,
+            'bookName' => $bookName,
+            'rest' => $rest,
+            'textFormat' => $textFormat,
+        ];
+    }
 }
+

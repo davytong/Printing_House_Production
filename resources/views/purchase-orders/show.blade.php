@@ -26,7 +26,7 @@
     @endif
     @if(!in_array($purchaseOrder->status,['received']))
       <form action="{{ route('purchase-orders.destroy',$purchaseOrder) }}" method="POST"
-            onsubmit="return confirm('លុប PO នេះ?')">
+            data-confirm="តើអ្នកប្រាកដជាចង់លុប PO នេះមែនទេ? / Are you sure you want to delete this PO?">
         @csrf @method('DELETE')
         <button class="btn btn-sm" style="background:#fee2e2;color:#b91c1c;border:none"><i class="bi bi-trash3"></i></button>
       </form>
@@ -118,6 +118,92 @@
             </tr>
           </tfoot>
         </table>
+      </div>
+    </div>
+
+    {{-- Attachments --}}
+    @if($purchaseOrder->attachments && count($purchaseOrder->attachments) > 0)
+    <div class="panel mt-4">
+      <div class="panel-header">
+        <div class="ph-title">
+          <div class="ph-icon" style="background:#fef3c7;color:#d97706"><i class="bi bi-paperclip"></i></div>
+          <span>ឯកសារភ្ជាប់</span>
+          <span class="badge badge-binding" style="font-family:var(--font-latin)">{{ count($purchaseOrder->attachments) }}</span>
+        </div>
+      </div>
+      <div class="panel-body">
+        <div class="row g-3">
+          @foreach($purchaseOrder->attachments as $index => $att)
+            <div class="col-md-6">
+              <div style="display:flex;align-items:center;gap:.75rem;padding:.75rem;background:var(--surface-2);border-radius:var(--radius);border:1px solid var(--border)">
+                <div style="width:40px;height:40px;background:var(--surface);border-radius:6px;display:flex;align-items:center;justify-content:center;color:var(--primary)">
+                  @if(str_contains($att['mime']??'', 'image'))
+                    <i class="bi bi-file-image" style="font-size:1.3rem"></i>
+                  @elseif(str_contains($att['mime']??'', 'pdf'))
+                    <i class="bi bi-file-pdf" style="font-size:1.3rem"></i>
+                  @else
+                    <i class="bi bi-file-earmark" style="font-size:1.3rem"></i>
+                  @endif
+                </div>
+                <div style="flex:1;min-width:0">
+                  <div style="font-size:.85rem;font-weight:600;color:var(--text-primary);overflow:hidden;text-overflow:ellipsis;white-space:nowrap">
+                    {{ $att['original_name'] }}
+                  </div>
+                  <div style="font-size:.7rem;color:var(--text-muted);font-family:var(--font-latin)">
+                    {{ number_format(($att['size']??0)/1024, 1) }} KB
+                    @if($att['uploaded_at'] ?? false)
+                      · {{ \Carbon\Carbon::parse($att['uploaded_at'])->format('d/m/Y H:i') }}
+                    @endif
+                  </div>
+                </div>
+                <a href="{{ asset('storage/'.$att['path']) }}" target="_blank" class="btn btn-ghost btn-sm" title="View">
+                  <i class="bi bi-eye"></i>
+                </a>
+                <form action="{{ route('purchase-orders.attachments.remove', $purchaseOrder) }}" method="POST"
+                      data-confirm="តើអ្នកប្រាកដជាចង់លុបឯកសារភ្ជាប់នេះមែនទេ? / Are you sure you want to delete this attachment?">
+                  @csrf @method('DELETE')
+                  <input type="hidden" name="index" value="{{ $index }}">
+                  <button type="submit" class="btn btn-ghost btn-sm" style="color:var(--danger)" title="Delete">
+                    <i class="bi bi-trash3"></i>
+                  </button>
+                </form>
+              </div>
+            </div>
+          @endforeach
+        </div>
+      </div>
+    </div>
+    @endif
+
+    {{-- Add Attachments Form (works for any status including received) --}}
+    <div class="panel mt-4">
+      <div class="panel-header">
+        <div class="ph-title">
+          <div class="ph-icon" style="background:#dbeafe;color:#1d4ed8"><i class="bi bi-plus-circle"></i></div>
+          <span>បន្ថែមឯកសារភ្ជាប់ថ្មី</span>
+        </div>
+      </div>
+      <div class="panel-body">
+        <form action="{{ route('purchase-orders.attachments.add', $purchaseOrder) }}" method="POST" enctype="multipart/form-data">
+          @csrf
+          <div class="mb-3">
+            <label class="form-label" style="font-size:.82rem;font-weight:600">
+              ជ្រើសរើសឯកសារ (រូបភាព, PDF, Excel, Word)
+            </label>
+            <input type="file" name="attachments[]" class="form-control" multiple accept="image/*,.pdf,.doc,.docx,.xls,.xlsx" required>
+            <div style="font-size:.72rem;color:var(--text-muted);margin-top:.5rem">
+              <i class="bi bi-info-circle"></i> អាចបន្ថែមបានច្រើនឯកសារក្នុងពេលតែមួយ (អតិបរមា 10 ឯកសារ, 10MB/file)
+            </div>
+          </div>
+          <div class="d-flex gap-2">
+            <button type="submit" class="btn btn-primary btn-sm">
+              <i class="bi bi-upload"></i> បន្ថែមឯកសារ (Upload)
+            </button>
+            <div style="font-size:.78rem;color:var(--text-muted);padding:.5rem 0">
+              ✅ អាចបន្ថែមឯកសារបានទោះបីជា PO ត្រូវបានទទួលរួចក៏ដោយ
+            </div>
+          </div>
+        </form>
       </div>
     </div>
   </div>

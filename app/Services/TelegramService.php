@@ -110,10 +110,12 @@ class TelegramService
     /**
      * Send a text message (optionally into a topic thread).
      */
-    public function sendMessage(string $chatId, string $text, ?int $threadId = null): bool
+    public function sendMessage(string $chatId, string $text, ?int $threadId = null, ?string $parseMode = null, ?array $replyMarkup = null): bool
     {
         $params = ['chat_id' => $chatId, 'text' => mb_substr($text, 0, 4096)];
+        if ($parseMode) $params['parse_mode'] = $parseMode;
         if ($threadId) $params['message_thread_id'] = $threadId;
+        if ($replyMarkup) $params['reply_markup'] = json_encode($replyMarkup);
 
         try {
             $response = $this->http(15)->post("{$this->apiBase}/sendMessage", $params);
@@ -122,7 +124,16 @@ class TelegramService
             return false;
         }
 
-        return $response->successful() && $response->json('ok');
+        if (!$response->successful() || !$response->json('ok')) {
+            Log::error('TelegramService sendMessage failed', [
+                'chat_id' => $chatId,
+                'status'  => $response->status(),
+                'body'    => $response->body()
+            ]);
+            return false;
+        }
+
+        return true;
     }
 
     /**
@@ -141,12 +152,12 @@ class TelegramService
     /**
      * Send message to ALL registered groups (respecting each group's thread_id).
      */
-    public function broadcastMessage(string $text): int
+    public function broadcastMessage(string $text, ?string $parseMode = null): int
     {
         $groups = \App\Models\TelegramGroup::all();
         $sent   = 0;
         foreach ($groups as $g) {
-            if ($this->sendMessage($g->chat_id, $text, $g->message_thread_id)) $sent++;
+            if ($this->sendMessage($g->chat_id, $text, $g->message_thread_id, $parseMode)) $sent++;
         }
         return $sent;
     }

@@ -13,8 +13,8 @@ class CheckEntry
      */
     public function handle(Request $request, Closure $next): Response
     {
-        // Skip for entry routes and API routes
-        if ($request->routeIs('entry', 'entry.login', 'entry.logout')) {
+        // Skip for entry routes, language switcher, and API routes
+        if ($request->routeIs('entry', 'entry.login', 'entry.logout', 'lang.switch')) {
             return $next($request);
         }
 

@@ -1,4 +1,4 @@
-﻿@extends('layouts.app')
+@extends('layouts.app')
 @section('title','Create Stock Report')
 @section('page-title','New Stock Report')
 
@@ -13,13 +13,13 @@
   <div class="panel-body" style="display:flex;flex-wrap:wrap;gap:.6rem;align-items:center">
     <span style="font-weight:700;font-size:.88rem;margin-right:.4rem"><i class="bi bi-people-fill"></i> ផ្នែកទទួលបន្ទុក៖</span>
     @php
-      $cats = [null=>['📦','ទាំងអស់ (All)'],'paper'=>['📄','ក្រដាស (Paper)'],'film'=>['🎞️','Film (ហ្វីល)'],'consumable'=>['🧴','Consumable (សម្ភារៈប្រើប្រាស់)']];
+      $cats = [null=>['<i class="fa-solid fa-box"></i>','ទាំងអស់ (All)'],'paper'=>['<i class="fa-solid fa-file-lines"></i>','ក្រដាស (Paper)'],'film'=>['<i class="fa-solid fa-tape"></i>','Film (ហ្វីល)'],'consumable'=>['<i class="fa-solid fa-bottle-droplet"></i>','Consumable (សម្ភារៈប្រើប្រាស់)']];
     @endphp
     @foreach($cats as $val => [$emoji,$label])
       @php $active = ($category === $val) || ($val === null && !$category); @endphp
       <a href="{{ route('stock.reports.create') }}{{ $val ? '?category='.$val : '' }}"
          class="btn btn-sm {{ $active ? 'btn-primary' : 'btn-outline-secondary' }}">
-        {{ $emoji }} {{ $label }}
+        {!! $emoji !!} {{ $label }}
       </a>
     @endforeach
   </div>
@@ -76,16 +76,16 @@
       <div class="panel-body">
         @if($summary && isset($summary['categories']))
           @foreach($summary['categories'] as $cat => $data)
-            @php $emoji = match($cat){'paper'=>'📄','film'=>'🎞️',default=>'🖨️'}; @endphp
+            @php $emoji = match($cat){'paper'=>'<i class="fa-solid fa-file-lines"></i>','film'=>'<i class="fa-solid fa-tape"></i>',default=>'<i class="fa-solid fa-print"></i>'}; @endphp
             <div style="margin-bottom:1rem;padding-bottom:.75rem;border-bottom:1px solid var(--border)">
-              <div style="font-weight:700;font-size:.88rem;margin-bottom:.4rem">{{ $emoji }} {{ $data['label'] }} ({{ $data['count'] }})</div>
+              <div style="font-weight:700;font-size:.88rem;margin-bottom:.4rem">{!! $emoji !!} {{ $data['label'] }} ({{ $data['count'] }})</div>
               @foreach(array_slice($data['items'], 0, 5) as $item)
                 @php $color = $item['is_low'] ? 'var(--danger)' : 'var(--success)'; @endphp
                 <div style="display:flex;justify-content:space-between;align-items:center;padding:.2rem 0;font-size:.8rem">
                   <span>{{ $item['name'] }}{{ $item['sub_type']?' · '.$item['sub_type']:'' }}</span>
                   <span style="font-family:var(--font-latin);font-weight:700;color:{{ $color }}">
                     {{ number_format($item['stock'],1) }} {{ $item['unit'] }}
-                    @if($item['is_low']) ⚠️ @endif
+                    @if($item['is_low']) <i class="bi bi-exclamation-triangle-fill" style="color:var(--warning)"></i> @endif
                   </span>
                 </div>
               @endforeach

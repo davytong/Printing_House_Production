@@ -25,10 +25,12 @@ class TelegramController extends Controller
      */
     private function http(int $timeout = 30): \Illuminate\Http\Client\PendingRequest
     {
+        $telegramIp = env('TELEGRAM_API_IP', '149.154.167.220');
+        
         return Http::timeout($timeout)->withOptions([
             'curl' => [
                 // Pre-resolved IP for api.telegram.org:443 — skips DNS entirely
-                CURLOPT_RESOLVE => ['api.telegram.org:443:149.154.167.220'],
+                CURLOPT_RESOLVE => ["api.telegram.org:443:{$telegramIp}"],
             ],
         ]);
     }
@@ -51,7 +53,6 @@ class TelegramController extends Controller
         }
 
         $update = $request->all();
-        Log::debug('TELEGRAM UPDATE', ['update_id' => $update['update_id'] ?? null]);
 
         // ── Extract message (could be message, channel_post, etc.) ────
         $message = $update['message']
@@ -142,6 +143,8 @@ class TelegramController extends Controller
             'photo'             => 'required|file|mimes:png,jpg,jpeg|max:10240',
             'caption'           => 'nullable|string',
             'message_thread_id' => 'nullable|integer',
+            'send_full_text'    => 'nullable|boolean',
+            'full_text'         => 'nullable|string',
         ]);
 
         $caption   = mb_substr($request->input('caption', '📄 របាយការណ៍ការបោះពុម្ព'), 0, 1024);
@@ -164,13 +167,23 @@ class TelegramController extends Controller
             $response = $this->http(30)
                 ->attach('photo', file_get_contents($photoPath), 'report.png')
                 ->post("{$this->apiBase}/sendPhoto", $params);
+
+            if ($response->successful() && $response->json('ok') === true) {
+                // Send full text report as a separate message if enabled
+                if ($request->boolean('send_full_text') && $request->filled('full_text')) {
+                    $textParams = [
+                        'chat_id' => $chatId,
+                        'text'    => mb_substr($request->input('full_text'), 0, 4096),
+                    ];
+                    if ($threadId) $textParams['message_thread_id'] = $threadId;
+                    $this->http(15)->post("{$this->apiBase}/sendMessage", $textParams);
+                }
+
+                return response()->json(['ok' => true, 'message' => 'Image sent']);
+            }
         } catch (\Throwable $e) {
             Log::error('Telegram sendPhoto: connection failed', ['error' => $e->getMessage()]);
             return response()->json(['ok' => false, 'message' => 'Cannot connect to Telegram: ' . $e->getMessage()], 502);
-        }
-
-        if ($response->successful() && $response->json('ok') === true) {
-            return response()->json(['ok' => true, 'message' => 'Image sent']);
         }
 
         Log::error('Telegram sendPhoto failed', [

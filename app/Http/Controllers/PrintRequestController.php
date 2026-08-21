@@ -103,10 +103,10 @@ class PrintRequestController extends Controller
         foreach ($data['books'] as $row) {
             PrintRequestItem::create([
                 'print_request_id'   => $req->id,
-                'book_id'            => $row['book_id'] ?: null,
+                'book_id'            => $row['book_id'] ?? null,
                 'book_title'         => $row['book_title'],
-                'grade'              => $row['grade'] ?: null,
-                'category'           => $row['category'] ?: null,
+                'grade'              => $row['grade'] ?? null,
+                'category'           => $row['category'] ?? null,
                 'quantity_requested' => (int) $row['quantity_requested'],
                 'notes'              => $row['notes'] ?? null,
             ]);
@@ -200,10 +200,10 @@ class PrintRequestController extends Controller
         foreach ($data['books'] as $row) {
             PrintRequestItem::create([
                 'print_request_id'   => $printRequest->id,
-                'book_id'            => $row['book_id'] ?: null,
+                'book_id'            => $row['book_id'] ?? null,
                 'book_title'         => $row['book_title'],
-                'grade'              => $row['grade'] ?: null,
-                'category'           => $row['category'] ?: null,
+                'grade'              => $row['grade'] ?? null,
+                'category'           => $row['category'] ?? null,
                 'quantity_requested' => (int) $row['quantity_requested'],
                 'notes'              => $row['notes'] ?? null,
             ]);

@@ -71,7 +71,7 @@ class AlertService
 
         $stock    = $material->currentStock();
         $min      = (float) $material->min_stock;
-        $cooldown = (int) config('services.telegram.alert_cooldown', 24);
+        $cooldown = (int) (Setting::get('alert_cooldown_hours') ?: config('services.telegram.alert_cooldown', 24));
 
         // ── Cooldown check ────────────────────────────────────────────
         if ($material->last_alerted_at && $material->last_alerted_at->diffInHours(now()) < $cooldown) {
@@ -91,15 +91,16 @@ class AlertService
         SystemNotification::notify('warning', 'stock', $title, $body, null);
 
         // ── Telegram alert (single target only) ───────────────────────
-        $chatId   = config('services.telegram.alert_chat_id');
-        $threadId = config('services.telegram.alert_thread_id');
+        // Prefer DB settings (configurable in the UI), fall back to .env
+        $chatId   = Setting::get('alert_chat_id') ?: config('services.telegram.alert_chat_id');
+        $threadId = Setting::get('alert_thread_id') ?: config('services.telegram.alert_thread_id');
 
         if ($chatId) {
-            $this->sendTelegramAlert($material, $stock, $min, $chatId, $threadId);
+            $this->sendGroupedLowStockAlert(collect([$material]), true);
         }
 
         // ── Mark alerted ──────────────────────────────────────────────
-        $material->updateQuietly(['last_alerted_at' => now()]);
+        $material->newQuery()->where('id', $material->id)->update(['last_alerted_at' => now()]);
     }
 
     private function sendTelegramAlert(
@@ -115,15 +116,72 @@ class AlertService
         $template = Setting::get('stock_alert_template', self::DEFAULT_TEMPLATE);
         $message  = self::renderTemplate($template, $material, $stock, $min);
 
-        $params = ['chat_id' => $chatId, 'text' => $message];
-        if ($threadId) $params['message_thread_id'] = $threadId;
+        \App\Jobs\SendTelegramMessageJob::dispatch($chatId, $message, $threadId);
+    }
 
-        try {
-            \Illuminate\Support\Facades\Http::timeout(10)->withOptions([
-                'curl' => [CURLOPT_RESOLVE => ['api.telegram.org:443:149.154.167.220']],
-            ])->post("https://api.telegram.org/bot{$token}/sendMessage", $params);
-        } catch (\Throwable $e) {
-            Log::warning("AlertService: Telegram send failed — " . $e->getMessage());
+    /**
+     * Send a consolidated low stock report.
+     */
+    public function sendGroupedLowStockAlert($materials, bool $ignoreCooldown = false): void
+    {
+        $lowStockItems = [];
+        $cooldown = (int) (Setting::get('alert_cooldown_hours') ?: config('services.telegram.alert_cooldown', 24));
+
+        foreach ($materials as $material) {
+            $stock = $material->calculated_stock ?? $material->currentStock();
+            if ($stock > (float) $material->min_stock) {
+                continue;
+            }
+
+            if (!$ignoreCooldown && $material->last_alerted_at && $material->last_alerted_at->diffInHours(now()) < $cooldown) {
+                continue;
+            }
+
+            $material->calculated_stock = $stock; // ensure it's set
+            $lowStockItems[] = $material;
+        }
+
+        if (empty($lowStockItems)) {
+            return;
+        }
+
+        $date = now()->format('d/m/Y');
+        $message = "*របាយការណ៍ស្តុក ជិតអស់*\n {$date}\n\n";
+
+        $groupedItems = collect($lowStockItems)->groupBy(function ($item) {
+            $catLabel = match($item->category) {
+                'paper'      => \App\Models\Setting::get('category_label_paper', 'ក្រដាស (Paper)'),
+                'film'       => \App\Models\Setting::get('category_label_film', 'Lamination Film (ស្គុត)'),
+                'consumable' => \App\Models\Setting::get('category_label_consumable', 'Consumable (សម្ភារៈប្រើប្រាស់)'),
+                default      => ucfirst($item->category),
+            };
+            return "*{$catLabel}*";
+        });
+
+        foreach ($groupedItems as $categoryLabel => $items) {
+            $message .= "{$categoryLabel}\n";
+            foreach ($items as $item) {
+                $stock = rtrim(rtrim(number_format($item->calculated_stock, 2), '0'), '.');
+                $isOut = $item->calculated_stock <= 0;
+                $statusIcon = $isOut ? '🔴' : '⚠️';
+                $statusText = $isOut ? '(អស់)' : '(ជិតអស់)';
+                $sizeInfo = $item->size ? " ({$item->size})" : "";
+                
+                $message .= "{$statusIcon} {$item->name}{$sizeInfo}\n";
+                $message .= "   └ Stock: {$stock} {$statusText}\n";
+            }
+            $message .= "\n";
+        }
+
+        $chatId = Setting::get('alert_chat_id') ?: config('services.telegram.alert_chat_id');
+        $threadId = Setting::get('alert_thread_id') ?: config('services.telegram.alert_thread_id');
+
+        if ($chatId) {
+            \App\Jobs\SendTelegramMessageJob::dispatch($chatId, trim($message), $threadId ? (int) $threadId : null);
+            
+            foreach ($lowStockItems as $item) {
+                $item->newQuery()->where('id', $item->id)->update(['last_alerted_at' => now()]);
+            }
         }
     }
 }

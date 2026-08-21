@@ -25,9 +25,16 @@ class ProductionBatch extends Model
 
     /**
      * Get the current active batch, creating one if none exists.
+     * Memoized per request to avoid duplicate queries.
      */
+    protected static ?self $currentCache = null;
+
     public static function current(): self
     {
+        if (static::$currentCache) {
+            return static::$currentCache;
+        }
+
         $batch = static::where('status', 'active')->latest('id')->first();
 
         if (!$batch) {
@@ -42,6 +49,14 @@ class ProductionBatch extends Model
             Book::whereNull('batch_id')->update(['batch_id' => $batch->id]);
         }
 
-        return $batch;
+        return static::$currentCache = $batch;
+    }
+
+    /**
+     * Clear the per-request cache (call after switching active batch).
+     */
+    public static function clearCache(): void
+    {
+        static::$currentCache = null;
     }
 }

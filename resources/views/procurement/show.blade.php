@@ -31,7 +31,7 @@
       </ul>
     </div>
     <form action="{{ route('procurement.destroy', $procurement) }}" method="POST"
-          onsubmit="return confirm('Are you sure you want to delete this request?')">
+          data-confirm="តើអ្នកប្រាកដជាចង់លុបសំណើទិញនេះមែនទេ? / Are you sure you want to delete this request?">
       @csrf @method('DELETE')
       <button type="submit" class="btn btn-outline-secondary btn-sm" style="color:var(--danger)">
         <i class="bi bi-trash"></i> Delete
@@ -184,7 +184,7 @@
                 <i class="bi bi-download"></i>
               </a>
               <form action="{{ route('procurement.delete-attachment', $att) }}" method="POST"
-                    onsubmit="return confirm('Delete this attachment?')">
+                    data-confirm="តើអ្នកប្រាកដជាចង់លុបឯកសារភ្ជាប់នេះមែនទេ? / Are you sure you want to delete this attachment?">
                 @csrf @method('DELETE')
                 <button type="submit" class="btn btn-ghost btn-sm" style="color:var(--danger)" title="Delete">
                   <i class="bi bi-trash"></i>

@@ -7,6 +7,7 @@ use App\Models\PurchaseOrder;
 use App\Models\PurchaseOrderItem;
 use App\Models\Supplier;
 use App\Models\SystemNotification;
+use App\Services\ExcelExportService;
 use Illuminate\Http\Request;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\View\View;
@@ -38,23 +39,57 @@ class PurchaseOrderController extends Controller
     {
         $data = $this->validatePoData($request);
 
+        // Handle file uploads
+        $storedFiles = [];
+        if ($request->hasFile('attachments')) {
+            foreach ($request->file('attachments') as $file) {
+                $path = $file->store('po-attachments', 'public');
+                $storedFiles[] = [
+                    'path'          => $path,
+                    'original_name' => $file->getClientOriginalName(),
+                    'size'          => $file->getSize(),
+                    'mime'          => $file->getMimeType(),
+                ];
+            }
+        }
+
+        // Determine status based on action
+        $status = $data['status'] ?? 'draft';
+        if ($request->input('action') === 'submit_for_approval') {
+            $status = 'pending_approval';
+        }
+
+        // Get current user name
+        $userName = session('user_name', 'Admin');
+
         // po_number is auto-set by booted() after insert
         $po = PurchaseOrder::create([
-            'supplier_id'   => $data['supplier_id'],
-            'order_date'    => $data['order_date'],
-            'expected_date' => $data['expected_date'] ?? null,
-            'currency'      => $data['currency'],
-            'notes'         => $data['notes'] ?? null,
-            'status'        => 'draft',
-            'created_by'    => 'Admin',
-            'total_amount'  => 0,
+            'supplier_id'    => $data['supplier_id'],
+            'order_date'     => $data['order_date'],
+            'expected_date'  => $data['expected_date'] ?? null,
+            'currency'       => $data['currency'],
+            'notes'          => $data['notes'] ?? null,
+            'status'         => $status,
+            'created_by'     => $userName,
+            'total_amount'   => 0,
+            'attachments'    => $storedFiles ?: null,
+            // New enhanced fields
+            'priority'       => $data['priority'] ?? 'medium',
+            'reason'         => $data['reason'] ?? null,
+            'requested_by'   => $userName,
+            'payment_method' => $data['payment_method'] ?? 'cash',
+            'payment_status' => $data['payment_status'] ?? 'pending',
         ]);
 
         $total = $this->syncItems($po, $data['items']);
         $po->update(['total_amount' => $total]);
 
+        $message = $status === 'pending_approval' 
+            ? "PO {$po->po_number} ត្រូវបានបង្កើត និងដាក់ស្នើសុំអនុម័ត" 
+            : "PO {$po->po_number} ត្រូវបានបង្កើត";
+
         return redirect()->route('purchase-orders.show', $po)
-            ->with('success', "ការបញ្ជាទិញ {$po->po_number} ត្រូវបានបង្កើត");
+            ->with('success', $message);
     }
 
     public function show(PurchaseOrder $purchaseOrder): View
@@ -83,12 +118,27 @@ class PurchaseOrderController extends Controller
 
         $data = $this->validatePoData($request);
 
+        // Handle new file uploads - merge with existing
+        $existing = $purchaseOrder->attachments ?? [];
+        if ($request->hasFile('attachments')) {
+            foreach ($request->file('attachments') as $file) {
+                $path = $file->store('po-attachments', 'public');
+                $existing[] = [
+                    'path'          => $path,
+                    'original_name' => $file->getClientOriginalName(),
+                    'size'          => $file->getSize(),
+                    'mime'          => $file->getMimeType(),
+                ];
+            }
+        }
+
         $purchaseOrder->update([
             'supplier_id'   => $data['supplier_id'],
             'order_date'    => $data['order_date'],
             'expected_date' => $data['expected_date'] ?? null,
             'currency'      => $data['currency'],
             'notes'         => $data['notes'] ?? null,
+            'attachments'   => $existing ?: null,
         ]);
 
         // Replace items
@@ -102,8 +152,19 @@ class PurchaseOrderController extends Controller
 
     public function updateStatus(Request $request, PurchaseOrder $purchaseOrder): RedirectResponse
     {
-        $request->validate(['status' => 'required|in:sent,cancelled']);
-        $purchaseOrder->update(['status' => $request->status]);
+        $request->validate([
+            'status' => 'required|in:draft,pending_approval,approved,sent,in_transit,partially_received,cancelled',
+        ]);
+
+        $updates = ['status' => $request->status];
+
+        // Track who approved and when
+        if ($request->status === 'approved') {
+            $updates['approved_by'] = session('user_name', 'Admin');
+            $updates['approved_at'] = now();
+        }
+
+        $purchaseOrder->update($updates);
         return back()->with('success', 'ស្ថានភាពបានធ្វើបច្ចុប្បន្នភាព');
     }
 
@@ -133,13 +194,14 @@ class PurchaseOrderController extends Controller
                         'quantity_before' => $before,
                         'quantity_after'  => $before + $received,
                         'reference'       => $purchaseOrder->po_number,
-                        'performed_by'    => 'Admin',
+                        'performed_by'    => session('user_name', 'Admin'),
                     ]);
-                    // Low-stock cleared — push notification if now OK
-                    if ($inv->fresh()->isLowStock() === false) {
+                    // Reload once to check low-stock status
+                    $freshInv = $inv->fresh();
+                    if ($freshInv && $freshInv->isLowStock() === false) {
                         SystemNotification::notify('success', 'inventory',
                             'Stock ត្រឡប់ស្ថានភាពធម្មតា',
-                            "{$inv->name} — stock ឥឡូវ {$inv->fresh()->quantity_in_stock} {$inv->unit}",
+                            "{$freshInv->name} — stock ឥឡូវ {$freshInv->quantity_in_stock} {$freshInv->unit}",
                             route('inventory.show', $inv)
                         );
                     }
@@ -180,6 +242,63 @@ class PurchaseOrderController extends Controller
             ->with('success', 'ការបញ្ជាទិញត្រូវបានលុប');
     }
 
+    /**
+     * Add images/attachments to a PO (works for any status, including received)
+     */
+    public function addAttachments(Request $request, PurchaseOrder $purchaseOrder): RedirectResponse
+    {
+        $request->validate([
+            'attachments'   => 'required|array|min:1|max:10',
+            'attachments.*' => 'file|mimes:jpg,jpeg,png,gif,webp,pdf,doc,docx,xls,xlsx|max:10240',
+        ]);
+
+        $existing = $purchaseOrder->attachments ?? [];
+        
+        foreach ($request->file('attachments') as $file) {
+            $path = $file->store('po-attachments', 'public');
+            $existing[] = [
+                'path'          => $path,
+                'original_name' => $file->getClientOriginalName(),
+                'size'          => $file->getSize(),
+                'mime'          => $file->getMimeType(),
+                'uploaded_at'   => now()->toDateTimeString(),
+            ];
+        }
+
+        $purchaseOrder->update(['attachments' => $existing]);
+
+        $count = count($request->file('attachments'));
+        return back()->with('success', "បានបន្ថែមឯកសារ {$count} ទៅកាន់ PO {$purchaseOrder->po_number}");
+    }
+
+    /**
+     * Remove a specific attachment from a PO
+     */
+    public function removeAttachment(Request $request, PurchaseOrder $purchaseOrder): RedirectResponse
+    {
+        $request->validate(['index' => 'required|integer|min:0']);
+        
+        $attachments = $purchaseOrder->attachments ?? [];
+        $index = $request->integer('index');
+        
+        if (!isset($attachments[$index])) {
+            return back()->with('error', 'រកមិនឃើញឯកសារ');
+        }
+
+        // Delete file from storage
+        $filePath = $attachments[$index]['path'] ?? null;
+        if ($filePath && \Storage::disk('public')->exists($filePath)) {
+            \Storage::disk('public')->delete($filePath);
+        }
+
+        // Remove from array
+        array_splice($attachments, $index, 1);
+        
+        $purchaseOrder->update(['attachments' => $attachments ?: null]);
+
+        return back()->with('success', 'បានលុបឯកសារ');
+    }
+
     // ─── private helpers ──────────────────────────────────
 
     private function validatePoData(Request $request): array
@@ -190,6 +309,7 @@ class PurchaseOrderController extends Controller
             'expected_date'             => 'nullable|date',
             'currency'                  => 'required|string|max:10',
             'notes'                     => 'nullable|string|max:1000',
+            'status'                    => 'nullable|string|in:draft,pending_approval,approved',
             'items'                     => 'required|array|min:1',
             'items.*.item_name'         => 'required|string|max:255',
             'items.*.unit'              => 'required|string|max:50',
@@ -197,6 +317,16 @@ class PurchaseOrderController extends Controller
             'items.*.unit_price'        => 'required|numeric|min:0',
             'items.*.inventory_item_id' => 'nullable|exists:inventory_items,id',
             'items.*.notes'             => 'nullable|string|max:255',
+            
+            // Enhanced fields
+            'priority'                  => 'nullable|string|in:low,medium,high,urgent',
+            'reason'                    => 'required|string|max:1000',
+            'payment_method'            => 'nullable|string|in:cash,bank,credit',
+            'payment_status'            => 'nullable|string|in:pending,partial,paid',
+            
+            // Attachments (images of request forms, quotations, etc.)
+            'attachments'               => 'nullable|array|max:10',
+            'attachments.*'             => 'file|mimes:jpg,jpeg,png,gif,webp,pdf,doc,docx,xls,xlsx|max:10240',
         ]);
     }
 
@@ -219,5 +349,42 @@ class PurchaseOrderController extends Controller
             ]);
         }
         return $total;
+    }
+
+    /**
+     * Export purchase orders to Excel
+     */
+    public function exportExcel(Request $request, ExcelExportService $exportService)
+    {
+        try {
+            $query = PurchaseOrder::with('supplier');
+            
+            // Apply filters
+            if ($request->filled('status')) {
+                $query->where('status', $request->status);
+            }
+            if ($request->filled('supplier_id')) {
+                $query->where('supplier_id', $request->supplier_id);
+            }
+            if ($request->filled('start_date')) {
+                $query->where('order_date', '>=', $request->start_date);
+            }
+            if ($request->filled('end_date')) {
+                $query->where('order_date', '<=', $request->end_date);
+            }
+            
+            $purchaseOrders = $query->latest()->get();
+            
+            $filename = 'purchase_orders_' . now()->format('Y-m-d') . '.xlsx';
+            
+            return $exportService->exportPurchaseOrders($purchaseOrders, $filename);
+        } catch (\Throwable $e) {
+            \Log::error('PO export failed: ' . $e->getMessage(), [
+                'file' => $e->getFile(),
+                'line' => $e->getLine()
+            ]);
+            
+            return back()->with('error', 'មិនអាចទាញយក Excel បានទេ។ សូមព្យាយាមម្តងទៀត។ / Unable to export Excel. Please try again.');
+        }
     }
 }

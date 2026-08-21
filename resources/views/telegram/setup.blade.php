@@ -7,6 +7,127 @@
 {{-- ════════════════════════════════════════════
      PAGE HEADER
 ════════════════════════════════════════════ --}}
+<style>
+    @import url('https://fonts.googleapis.com/css2?family=Outfit:wght@400;500;600;700;800&display=swap');
+    
+    .section-title {
+        font-family: var(--font-khmer);
+        font-weight: 800;
+        font-size: 2rem !important;
+        letter-spacing: -0.02em;
+        background: linear-gradient(135deg, #0f172a, #334155);
+        -webkit-background-clip: text;
+        -webkit-text-fill-color: transparent;
+    }
+
+    .panel {
+        background: rgba(255, 255, 255, 0.6) !important;
+        backdrop-filter: blur(16px) !important;
+        -webkit-backdrop-filter: blur(16px) !important;
+        border: 1px solid rgba(255, 255, 255, 0.8) !important;
+        border-radius: 24px !important;
+        box-shadow: 0 20px 40px -15px rgba(0,0,0,0.05) !important;
+        overflow: hidden;
+        transition: transform 0.3s cubic-bezier(0.4, 0, 0.2, 1), box-shadow 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+    }
+    .panel:hover {
+        transform: translateY(-4px);
+        box-shadow: 0 30px 60px -15px rgba(0,0,0,0.1) !important;
+    }
+
+    .panel-header {
+        background: rgba(255,255,255,0.4) !important;
+        border-bottom: 1px solid rgba(0,0,0,0.03) !important;
+        padding: 1.5rem !important;
+    }
+
+    .ph-title {
+        font-family: var(--font-khmer);
+        font-weight: 700;
+        font-size: 1.15rem;
+        color: #1e293b;
+        display: flex;
+        align-items: center;
+        gap: 0.75rem;
+    }
+
+    .ph-icon {
+        width: 40px !important;
+        height: 40px !important;
+        border-radius: 12px !important;
+        display: flex !important;
+        align-items: center !important;
+        justify-content: center !important;
+        box-shadow: 0 8px 16px -4px rgba(0,0,0,0.1) !important;
+        font-size: 1.2rem;
+    }
+
+    .panel-body {
+        padding: 1.75rem !important;
+    }
+
+    .btn {
+        border-radius: 12px;
+        font-weight: 600;
+        padding: 0.6rem 1.25rem;
+        transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+        font-family: var(--font-khmer);
+    }
+    .btn:hover {
+        transform: translateY(-2px);
+        box-shadow: 0 10px 20px -5px rgba(0,0,0,0.15);
+    }
+    
+    .form-control, .form-select {
+        border-radius: 12px;
+        border: 1px solid #e2e8f0;
+        background: rgba(248, 250, 252, 0.8);
+        padding: 0.6rem 1rem;
+        transition: all 0.2s;
+    }
+    .form-control:focus, .form-select:focus {
+        background: #fff;
+        border-color: #3b82f6;
+        box-shadow: 0 0 0 4px rgba(59, 130, 246, 0.1);
+    }
+
+    .step-badge {
+        width: 36px;
+        height: 36px;
+        border-radius: 12px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-weight: 800;
+        font-size: 1rem;
+        font-family: var(--font-khmer);
+        color: white;
+        box-shadow: 0 8px 16px -4px rgba(0,0,0,0.15);
+        flex-shrink: 0;
+    }
+    .step-title {
+        font-family: var(--font-khmer);
+        font-weight: 700;
+        font-size: 1.05rem;
+        color: #0f172a;
+    }
+    /* Dark Mode Overrides for Telegram Setup */
+    [data-theme="dark"] .panel { background: rgba(30, 41, 59, 0.6) !important; border-color: rgba(255, 255, 255, 0.05) !important; }
+    [data-theme="dark"] .panel-header { background: rgba(15, 23, 42, 0.4) !important; border-bottom-color: rgba(255,255,255,0.05) !important; }
+    [data-theme="dark"] .ph-title { color: var(--text-primary); }
+    [data-theme="dark"] .form-control, [data-theme="dark"] .form-select { background: rgba(15, 23, 42, 0.6); border-color: rgba(255,255,255,0.1); color: var(--text-primary); }
+    [data-theme="dark"] div[style*="background:#fffbeb"] { background: rgba(245, 158, 11, 0.1) !important; border-color: rgba(245, 158, 11, 0.2) !important; color: #fcd34d !important; }
+    [data-theme="dark"] div[style*="background:#fee2e2"] { background: rgba(239, 68, 68, 0.1) !important; border-color: rgba(239, 68, 68, 0.2) !important; color: #fca5a5 !important; }
+    [data-theme="dark"] div[style*="background:#eff6ff"] { background: rgba(59, 130, 246, 0.1) !important; border-color: rgba(59, 130, 246, 0.2) !important; color: #93c5fd !important; }
+    [data-theme="dark"] div[style*="background:#dcfce7"] { background: rgba(16, 185, 129, 0.1) !important; border-color: rgba(16, 185, 129, 0.2) !important; color: #6ee7b7 !important; }
+    [data-theme="dark"] div[style*="background:#f8fafc"] { background: rgba(30, 41, 59, 0.6) !important; border-color: rgba(255,255,255,0.05) !important; }
+    [data-theme="dark"] div[style*="background:#fef3c7"] { background: rgba(245, 158, 11, 0.15) !important; color: #fcd34d !important; }
+    [data-theme="dark"] div[style*="background:#fef9c3"] { background: rgba(234, 179, 8, 0.15) !important; color: #fde047 !important; }
+    [data-theme="dark"] .ph-icon[style*="background:#ede9fe"] { background: rgba(139, 92, 246, 0.15) !important; color: #c4b5fd !important; }
+    [data-theme="dark"] .ph-icon[style*="background:#dbeafe"] { background: rgba(59, 130, 246, 0.15) !important; color: #93c5fd !important; }
+    [data-theme="dark"] code { background: rgba(255,255,255,0.1) !important; color: var(--text-primary) !important; }
+    [data-theme="dark"] .step-badge { box-shadow: 0 4px 10px rgba(0,0,0,0.3) !important; }
+</style>
 <div class="d-flex align-items-start justify-content-between flex-wrap gap-3 mb-4">
   <div>
     <h1 class="section-title">Telegram Bot Setup</h1>
@@ -60,8 +181,15 @@
         @else
           {{-- Bot info --}}
           <div style="display:flex;align-items:center;gap:1rem;padding:1rem;background:var(--surface-2);border-radius:var(--radius);margin-bottom:1.25rem">
-            <div style="width:52px;height:52px;border-radius:50%;background:linear-gradient(135deg,#4f46e5,#6366f1);display:flex;align-items:center;justify-content:center;font-size:1.4rem;flex-shrink:0">
+            <div style="width:60px;height:60px;border-radius:18px;background:linear-gradient(135deg,#6366f1,#8b5cf6,#ec4899);background-size:200% 200%;animation:gradient 5s ease infinite;display:flex;align-items:center;justify-content:center;font-size:1.8rem;flex-shrink:0;box-shadow:0 10px 25px -5px rgba(139,92,246,0.5)">
               🤖
+              <style>
+                @keyframes gradient {
+                  0% {background-position: 0% 50%;}
+                  50% {background-position: 100% 50%;}
+                  100% {background-position: 0% 50%;}
+                }
+              </style>
             </div>
             <div>
               <div style="font-weight:700;font-size:1rem">{{ $botInfo['first_name'] }}</div>
@@ -125,9 +253,9 @@
 
         {{-- STEP 1 --}}
         <div>
-          <div style="display:flex;align-items:center;gap:.6rem;margin-bottom:.75rem">
-            <div style="width:24px;height:24px;border-radius:50%;background:var(--primary);color:#fff;display:flex;align-items:center;justify-content:center;font-size:.72rem;font-weight:700;font-family:var(--font-latin);flex-shrink:0">1</div>
-            <span style="font-weight:600;font-size:.9rem">Add Bot to Group</span>
+          <div style="display:flex;align-items:center;gap:.75rem;margin-bottom:1rem">
+            <div class="step-badge" style="background:linear-gradient(135deg, #3b82f6, #2563eb)">1</div>
+            <span class="step-title">Add Bot to Group</span>
           </div>
           <div style="background:var(--surface-2);border-radius:var(--radius);padding:.85rem 1rem;font-size:.83rem;color:var(--text-secondary);border-left:3px solid var(--primary)">
             ក្នុង Telegram: បើក Group Settings → Add Members → ស្វែងរក
@@ -142,9 +270,9 @@
 
         {{-- STEP 2A: Webhook (production) --}}
         <div>
-          <div style="display:flex;align-items:center;gap:.6rem;margin-bottom:.75rem">
-            <div style="width:24px;height:24px;border-radius:50%;background:#059669;color:#fff;display:flex;align-items:center;justify-content:circle;font-size:.72rem;font-weight:700;font-family:var(--font-latin);flex-shrink:0;align-items:center;justify-content:center">2A</div>
-            <span style="font-weight:600;font-size:.9rem">Webhook <span class="badge badge-done" style="font-size:.68rem">Production</span></span>
+          <div style="display:flex;align-items:center;gap:.75rem;margin-bottom:1rem">
+            <div class="step-badge" style="background:linear-gradient(135deg, #10b981, #059669)">2A</div>
+            <span class="step-title">Webhook <span class="badge badge-done" style="font-size:.75rem">Production</span></span>
           </div>
           <p style="font-size:.82rem;color:var(--text-muted);margin-bottom:.75rem">
             ⚠️ Webhook ត្រូវការ <strong>HTTPS URL</strong> — ដូច្នេះ <code>http://localhost</code> <strong>មិនដំណើរការ</strong>។
@@ -197,11 +325,11 @@
 
         {{-- STEP 2B: Poll (local dev) --}}
         <div>
-          <div style="display:flex;align-items:center;gap:.6rem;margin-bottom:.75rem">
-            <div style="width:24px;height:24px;border-radius:50%;background:#d97706;color:#fff;display:flex;align-items:center;justify-content:center;font-size:.72rem;font-weight:700;font-family:var(--font-latin);flex-shrink:0">2B</div>
-            <span style="font-weight:600;font-size:.9rem">
+          <div style="display:flex;align-items:center;gap:.75rem;margin-bottom:1rem">
+            <div class="step-badge" style="background:linear-gradient(135deg, #f59e0b, #d97706)">2B</div>
+            <span class="step-title">
               Polling
-              <span class="badge badge-done" style="font-size:.68rem">✅ ល្អបំផុតសម្រាប់ Local Server</span>
+              <span class="badge badge-done" style="font-size:.75rem">✅ ល្អបំផុតសម្រាប់ Local Server</span>
             </span>
           </div>
 
@@ -328,9 +456,9 @@
      LOW-STOCK ALERT CONFIGURATION
 ════════════════════════════════════════════ --}}
 @php
-  $alertChatId  = config('services.telegram.alert_chat_id');
-  $alertThreadId= config('services.telegram.alert_thread_id');
-  $alertHours   = config('services.telegram.alert_cooldown', 24);
+  $alertChatId  = $alertConfig['chat_id'];
+  $alertThreadId= $alertConfig['thread_id'];
+  $alertHours   = $alertConfig['cooldown'];
   $alertGroup   = $alertChatId
     ? $groupedChats->get($alertChatId)?->first()
     : null;
@@ -350,44 +478,144 @@
   <div class="panel-body">
 
     @if($alertChatId)
-      <div style="background:#dcfce7;border:1px solid #86efac;border-radius:var(--radius);
-                  padding:.75rem 1rem;font-size:.83rem;color:#14532d;margin-bottom:.75rem">
-        ✅ Alert ត្រូវបានកំណត់ → ផ្ញើទៅ:
-        <strong>{{ $alertGroup?->name ?? $alertChatId }}</strong>
-        @if($alertThreadId) › Thread #{{ $alertThreadId }} @endif
-        &nbsp;·&nbsp; Cooldown: {{ $alertHours }}h
+      <div style="background:#dcfce7;border:1px solid #86efac;border-radius:12px;
+                  padding:.85rem 1.25rem;font-size:.9rem;color:#14532d;margin-bottom:1rem;
+                  display:flex;align-items:center;gap:0.75rem;">
+        <i class="bi bi-check-circle-fill" style="font-size:1.2rem"></i>
+        <div>
+          Alert ត្រូវបានកំណត់ → ផ្ញើទៅ:
+          <strong>{{ $alertGroup?->name ?? $alertChatId }}</strong>
+          @if($alertThreadId) › Thread #{{ $alertThreadId }} @endif
+          <span style="opacity:0.8;margin-left:0.5rem">· Cooldown: {{ $alertHours }}h</span>
+        </div>
       </div>
     @endif
 
-    <div style="font-size:.82rem;color:var(--text-secondary);margin-bottom:.75rem">
-      កំណត់ Group ណាដែលទទួល Alert ពេល Stock ទាប ឬអស់ — ផ្ញើតែ <strong>១ ក្រុម/Topic</strong> ប៉ុណ្ណោះ
-      ហើយ <strong>cooldown {{ $alertHours }} ម៉ោង</strong> ដើម្បីកុំ spam។
+    <div style="font-size:.88rem;color:var(--text-secondary);margin-bottom:1.5rem;line-height:1.6">
+      ជ្រើសរើសក្រុម/Topic គោលដៅ ដើម្បីទទួលសារប្រកាសអាសន្នពេល Stock ទាប ឬអស់។ 
+      ប្រព័ន្ធនឹងផ្ញើសារជូនដំណឹងតែ <strong>១ ក្រុម/Topic</strong> ប៉ុណ្ណោះ ហើយនឹងរង់ចាំ <strong>{{ $alertHours }} ម៉ោង (Cooldown)</strong> មុននឹងផ្ញើម្ដងទៀត ដើម្បីការពារការរំខាន (Spam)។
     </div>
 
-    <div style="background:var(--surface-2);border-radius:var(--radius);padding:.85rem 1rem;
-                font-family:var(--font-latin);font-size:.82rem">
-      <div style="font-weight:700;margin-bottom:.5rem;color:var(--text-secondary)">Add to .env:</div>
-      <pre style="margin:0;font-size:.78rem;color:var(--text-primary)">TELEGRAM_ALERT_CHAT_ID={{ $alertChatId ?: '-100xxxxxxxxxx' }}
-TELEGRAM_ALERT_THREAD_ID={{ $alertThreadId ?: '' }}   {{-- leave blank for General --}}
-TELEGRAM_ALERT_COOLDOWN_HOURS={{ $alertHours }}</pre>
-      <div style="font-size:.72rem;color:var(--text-muted);margin-top:.5rem">
-        After editing .env → run <code>php artisan config:clear</code>
+    <form action="{{ route('telegram.alert-config') }}" method="POST" style="background:var(--surface-2);border-radius:16px;padding:1.5rem;border:1px solid var(--border);">
+      @csrf
+      <div class="row g-3 align-items-end">
+        <div class="col-md-6">
+          <label class="form-label" style="font-family:var(--font-khmer);font-weight:700;color:var(--text-primary)">
+            <i class="bi bi-send-fill me-1" style="color:var(--primary)"></i> ក្រុម/Topic គោលដៅ (Alert Target)
+          </label>
+          <select name="alert_target" class="form-select" style="font-family:var(--font-khmer);font-size:0.95rem;cursor:pointer;">
+            <option value="">— មិនកំណត់ (Disabled) —</option>
+            @foreach($groupedChats as $cId => $chatGrps)
+              <optgroup label="{{ $chatGrps->first()->name }}">
+                @foreach($chatGrps as $g)
+                  @php 
+                    $val = $g->chat_id . '|' . ($g->message_thread_id ?? '');
+                    $isSelected = ($alertChatId == $g->chat_id && $alertThreadId == $g->message_thread_id);
+                    $label = $g->name ?? $g->chat_id;
+                    if ($g->message_thread_id) $label .= ' › ' . ($g->topic_name ?: 'Topic #'.$g->message_thread_id);
+                  @endphp
+                  <option value="{{ $val }}" {{ $isSelected ? 'selected' : '' }}>
+                    {{ $label }}
+                  </option>
+                @endforeach
+              </optgroup>
+            @endforeach
+          </select>
+        </div>
+        <div class="col-md-4">
+          <label class="form-label" style="font-family:var(--font-khmer);font-weight:700;color:var(--text-primary)">
+            <i class="bi bi-stopwatch me-1" style="color:#d97706"></i> Cooldown (ម៉ោង)
+          </label>
+          <div class="input-group" style="box-shadow:0 0 0 1px #e2e8f0;border-radius:12px;overflow:hidden;">
+            <input type="number" name="alert_cooldown" class="form-control border-0" value="{{ $alertHours }}" min="1" max="168" required style="font-family:var(--font-khmer);font-size:0.95rem;font-weight:600;">
+            <span class="input-group-text bg-light border-0" style="font-family:var(--font-khmer);font-weight:600;color:var(--text-muted)">ម៉ោង</span>
+          </div>
+        </div>
+        <div class="col-md-2">
+          <button type="submit" class="btn btn-primary w-100" style="height:42px;display:flex;align-items:center;justify-content:center;gap:0.5rem;">
+            <i class="bi bi-save2"></i> រក្សាទុក
+          </button>
+        </div>
       </div>
-    </div>
+    </form>
 
-    @if(!$groups->isEmpty())
-      <div style="margin-top:.75rem;font-size:.78rem;color:var(--text-muted)">
-        <strong>Available groups/topics:</strong><br>
-        @foreach($groupedChats as $cId => $chatGrps)
-          @foreach($chatGrps as $g)
-            <code style="font-family:var(--font-latin);font-size:.72rem;
-                         background:var(--surface-2);padding:.1em .4em;border-radius:3px;margin:.1rem .15rem;display:inline-block">
-              {{ $g->chat_id }}@if($g->message_thread_id) | thread={{ $g->message_thread_id }} ({{ $g->topic_name }})@endif
-            </code>
-          @endforeach
-        @endforeach
+  </div>
+</div>
+
+{{-- ════════════════════════════════════════════
+     DAILY STOCK USAGE REPORT CONFIGURATION
+════════════════════════════════════════════ --}}
+@php
+  $usageChatId  = $dailyUsageConfig['chat_id'];
+  $usageThreadId= $dailyUsageConfig['thread_id'];
+  $usageGroup   = $usageChatId
+    ? $groupedChats->get($usageChatId)?->first()
+    : null;
+@endphp
+<div class="panel mb-4">
+  <div class="panel-header">
+    <div class="ph-title">
+      <div class="ph-icon" style="background:#e0f2fe;color:#0369a1"><i class="bi bi-graph-down-arrow"></i></div>
+      <span>Daily Stock Usage Target</span>
+      @if($usageChatId)
+        <span class="badge badge-done" style="font-size:.65rem">✅ Configured</span>
+      @else
+        <span class="badge badge-pending" style="font-size:.65rem">⚠️ Not configured</span>
+      @endif
+    </div>
+  </div>
+  <div class="panel-body">
+
+    @if($usageChatId)
+      <div style="background:#dcfce7;border:1px solid #86efac;border-radius:12px;
+                  padding:.85rem 1.25rem;font-size:.9rem;color:#14532d;margin-bottom:1rem;
+                  display:flex;align-items:center;gap:0.75rem;">
+        <i class="bi bi-check-circle-fill" style="font-size:1.2rem"></i>
+        <div>
+          Daily Stock Usage ត្រូវបានកំណត់ → ផ្ញើទៅ:
+          <strong>{{ $usageGroup?->name ?? $usageChatId }}</strong>
+          @if($usageThreadId) › Thread #{{ $usageThreadId }} @endif
+        </div>
       </div>
     @endif
+
+    <div style="font-size:.88rem;color:var(--text-secondary);margin-bottom:1.5rem;line-height:1.6">
+      ជ្រើសរើសក្រុម/Topic គោលដៅ ដើម្បីទទួលរបាយការណ៍បូកសរុបការប្រើប្រាស់ Stock ប្រចាំថ្ងៃ (ផ្ញើដោយស្វ័យប្រវត្តិរៀងរាល់ព្រឹក) និង ទទួលបានការជូនដំណឹងភ្លាមៗរាល់ពេលដែលមានការបញ្ចេញ Stock (Stock Out)។
+    </div>
+
+    <form action="{{ route('telegram.daily-usage-config') }}" method="POST" style="background:var(--surface-2);border-radius:16px;padding:1.5rem;border:1px solid var(--border);">
+      @csrf
+      <div class="row g-3 align-items-end">
+        <div class="col-md-10">
+          <label class="form-label" style="font-family:var(--font-khmer);font-weight:700;color:var(--text-primary)">
+            <i class="bi bi-send-fill me-1" style="color:var(--primary)"></i> ក្រុម/Topic គោលដៅ (Usage Target)
+          </label>
+          <select name="daily_usage_target" class="form-select" style="font-family:var(--font-khmer);font-size:0.95rem;cursor:pointer;">
+            <option value="">— មិនកំណត់ (Disabled) —</option>
+            @foreach($groupedChats as $cId => $chatGrps)
+              <optgroup label="{{ $chatGrps->first()->name }}">
+                @foreach($chatGrps as $g)
+                  @php 
+                    $val = $g->chat_id . '|' . ($g->message_thread_id ?? '');
+                    $isSelected = ($usageChatId == $g->chat_id && $usageThreadId == $g->message_thread_id);
+                    $label = $g->name ?? $g->chat_id;
+                    if ($g->message_thread_id) $label .= ' › ' . ($g->topic_name ?: 'Topic #'.$g->message_thread_id);
+                  @endphp
+                  <option value="{{ $val }}" {{ $isSelected ? 'selected' : '' }}>
+                    {{ $label }}
+                  </option>
+                @endforeach
+              </optgroup>
+            @endforeach
+          </select>
+        </div>
+        <div class="col-md-2">
+          <button type="submit" class="btn btn-primary w-100" style="height:42px;display:flex;align-items:center;justify-content:center;gap:0.5rem;">
+            <i class="bi bi-save2"></i> រក្សាទុក
+          </button>
+        </div>
+      </div>
+    </form>
 
   </div>
 </div>
@@ -430,13 +658,21 @@ TELEGRAM_ALERT_COOLDOWN_HOURS={{ $alertHours }}</pre>
               </button>
             </div>
           </form>
-          <form action="{{ route('telegram.alert-template-reset') }}" method="POST" class="mt-2"
-                onsubmit="return confirm('កំណត់ Template ត្រឡប់ទៅលំនាំដើម?')">
-            @csrf
-            <button type="submit" class="btn btn-outline-danger btn-sm">
-              <i class="bi bi-arrow-counterclockwise"></i> លំនាំដើម (Reset)
-            </button>
-          </form>
+          <div class="d-flex flex-wrap gap-2 mt-2">
+            <form action="{{ route('telegram.alert-test') }}" method="POST">
+              @csrf
+              <button type="submit" class="btn btn-info btn-sm text-white" style="background:#0ea5e9;border:none;">
+                <i class="bi bi-send-fill"></i> សាកល្បងផ្ញើសារ (Send Test Alert)
+              </button>
+            </form>
+            <form action="{{ route('telegram.alert-template-reset') }}" method="POST"
+                  onsubmit="return confirm('កំណត់ Template ត្រឡប់ទៅលំនាំដើម?')">
+              @csrf
+              <button type="submit" class="btn btn-outline-danger btn-sm">
+                <i class="bi bi-arrow-counterclockwise"></i> លំនាំដើម (Reset)
+              </button>
+            </form>
+          </div>
         </div>
 
         <div class="col-lg-5">
@@ -555,6 +791,8 @@ TELEGRAM_ALERT_COOLDOWN_HOURS={{ $alertHours }}</pre>
                 <option value="finishing_report" {{ $baseGroup->purpose==='finishing_report' ? 'selected' : '' }}>🎞️ Finishing</option>
                 <option value="consumable_stock" {{ $baseGroup->purpose==='consumable_stock' ? 'selected' : '' }}>🧴 Consumable</option>
                 <option value="procurement" {{ $baseGroup->purpose==='procurement' ? 'selected' : '' }}>📋 Procurement</option>
+                <option value="production_briefing" {{ $baseGroup->purpose==='production_briefing' ? 'selected' : '' }}>🌅 Prod Briefing</option>
+                <option value="stock_usage" {{ $baseGroup->purpose==='stock_usage' ? 'selected' : '' }}>📉 Stock Usage</option>
                 <option value="general" {{ $baseGroup->purpose==='general' ? 'selected' : '' }}>📢 General</option>
               </select>
             </form>
@@ -632,6 +870,8 @@ TELEGRAM_ALERT_COOLDOWN_HOURS={{ $alertHours }}</pre>
                         <option value="finishing_report" {{ $topic->purpose==='finishing_report' ? 'selected' : '' }}>🎞️ Finishing</option>
                         <option value="consumable_stock" {{ $topic->purpose==='consumable_stock' ? 'selected' : '' }}>🧴 Consumable</option>
                         <option value="procurement" {{ $topic->purpose==='procurement' ? 'selected' : '' }}>📋 Procurement</option>
+                        <option value="production_briefing" {{ $topic->purpose==='production_briefing' ? 'selected' : '' }}>🌅 Prod Briefing</option>
+                        <option value="stock_usage" {{ $topic->purpose==='stock_usage' ? 'selected' : '' }}>📉 Stock Usage</option>
                         <option value="general" {{ $topic->purpose==='general' ? 'selected' : '' }}>📢 General</option>
                       </select>
                     </form>

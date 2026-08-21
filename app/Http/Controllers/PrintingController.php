@@ -7,6 +7,8 @@ use App\Models\DailyPrint;
 use App\Models\ProductionBatch;
 use App\Models\BatchSnapshot;
 use App\Models\TelegramGroup;
+use App\Services\ExcelExportService;
+use App\Services\CacheService;
 use Illuminate\Http\Request;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\View\View;
@@ -19,10 +21,7 @@ class PrintingController extends Controller
     private function booksOrdered()
     {
         $activeId = ProductionBatch::current()->id;
-        return Book::where('batch_id', $activeId)
-            ->orderBy('category')
-            ->orderByRaw("CAST(SUBSTRING_INDEX(COALESCE(grade,'0'), ' ', -1) AS UNSIGNED)")
-            ->orderBy('title');
+        return Book::where('batch_id', $activeId)->ordered();
     }
 
     // ─────────────────────────────────────────────
@@ -34,7 +33,14 @@ class PrintingController extends Controller
         $books        = $this->booksOrdered()->get();
         $allBatches   = ProductionBatch::orderBy('id', 'desc')->get();
 
-        return view('printing.index', compact('books', 'currentBatch', 'allBatches'));
+        // Today's print entries (for the Undo panel) — newest first
+        $todayEntries = DailyPrint::with('book')
+            ->whereDate('date', today())
+            ->whereIn('book_id', $books->pluck('id'))
+            ->orderByDesc('id')
+            ->get();
+
+        return view('printing.index', compact('books', 'currentBatch', 'allBatches', 'todayEntries'));
     }
 
     // ─────────────────────────────────────────────
@@ -54,37 +60,45 @@ class PrintingController extends Controller
         $current = ProductionBatch::current();
         $mode    = $request->reset_mode;
 
-        // 1. Complete the current batch (its book rows stay intact as history)
-        $current->update(['status' => 'completed', 'completed_at' => now()]);
+        $newBatch = \DB::transaction(function() use ($request, $current, $mode) {
+            // 1. Complete the current batch (its book rows stay intact as history)
+            $current->update(['status' => 'completed', 'completed_at' => now()]);
 
-        // 2. Create the new active batch
-        $count = ProductionBatch::count();
-        $newBatch = ProductionBatch::create([
-            'name'       => $request->name ?: ('Batch ' . ($count + 1)),
-            'status'     => 'active',
-            'notes'      => $request->input('notes'),
-            'started_at' => now(),
-        ]);
+            // 2. Create the new active batch
+            $count = ProductionBatch::count();
+            $newBatch = ProductionBatch::create([
+                'name'       => $request->name ?: ('Batch ' . ($count + 1)),
+                'status'     => 'active',
+                'notes'      => $request->input('notes'),
+                'started_at' => now(),
+            ]);
 
-        // 3. Populate the new batch's books based on mode
-        if ($mode === 'keep_targets' || $mode === 'keep_targets_zero') {
-            $oldBooks = Book::where('batch_id', $current->id)->get();
-            foreach ($oldBooks as $b) {
-                Book::create([
-                    'batch_id'      => $newBatch->id,
-                    'title'         => $b->title,
-                    'category'      => $b->category,
-                    'grade'         => $b->grade,
-                    'target_qty'    => $mode === 'keep_targets_zero' ? 0 : $b->target_qty,
-                    'total_printed' => 0,
-                ]);
+            // 3. Populate the new batch's books based on mode
+            if ($mode === 'keep_targets' || $mode === 'keep_targets_zero') {
+                $oldBooks = Book::where('batch_id', $current->id)->get();
+                foreach ($oldBooks as $b) {
+                    Book::create([
+                        'batch_id'      => $newBatch->id,
+                        'title'         => $b->title,
+                        'category'      => $b->category,
+                        'grade'         => $b->grade,
+                        'target_qty'    => $mode === 'keep_targets_zero' ? 0 : $b->target_qty,
+                        'total_printed' => 0,
+                    ]);
+                }
             }
-            $msg = "បានចាប់ផ្ដើម {$newBatch->name} ថ្មី (សៀវភៅដដែល)! {$current->name} ត្រូវបានរក្សាទុក។";
-        } else {
-            // fresh → no books; user adds new ones
+            return $newBatch;
+        });
+
+        if ($mode === 'fresh') {
             $msg = "បានចាប់ផ្ដើម {$newBatch->name} ទទេ — សូមបន្ថែមសៀវភៅថ្មី! {$current->name} ត្រូវបានរក្សាទុក។";
+        } else {
+            $msg = "បានចាប់ផ្ដើម {$newBatch->name} ថ្មី (សៀវភៅដដែល)! {$current->name} ត្រូវបានរក្សាទុក។";
         }
 
+        ProductionBatch::clearCache(); // invalidate per-request cache
+        CacheService::invalidateBatch(); // Clear all batch & dashboard caches
+        CacheService::warmUp(); // Pre-warm dashboard cache
         return redirect()->route('printing.index')->with('success', $msg);
     }
 
@@ -123,6 +137,7 @@ class PrintingController extends Controller
         $current->update(['status' => 'completed', 'completed_at' => now()]);
         $batch->update(['status' => 'active', 'completed_at' => null]);
 
+        ProductionBatch::clearCache(); // invalidate per-request cache
         return redirect()->route('printing.index')
             ->with('success', "បានប្ដូរទៅ {$batch->name}! ({$current->name} ត្រូវបានរក្សាទុក)");
     }
@@ -156,10 +171,11 @@ class PrintingController extends Controller
     public function storeBook(Request $request): RedirectResponse
     {
         $data = $request->validate([
-            'title'      => 'required|string|max:255',
-            'category'   => 'required|in:perfect_binding,staple',
-            'grade'      => 'nullable|string|max:50',
-            'target_qty' => 'required|integer|min:0',
+            'title'           => 'required|string|max:255',
+            'category'        => 'required|in:perfect_binding,staple',
+            'printing_method' => 'required|in:offset,digital',
+            'grade'           => 'nullable|string|max:50',
+            'target_qty'      => 'required|integer|min:0',
         ]);
 
         $data['total_printed'] = 0;
@@ -175,10 +191,11 @@ class PrintingController extends Controller
     public function updateBook(Request $request, Book $book): RedirectResponse
     {
         $data = $request->validate([
-            'title'      => 'required|string|max:255',
-            'category'   => 'required|in:perfect_binding,staple',
-            'grade'      => 'nullable|string|max:50',
-            'target_qty' => 'required|integer|min:0',
+            'title'           => 'required|string|max:255',
+            'category'        => 'required|in:perfect_binding,staple',
+            'printing_method' => 'required|in:offset,digital',
+            'grade'           => 'nullable|string|max:50',
+            'target_qty'      => 'required|integer|min:0',
         ]);
 
         $book->update($data);
@@ -220,67 +237,87 @@ class PrintingController extends Controller
         $created  = 0;
         $updated  = 0;
         $skipped  = [];
-        $lineNum  = 1; // header was line 1
 
-        foreach ($dataRows as $row) {
-            $lineNum++;
+        try {
+            \DB::transaction(function() use ($dataRows, $activeBatchId, &$created, &$updated, &$skipped) {
+                $lineNum  = 1; // header was line 1
+                foreach ($dataRows as $row) {
+                    $lineNum++;
 
-            // Skip completely empty rows
-            if (count(array_filter($row, fn($v) => trim((string) $v) !== '')) === 0) continue;
+                    // Skip completely empty rows
+                    if (count(array_filter($row, fn($v) => trim((string) $v) !== '')) === 0) continue;
 
-            if (count($row) < 3) {
-                $skipped[] = "Line {$lineNum}: too few columns (" . count($row) . ")";
-                continue;
-            }
+                    if (count($row) < 3) {
+                        $skipped[] = "Line {$lineNum}: too few columns (" . count($row) . ")";
+                        continue;
+                    }
 
-            $title     = trim((string) ($row[0] ?? ''));
-            $category  = strtolower(trim((string) ($row[1] ?? '')));
-            $targetQty = (int) str_replace([',', ' '], '', (string) ($row[2] ?? '0'));
-            $printed   = (int) str_replace([',', ' '], '', (string) ($row[3] ?? '0'));
-            $grade     = trim((string) ($row[4] ?? ''));
+                    $title     = trim((string) ($row[0] ?? ''));
+                    $category  = strtolower(trim((string) ($row[1] ?? '')));
+                    $targetQty = (int) str_replace([',', ' '], '', (string) ($row[2] ?? '0'));
+                    $printed   = (int) str_replace([',', ' '], '', (string) ($row[3] ?? '0'));
+                    $grade     = trim((string) ($row[4] ?? ''));
+                    $printMethod = strtolower(trim((string) ($row[5] ?? 'offset'))); // New column
 
-            // Validate — title is required; target may be 0 (set later)
-            if (empty($title)) {
-                $skipped[] = "Line {$lineNum}: empty title";
-                continue;
-            }
-            $targetQty = max(0, $targetQty);
-            $printed   = max(0, $printed);
+                    // Validate — title is required; target may be 0 (set later)
+                    if (empty($title)) {
+                        $skipped[] = "Line {$lineNum}: empty title";
+                        continue;
+                    }
+                    $targetQty = max(0, $targetQty);
+                    $printed   = max(0, $printed);
 
-            // Normalise category — accept many formats
-            if (str_contains($category, 'perfect') || str_contains($category, 'bind') ||
-                str_contains($category, 'បិត')     || $category === 'pb') {
-                $category = 'perfect_binding';
-            } elseif (str_contains($category, 'staple') || str_contains($category, 'kib') ||
-                      str_contains($category, 'កិប')     || $category === 'st') {
-                $category = 'staple';
-            } else {
-                $category = 'staple'; // default fallback
-            }
+                    // Normalise category — accept many formats
+                    if (str_contains($category, 'perfect') || str_contains($category, 'bind') ||
+                        str_contains($category, 'បិត')     || $category === 'pb') {
+                        $category = 'perfect_binding';
+                    } elseif (str_contains($category, 'staple') || str_contains($category, 'kib') ||
+                              str_contains($category, 'កិប')     || $category === 'st') {
+                        $category = 'staple';
+                    } else {
+                        $category = 'staple'; // default fallback
+                    }
+                    
+                    // Normalise printing method
+                    if (str_contains($printMethod, 'digital') || str_contains($printMethod, 'digi')) {
+                        $printMethod = 'digital';
+                    } else {
+                        $printMethod = 'offset'; // default
+                    }
 
-            $existing = Book::where('title', $title)
-                ->where('grade', $grade ?: null)
-                ->where('batch_id', $activeBatchId)
-                ->first();
+                    $existing = Book::where('title', $title)
+                        ->where('grade', $grade ?: null)
+                        ->where('batch_id', $activeBatchId)
+                        ->first();
 
-            if ($existing) {
-                $existing->update([
-                    'category'      => $category,
-                    'target_qty'    => $targetQty,
-                    'total_printed' => $targetQty > 0 ? min($printed, $targetQty) : $printed,
-                ]);
-                $updated++;
-            } else {
-                Book::create([
-                    'batch_id'      => $activeBatchId,
-                    'title'         => $title,
-                    'category'      => $category,
-                    'grade'         => $grade ?: null,
-                    'target_qty'    => $targetQty,
-                    'total_printed' => $targetQty > 0 ? min($printed, $targetQty) : $printed,
-                ]);
-                $created++;
-            }
+                    if ($existing) {
+                        $existing->update([
+                            'category'        => $category,
+                            'printing_method' => $printMethod,
+                            'target_qty'      => $targetQty,
+                            // Preserve existing printed quantity - don't overwrite progress!
+                            // Only use CSV printed value if current is 0 (new import scenario)
+                            'total_printed' => $existing->total_printed > 0 
+                                ? $existing->total_printed 
+                                : ($targetQty > 0 ? min($printed, $targetQty) : $printed),
+                        ]);
+                        $updated++;
+                    } else {
+                        Book::create([
+                            'batch_id'        => $activeBatchId,
+                            'title'           => $title,
+                            'category'        => $category,
+                            'printing_method' => $printMethod,
+                            'grade'           => $grade ?: null,
+                            'target_qty'      => $targetQty,
+                            'total_printed'   => $targetQty > 0 ? min($printed, $targetQty) : $printed,
+                        ]);
+                        $created++;
+                    }
+                }
+            });
+        } catch (\Throwable $e) {
+            return back()->with('error', 'ការនាំចូលបានបរាជ័យ: ' . $e->getMessage());
         }
 
         // Build detailed feedback message
@@ -370,17 +407,27 @@ class PrintingController extends Controller
     {
         $request->validate([
             'book_id'       => 'required|exists:books,id',
-            'printed_today' => 'required|integer|min:1',
+            'printed_today' => 'required|integer|not_in:0',
         ]);
 
         $book      = Book::findOrFail($request->book_id);
-        $remaining = max($book->target_qty - $book->total_printed, 0);
+        $reqAmount = (int) $request->printed_today;
 
-        if ($remaining === 0) {
-            return back()->with('error', "'{$book->title}' បានដល់គោលដៅហើយ");
+        if ($reqAmount > 0) {
+            $remaining = max($book->target_qty - $book->total_printed, 0);
+            if ($remaining === 0) {
+                return back()->with('error', "'{$book->title}' បានដល់គោលដៅហើយ");
+            }
+            $amount = min($reqAmount, $remaining);
+        } else {
+            // Negative amount (reduction)
+            // Cannot reduce more than what is already printed
+            $amount = max($reqAmount, -($book->total_printed));
         }
 
-        $amount = min((int) $request->printed_today, $remaining);
+        if ($amount === 0) {
+            return back()->with('error', "គ្មានការប្រែប្រួល");
+        }
 
         DailyPrint::create([
             'book_id'       => $book->id,
@@ -390,7 +437,33 @@ class PrintingController extends Controller
 
         $book->increment('total_printed', $amount);
 
-        return back()->with('success', "បានកត់ {$amount} ក្បាល សម្រាប់ '{$book->title}'");
+        $msg = $amount > 0 ? "បានកត់ {$amount} ក្បាល សម្រាប់" : "បានដក " . abs($amount) . " ក្បាល ពី";
+        return back()->with('success', "{$msg} '{$book->title}'");
+    }
+
+    // ─────────────────────────────────────────────
+    // Undo / delete a single daily print entry (fixes wrong-book/grade mistakes)
+    // ─────────────────────────────────────────────
+    public function destroyDailyPrint(DailyPrint $print): RedirectResponse
+    {
+        // Only allow undoing entries recorded today, to keep history safe
+        if (!$print->date || !\Carbon\Carbon::parse($print->date)->isToday()) {
+            return back()->with('error', 'អាចលុបបានតែកំណត់ត្រាថ្ងៃនេះប៉ុណ្ណោះ។');
+        }
+
+        $book   = $print->book;
+        $amount = (int) $print->printed_today;
+        $title  = $book->title ?? 'សៀវភៅ';
+
+        // Reverse the recorded amount on the book total (never below 0)
+        if ($book) {
+            $book->total_printed = max(($book->total_printed ?? 0) - $amount, 0);
+            $book->save();
+        }
+
+        $print->delete();
+
+        return back()->with('success', "បានលុបកំណត់ត្រា {$amount} ក្បាល របស់ '{$title}' រួចរាល់");
     }
 
     // ─────────────────────────────────────────────
@@ -409,8 +482,12 @@ class PrintingController extends Controller
         $count   = 0;
         $details = [];
 
+        // Pre-fetch all requested books in one query to prevent N+1 issues
+        $bookIds = collect($request->updates)->pluck('id')->filter()->toArray();
+        $books   = Book::whereIn('id', $bookIds)->get()->keyBy('id');
+
         foreach ($request->updates as $upd) {
-            $book   = Book::find($upd['id']);
+            $book = $books->get($upd['id']);
             if (!$book) continue;
 
             if ($mode === 'set_done') {
@@ -441,12 +518,12 @@ class PrintingController extends Controller
                 // Set an exact total_printed value
                 $val = min((int) $upd['amount'], $book->target_qty);
                 $diff = $val - $book->total_printed;
-                if ($diff > 0) {
+                if ($diff != 0) {
                     $book->total_printed = $val;
                     $book->save();
                     DailyPrint::create([
                         'book_id'       => $book->id,
-                        'printed_today' => $diff,
+                        'printed_today' => $diff, // can be negative for corrections
                         'date'          => now()->toDateString(),
                     ]);
                 }
@@ -469,6 +546,9 @@ class PrintingController extends Controller
     {
         $books          = $this->booksOrdered()->get();
         $telegramGroups = TelegramGroup::orderBy('name')->get();
+        
+        // Get unique grades for the filter dropdown
+        $grades = $books->pluck('grade')->filter()->unique()->sort()->values();
 
         // Today's print stats
         $todayDate      = now()->toDateString();
@@ -478,6 +558,118 @@ class PrintingController extends Controller
             ->pluck('today_qty', 'book_id');
         $todayTotal     = $todayPrints->sum();
 
-        return view('printing.report', compact('books', 'telegramGroups', 'todayPrints', 'todayTotal'));
+        return view('printing.report', compact('books', 'telegramGroups', 'todayPrints', 'todayTotal', 'grades'));
+    }
+
+    /**
+     * Export production report to Excel
+     */
+    public function exportExcel(Request $request, ExcelExportService $exportService)
+    {
+        try {
+            $currentBatch = ProductionBatch::current();
+            $books = $this->booksOrdered()->get();
+            
+            $filename = 'production_report_' . $currentBatch->name . '_' . now()->format('Y-m-d') . '.xlsx';
+            
+            return $exportService->exportProductionReport($books, $filename);
+        } catch (\Throwable $e) {
+            // Log the error for debugging
+            \Log::error('Production export failed: ' . $e->getMessage(), [
+                'file' => $e->getFile(),
+                'line' => $e->getLine(),
+                'trace' => $e->getTraceAsString()
+            ]);
+            
+            // Show friendly error to user
+            return back()->with('error', 'មិនអាចទាញយក Excel បានទេ។ សូមព្យាយាមម្តងទៀត ឬទំនាក់ទំនង IT។ / Unable to export Excel. Please try again or contact IT.');
+        }
+    }
+
+    /**
+     * Generate daily report (for copy to clipboard or view)
+     */
+    public function generateDailyReport(Request $request)
+    {
+        $reportService = app(\App\Services\DailyReportService::class);
+        
+        $date = $request->input('date', today()->toDateString());
+        $batchId = $request->input('batch_id');
+        $grade = $request->input('grade'); // Grade filter
+        $format = $request->input('format', 'full'); // full or compact
+        
+        if ($format === 'compact') {
+            $report = $reportService->generateCompactReport($date, $batchId, $grade);
+        } else {
+            $report = $reportService->generateDailyReport($date, $batchId, $grade);
+        }
+        
+        return response()->json([
+            'success' => true,
+            'report' => $report,
+            'date' => $date,
+            'grade' => $grade,
+        ]);
+    }
+
+
+
+    /**
+     * Send daily report to Telegram
+     */
+    public function sendDailyReportTelegram(Request $request)
+    {
+        $reportService = app(\App\Services\DailyReportService::class);
+        
+        $date = $request->input('date', today()->toDateString());
+        $batchId = $request->input('batch_id');
+        $groupId = $request->input('group_id'); // null = send to all active groups
+        $format = $request->input('format', 'compact'); // compact for Telegram
+        $grade = $request->input('grade'); // grade/level filter
+        
+        // Prevent double-send: lock on date+group+format+grade for 15s.
+        $lockKey = 'tg-report:' . md5($date . '|' . ($groupId ?? 'all') . '|' . $format . '|' . ($grade ?? 'all'));
+        $lock = \Illuminate\Support\Facades\Cache::lock($lockKey, 15);
+
+        if (!$lock->get()) {
+            $msg = 'កំពុងផ្ញើរួចហើយ សូមរង់ចាំបន្តិច... / A send is already in progress.';
+            return $request->expectsJson()
+                ? response()->json(['success' => false, 'message' => $msg], 429)
+                : back()->with('error', $msg);
+        }
+
+        try {
+            // Generate report with grade filter if provided
+            if ($format === 'compact') {
+                $report = $reportService->generateCompactReport($date, $batchId, $grade);
+            } else {
+                $report = $reportService->generateDailyReport($date, $batchId, $grade);
+            }
+            
+            // Send to Telegram
+            $success = $reportService->sendToTelegram($report, $groupId);
+            
+            $okMsg  = 'របាយការណ៍ត្រូវបានផ្ញើទៅ Telegram ជោគជ័យ! / Report sent successfully!';
+            $errMsg = 'មិនអាចផ្ញើរបាយការណ៍បានទេ។ សូមពិនិត្យ Telegram Bot ឬ Group។';
+
+            if ($request->expectsJson()) {
+                return response()->json([
+                    'success' => $success,
+                    'message' => $success ? $okMsg : $errMsg,
+                ], $success ? 200 : 422);
+            }
+
+            return back()->with($success ? 'success' : 'error', $success ? $okMsg : $errMsg);
+        } catch (\Exception $e) {
+            \Log::error('Failed to send daily report to Telegram: ' . $e->getMessage());
+            $msg = 'មានបញ្ហាក្នុងការផ្ញើរបាយការណ៍៖ ' . $e->getMessage();
+            return $request->expectsJson()
+                ? response()->json(['success' => false, 'message' => $msg], 500)
+                : back()->with('error', $msg);
+        } finally {
+            // Release the lock as soon as sending finishes
+            optional($lock)->release();
+        }
     }
 }
+

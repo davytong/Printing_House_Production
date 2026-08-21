@@ -22,3 +22,11 @@
 Homestead.json
 Homestead.yaml
 Thumbs.db
+
+/printing-tracker
+last_ip.txt
+*.tmp
+test2.php
+.kiro/
+_archive/
+

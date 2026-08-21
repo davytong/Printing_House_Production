@@ -1,4 +1,4 @@
-﻿@extends('layouts.app')
+@extends('layouts.app')
 @section('title','Stock Reports')
 @section('page-title','Stock Reports')
 
@@ -15,11 +15,11 @@
 <div class="panel mb-4">
   <div class="panel-body" style="display:flex;flex-wrap:wrap;gap:.6rem;align-items:center">
     <span style="font-weight:700;font-size:.88rem;margin-right:.4rem"><i class="bi bi-funnel-fill"></i> ផ្នែក៖</span>
-    @php $filterCats = [null=>['📦','ទាំងអស់ (All)'],'paper'=>['📄','ក្រដាស (Paper)'],'film'=>['🎞️','Film (ហ្វីល)'],'consumable'=>['🧴','Consumable (សម្ភារៈប្រើប្រាស់)']]; @endphp
+    @php $filterCats = [null=>['<i class="fa-solid fa-box"></i>','ទាំងអស់ (All)'],'paper'=>['<i class="fa-solid fa-file-lines"></i>','ក្រដាស (Paper)'],'film'=>['<i class="fa-solid fa-tape"></i>','Film (ហ្វីល)'],'consumable'=>['<i class="fa-solid fa-bottle-droplet"></i>','Consumable (សម្ភារៈប្រើប្រាស់)']]; @endphp
     @foreach($filterCats as $val => [$emoji,$label])
       @php $active = ($category === $val) || ($val === null && !$category); @endphp
       <a href="{{ route('stock.reports.index') }}{{ $val ? '?category='.$val : '' }}"
-         class="btn btn-sm {{ $active ? 'btn-primary' : 'btn-outline-secondary' }}">{{ $emoji }} {{ $label }}</a>
+         class="btn btn-sm {{ $active ? 'btn-primary' : 'btn-outline-secondary' }}">{!! $emoji !!} {{ $label }}</a>
     @endforeach
     <a href="{{ route('stock.reports.create') }}{{ $category ? '?category='.$category : '' }}" class="btn btn-success btn-sm ms-auto">
       <i class="bi bi-plus-lg"></i> បង្កើតរបាយការណ៍{{ $category ? ' '.$filterCats[$category][1] : '' }}

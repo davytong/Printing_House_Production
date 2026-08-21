@@ -2,6 +2,7 @@
 @section('title','Stock Report — '.$stockReport->report_date->format('d/m/Y'))
 @section('page-title','Stock Report Detail')
 
+
 @section('content')
 <div class="d-flex justify-content-between align-items-start flex-wrap gap-3 mb-4">
   <div>
@@ -11,7 +12,7 @@
   </div>
   <div class="d-flex gap-2">
     <form action="{{ route('stock.reports.destroy', $stockReport) }}" method="POST"
-          onsubmit="return confirm('តើអ្នកប្រាកដថាចង់លុបរបាយការណ៍នេះមែនទេ?')">
+          data-confirm="តើអ្នកប្រាកដថាចង់លុបរបាយការណ៍នេះមែនទេ? / Are you sure you want to delete this report?">
       @csrf @method('DELETE')
       <button class="btn btn-sm" style="background:#fee2e2;color:#b91c1c;border:none"><i class="bi bi-trash3"></i></button>
     </form>
@@ -41,13 +42,13 @@
         <div class="panel-header"><div class="ph-title"><div class="ph-icon" style="background:#dbeafe;color:#1d4ed8"><i class="bi bi-bar-chart"></i></div><span>សង្ខេបស្ថានភាព Stock</span></div></div>
         <div class="panel-body">
           @foreach($stockReport->summary_data['categories'] as $cat => $data)
-            @php $emoji = match($cat){'paper'=>'📄','film'=>'🎞️',default=>'🖨️'}; @endphp
+            @php $emoji = match($cat){'paper'=>'<i class="fa-solid fa-file-lines"></i>','film'=>'<i class="fa-solid fa-tape"></i>',default=>'<i class="fa-solid fa-print"></i>'}; @endphp
             <div style="margin-bottom:1rem">
               <div style="font-weight:700;font-size:.9rem;margin-bottom:.5rem;display:flex;align-items:center;gap:.5rem">
-                <span>{{ $emoji }} {{ $data['label'] }}</span>
+                <span>{!! $emoji !!} {{ $data['label'] }}</span>
                 <span style="font-family:var(--font-latin);font-size:.72rem;background:#dbeafe;color:#1e40af;padding:.1em .5em;border-radius:999px">{{ $data['count'] }}</span>
                 @if($data['low_count'] > 0)
-                  <span style="font-family:var(--font-latin);font-size:.72rem;background:#fee2e2;color:#dc2626;padding:.1em .5em;border-radius:999px">⚠️ {{ $data['low_count'] }} low</span>
+                  <span style="font-family:var(--font-latin);font-size:.72rem;background:#fee2e2;color:#dc2626;padding:.1em .5em;border-radius:999px"><i class="bi bi-exclamation-triangle-fill"></i> {{ $data['low_count'] }} low</span>
                 @endif
               </div>
               @foreach($data['items'] as $item)
@@ -56,7 +57,7 @@
                   <span>{{ $item['name'] }}{{ $item['sub_type']?' · '.$item['sub_type']:'' }}</span>
                   <span style="font-family:var(--font-latin);font-weight:600;color:{{ $color }}">
                     {{ number_format($item['stock'],1) }} {{ $item['unit'] }}
-                    @if($item['is_low']) ⚠️ @endif
+                    @if($item['is_low']) <i class="bi bi-exclamation-triangle-fill" style="color:var(--warning)"></i> @endif
                   </span>
                 </div>
               @endforeach
@@ -84,7 +85,7 @@
             <span style="font-size:.82rem">មិនទាន់មាន Telegram Group</span>
           </div>
         @else
-          <form action="{{ route('stock.reports.send', $stockReport) }}" method="POST">
+          <form id="stockReportSendForm" action="{{ route('stock.reports.send', $stockReport) }}" method="POST">
             @csrf
             <div class="mb-3">
               <label class="form-label">ជ្រើសរើសក្រុមដែលត្រូវផ្ញើ</label>
@@ -135,6 +136,26 @@
 
   sel.addEventListener('change', sync);
   sync(); // sync on load if default option has a value
+})();
+
+// ── Prevent double-send: overlay + disable button on submit ──
+(function () {
+  const form = document.getElementById('stockReportSendForm');
+  if (!form) return;
+  let submitted = false;
+
+  form.addEventListener('submit', function (e) {
+    if (submitted) { e.preventDefault(); return; }
+    submitted = true;
+
+    form.querySelectorAll('button[type="submit"]').forEach(b => {
+      b.disabled = true;
+      b.style.opacity = '.65';
+      b.style.cursor = 'not-allowed';
+    });
+
+    if (typeof showLoading === 'function') showLoading(true, 'កំពុងផ្ញើទៅ Telegram...');
+  });
 })();
 </script>
 @endpush

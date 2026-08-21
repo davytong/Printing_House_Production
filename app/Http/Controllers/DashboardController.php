@@ -17,21 +17,62 @@ class DashboardController extends Controller
 {
     public function index(): View
     {
-        // ── Production ────────────────────────────
-        $books         = Book::all();
-        $totalBooks    = $books->count();
-        $totalPrinted  = $books->sum('total_printed');
-        $totalTarget   = $books->sum('target_qty');
-        $overallPct    = $totalTarget > 0 ? round($totalPrinted / $totalTarget * 100) : 0;
-        $doneCount     = $books->filter(fn($b) => $b->total_printed >= $b->target_qty)->count();
-        $inProgress    = $books->filter(fn($b) => $b->total_printed > 0 && $b->total_printed < $b->target_qty)->count();
+        // ── Production (Batch-Aware) ──────────────
+        $currentBatch = \App\Models\ProductionBatch::current();
+        $allBatches   = \App\Models\ProductionBatch::with('books')->orderBy('id', 'desc')->get();
+        
+        // Overall totals (all batches) — single SQL aggregate, cached for 5 minutes
+        $bookAgg = \Illuminate\Support\Facades\Cache::remember('dashboard_book_agg', 300, function () {
+            return Book::selectRaw(
+                'COUNT(*) as cnt, '
+                . 'COALESCE(SUM(total_printed),0) as printed, '
+                . 'COALESCE(SUM(target_qty),0) as target, '
+                . 'SUM(CASE WHEN total_printed >= target_qty THEN 1 ELSE 0 END) as done_cnt, '
+                . 'SUM(CASE WHEN total_printed > 0 AND total_printed < target_qty THEN 1 ELSE 0 END) as prog_cnt'
+            )->first();
+        });
 
-        // Daily trend: last 7 days
-        $trend = DailyPrint::selectRaw('date, SUM(printed_today) as total')
-            ->where('date', '>=', now()->subDays(6)->toDateString())
-            ->groupBy('date')
-            ->orderBy('date')
-            ->pluck('total', 'date');
+        $totalBooks    = (int) $bookAgg->cnt;
+        $totalPrinted  = (int) $bookAgg->printed;
+        $totalTarget   = (int) $bookAgg->target;
+        $overallPct    = $totalTarget > 0 ? round($totalPrinted / $totalTarget * 100) : 0;
+        $doneCount     = (int) $bookAgg->done_cnt;
+        $inProgress    = (int) $bookAgg->prog_cnt;
+
+        // Current batch statistics
+        $currentBatchBooks = $currentBatch->books;
+        $currentBatchTotal = $currentBatchBooks->sum('target_qty');
+        $currentBatchPrinted = $currentBatchBooks->sum('total_printed');
+        $currentBatchPct = $currentBatchTotal > 0 ? round($currentBatchPrinted / $currentBatchTotal * 100) : 0;
+        
+        // Batch breakdown for display
+        $batchStats = $allBatches->map(function($batch) {
+            $books = $batch->books;
+            $target = $books->sum('target_qty');
+            $printed = $books->sum('total_printed');
+            $pct = $target > 0 ? round($printed / $target * 100) : 0;
+            
+            return [
+                'id' => $batch->id,
+                'name' => $batch->name,
+                'status' => $batch->status,
+                'book_count' => $books->count(),
+                'target' => $target,
+                'printed' => $printed,
+                'percentage' => $pct,
+                'started_at' => $batch->started_at,
+                'completed_at' => $batch->completed_at,
+            ];
+        });
+
+        // Daily trend: last 7 days, cached for 5 minutes
+        $trend = \Illuminate\Support\Facades\Cache::remember('dashboard_trend', 300, function () {
+            return DailyPrint::selectRaw('date, SUM(printed_today) as total')
+                ->where('date', '>=', now()->subDays(6)->toDateString())
+                ->groupBy('date')
+                ->orderBy('date')
+                ->pluck('total', 'date');
+        });
 
         $trendLabels = collect();
         $trendValues = collect();
@@ -55,12 +96,19 @@ class DashboardController extends Controller
             ->take(5)->get();
 
         // ── Machines ─────────────────────────────
-        $operationalMachines = Machine::where('status', 'operational')->count();
-        $totalMachines       = Machine::count();
+        $machineStats = Machine::selectRaw("
+            SUM(CASE WHEN status = 'operational' THEN 1 ELSE 0 END) as operational,
+            SUM(CASE WHEN status = 'breakdown' THEN 1 ELSE 0 END) as breakdown,
+            COUNT(*) as total
+        ")->first();
+
+        $operationalMachines = (int) ($machineStats->operational ?? 0);
+        $breakdowns          = (int) ($machineStats->breakdown ?? 0);
+        $totalMachines       = (int) ($machineStats->total ?? 0);
+
         $maintenanceDue      = Machine::whereDate('next_maintenance', '<=', now()->addDays(7))
             ->where('status', '!=', 'retired')
             ->count();
-        $breakdowns          = Machine::where('status', 'breakdown')->count();
 
         // ── Purchase Orders ───────────────────────
         $pendingPOs   = PurchaseOrder::whereIn('status', ['draft', 'sent'])->count();
@@ -80,16 +128,23 @@ class DashboardController extends Controller
             ->orderBy('scheduled_date')
             ->take(5)->get();
 
+        // ── Telegram Bot Status ──────────────────
+        $telegramToken = config('services.telegram.bot_token');
+        $telegramAlertChatId = \App\Models\Setting::get('alert_chat_id', config('services.telegram.alert_chat_id'));
+        $telegramStatus = $telegramToken && $telegramAlertChatId ? 'active' : ($telegramToken ? 'pending' : 'disconnected');
+
         return view('dashboard.index', compact(
             'totalBooks', 'totalPrinted', 'totalTarget', 'overallPct',
             'doneCount', 'inProgress',
+            'currentBatch', 'currentBatchTotal', 'currentBatchPrinted', 'currentBatchPct',
+            'batchStats', 'allBatches',
             'trendLabels', 'trendValues',
             'pendingRequests', 'urgentRequests', 'recentRequests',
             'lowStockItems', 'inventoryAlerts',
             'operationalMachines', 'totalMachines', 'maintenanceDue', 'breakdowns',
             'pendingPOs', 'overduePOs',
             'unreadNotifs', 'notifications',
-            'upcomingMaintenance'
+            'upcomingMaintenance', 'telegramStatus'
         ));
     }
 }

@@ -6,6 +6,7 @@ use App\Http\Controllers\Controller;
 use App\Models\Material;
 use App\Models\StockMovement;
 use App\Services\AlertService;
+use App\Services\ExcelExportService;
 use App\Services\ImageService;
 use App\Services\StockService;
 use App\Services\TelegramService;
@@ -85,6 +86,26 @@ class MovementController extends Controller
         // Check low stock alert
         $this->alertService->checkAndAlert($material);
 
+        if ($data['type'] === 'out') {
+            $chatId = \App\Models\Setting::get('daily_usage_chat_id');
+            if ($chatId) {
+                $threadId = \App\Models\Setting::get('daily_usage_thread_id');
+                $itemName = $material->name_km ?: $material->name;
+                $qty = number_format($data['quantity'], 2) + 0; // Strip trailing zeroes
+                $by = $data['performed_by'] ? " 👤 {$data['performed_by']}" : '';
+                
+                $msg = "📉 <b>Live Stock Usage</b>\n";
+                $msg .= "• " . htmlspecialchars($itemName) . ": បានប្រើ <b>-{$qty} {$material->unit}</b>\n";
+                $msg .= "• សល់ក្នុងស្តុក: <b>" . $material->currentStock() . " {$material->unit}</b>{$by}";
+                
+                if (!empty($data['notes'])) {
+                    $msg .= "\n📝 Note: " . htmlspecialchars($data['notes']);
+                }
+                
+                $this->telegramService->sendMessage($chatId, $msg, $threadId ? (int)$threadId : null, 'HTML');
+            }
+        }
+
         $label = match($data['type']) {
             'in'     => 'Stock In',
             'out'    => 'Stock Out',
@@ -120,7 +141,10 @@ class MovementController extends Controller
         // Auto-select the right group for this category
         $defaultGroup = \App\Models\TelegramGroup::forCategory($category);
 
-        return view('stock.movements.daily', compact('materials', 'category', 'telegramGroups', 'defaultGroup'));
+        // Get language format setting for this category
+        $nameFormat = \App\Models\Setting::get("telegram_item_name_format_{$category}", 'both');
+
+        return view('stock.movements.daily', compact('materials', 'category', 'telegramGroups', 'defaultGroup', 'nameFormat'));
     }
 
     public function dailyStore(Request $request): RedirectResponse
@@ -151,39 +175,51 @@ class MovementController extends Controller
 
         $count   = 0;
         $updated = [];
-
-        foreach ($data['items'] as $item) {
-            $material = Material::find($item['material_id']);
-            if (! $material) continue;
-
-            $newQty = (float) $item['current_stock'];
-            $oldQty = $material->currentStock();
-
-            if (abs($newQty - $oldQty) >= 0.01) {
-                $this->stockService->recordMovement(
-                    $material, 'adjust', $newQty,
-                    'Daily update', $data['performed_by'] ?? null,
-                    null, $data['update_date'],
-                );
-                $this->alertService->checkAndAlert($material);
-                $count++;
-            }
-
-            $updated[] = [
-                'name'    => $material->name,
-                'name_km' => $material->name_km,
-                'unit'    => $material->unit,
-                'qty'     => $newQty,
-            ];
-        }
-
-        // Store uploaded images
         $imagePaths = [];
-        if ($request->hasFile('images')) {
-            foreach ($request->file('images') as $file) {
-                $path = $this->imageService->store($file, 'daily-reports');
-                if ($path) $imagePaths[] = $path;
-            }
+
+        try {
+            $count = \DB::transaction(function() use ($data, $request, &$updated, &$imagePaths) {
+                $count = 0;
+                foreach ($data['items'] as $item) {
+                    $material = Material::find($item['material_id']);
+                    if (! $material) continue;
+
+                    $newQty = (float) $item['current_stock'];
+                    $oldQty = $material->currentStock();
+
+                    if (abs($newQty - $oldQty) >= 0.01) {
+                        $this->stockService->recordMovement(
+                            $material, 'adjust', $newQty,
+                            'Daily update', $data['performed_by'] ?? null,
+                            null, $data['update_date'],
+                        );
+                        $this->alertService->checkAndAlert($material);
+                        $count++;
+                    }
+
+                    $updated[] = [
+                        'id'      => $material->id,
+                        'name'    => $material->name,
+                        'name_km' => $material->name_km,
+                        'size'    => $material->size,
+                        'unit'    => $material->unit,
+                        'qty'     => $newQty,
+                        'old_qty' => $oldQty,
+                    ];
+                }
+
+                // Store uploaded images
+                if ($request->hasFile('images')) {
+                    foreach ($request->file('images') as $file) {
+                        $path = $this->imageService->store($file, 'daily-reports');
+                        if ($path) $imagePaths[] = $path;
+                    }
+                }
+
+                return $count;
+            });
+        } catch (\Throwable $e) {
+            return back()->with('error', 'ការធ្វើបច្ចុប្បន្នភាពបានបរាជ័យ: ' . $e->getMessage())->withInput();
         }
 
         // Send to Telegram
@@ -200,13 +236,11 @@ class MovementController extends Controller
             );
         }
 
-        // Clean up temp image files from storage after sending
-        // (keep them — they are evidence/audit trail)
-
+        // Get category label from settings for success message
         $catLabel = match($data['category']) {
-            'paper'      => 'ក្រដាស (Paper)',
-            'film'       => 'Film (ហ្វីល)',
-            'consumable' => 'Consumable (សម្ភារៈប្រើប្រាស់)',
+            'paper'      => \App\Models\Setting::get('category_label_paper', 'ក្រដាស (Paper)'),
+            'film'       => \App\Models\Setting::get('category_label_film', 'Lamination Film (ស្គុត)'),
+            'consumable' => \App\Models\Setting::get('category_label_consumable', 'Consumable (សម្ភារៈប្រើប្រាស់)'),
             default      => ucfirst($data['category']),
         };
 
@@ -224,18 +258,21 @@ class MovementController extends Controller
         array $imagePaths = [],
         ?int $threadId = null,
     ): void {
-        $catEmoji = match($category) {
-            'paper'      => '📄',
-            'film'       => '🎞️',
-            'consumable' => '🧴',
-            default      => '📦',
+        $headerEmoji = match($category) {
+            'paper'      => '❖',
+            'film'       => '❖',
+            'consumable' => '❖',
+            default      => '❖',
         };
+        
+        // Get category label from settings
         $catLabel = match($category) {
-            'paper'      => 'ក្រដាស (Paper)',
-            'film'       => 'Film (ហ្វីល)',
-            'consumable' => 'Consumable (សម្ភារៈប្រើប្រាស់)',
+            'paper'      => \App\Models\Setting::get('category_label_paper', 'ក្រដាស (Paper)'),
+            'film'       => \App\Models\Setting::get('category_label_film', 'Lamination Film (ស្គុត)'),
+            'consumable' => \App\Models\Setting::get('category_label_consumable', 'Consumable (សម្ភារៈប្រើប្រាស់)'),
             default      => ucfirst($category),
         };
+        
         $catTag = match($category) {
             'paper'      => '#Paper_Stock',
             'film'       => '#Film_Stock',
@@ -247,34 +284,97 @@ class MovementController extends Controller
         $km = ['','មករា','កុម្ភៈ','មីនា','មេសា','ឧសភា','មិថុនា','កក្កដា','សីហា','កញ្ញា','តុលា','វិច្ឆិកា','ធ្នូ'];
         $dateStr = "ថ្ងៃទី {$d->day} ខែ{$km[$d->month]} ឆ្នាំ {$d->year}";
 
-        $lines = [
-            "សូមគោរពរាយការណ៍ជូនបង ពូ 📩",
-            $dateStr,
-            "",
-            "{$catEmoji} {$catLabel} នៅសល់មានចំនួន:",
-        ];
+        // Build items list with category-specific language format
+        $nameFormat = \App\Models\Setting::get("telegram_item_name_format_{$category}", 'both');
+        $itemLines = [];
+        $groupedItems = collect($items)->groupBy(fn($i) => $i['size'] ?? '');
 
-        foreach ($items as $it) {
-            // Bilingual: "Plate Cleaner — សាប៊ូជូតប្លាក : 23 bottle"
-            $nameDisplay = $it['name_km']
-                ? "{$it['name']} — {$it['name_km']}"
-                : $it['name'];
-            $lines[] = "- {$nameDisplay} : " . number_format($it['qty'], 0) . " {$it['unit']}";
+        foreach ($groupedItems as $size => $group) {
+            if ($size !== '' && $category !== 'paper') {
+                $itemLines[] = "\n◎ {$size}:";
+            }
+            foreach ($group as $it) {
+                if ($nameFormat === 'khmer') {
+                    $nameDisplay = $it['name_km'] ?: $it['name'];
+                } elseif ($nameFormat === 'english') {
+                    $nameDisplay = $it['name'];
+                } else {
+                    $nameDisplay = $it['name_km']
+                        ? "{$it['name']} — {$it['name_km']}"
+                        : $it['name'];
+                }
+
+                if ($size !== '') {
+                    // Remove redundant size text like (Large), (ធំ) from names
+                    $nameDisplay = preg_replace('/ \((Large|Small|ធំ|តូច|Large Roll|Small Roll)\)/ui', '', $nameDisplay);
+                }
+
+                $delta = (float)($it['qty']) - (float)($it['old_qty'] ?? $it['qty']);
+                $usageText = '';
+                
+                // Also check actual in/out movements for the day
+                $todayMovements = \App\Models\StockMovement::where('material_id', $it['id'])
+                    ->whereDate('movement_date', $date)
+                    ->get();
+                
+                $todayIn = (float) $todayMovements->where('type', 'in')->sum('quantity');
+                $todayOut = (float) $todayMovements->where('type', 'out')->sum('quantity');
+                
+                if ($todayIn > 0 || $todayOut > 0) {
+                    $parts = [];
+                    if ($todayOut > 0) {
+                        $parts[] = "បានប្រើ " . number_format($todayOut, 0);
+                    }
+                    if ($todayIn > 0) {
+                        $parts[] = "ចូលស្តុក " . number_format($todayIn, 0);
+                    }
+                    $usageText = " (" . implode(', ', $parts) . ")";
+                } else {
+                    // Fallback to delta if no specific IN/OUT movements
+                    if ($delta < 0) {
+                        $usageText = " (បានប្រើ " . number_format(abs($delta), 0) . ")";
+                    } elseif ($delta > 0) {
+                        $usageText = " (ចូលស្តុក " . number_format($delta, 0) . ")";
+                    }
+                }
+
+                $itemLines[] = "- {$nameDisplay} : " . number_format($it['qty'], 0) . " {$it['unit']}{$usageText}";
+            }
         }
+        $itemsText = trim(implode("\n", $itemLines));
 
-        if ($by) { $lines[] = ""; $lines[] = "👤 {$by}"; }
-        $lines[] = $catTag;
+        // Get template from settings
+        $template = \App\Models\Setting::get('daily_report_template', 
+            "សូមគោរពរាយការណ៍ជូនបង ពូ 📩\n{date}\n\n{emoji} {category} នៅសល់មានចំនួន:\n{items}\n{person}\n{hashtag}"
+        );
 
-        $message = mb_substr(implode("\n", $lines), 0, 4096);
+        // Replace placeholders
+        $message = str_replace([
+            '{date}',
+            '{emoji}',
+            '{category}',
+            '{items}',
+            '{person}',
+            '{hashtag}'
+        ], [
+            $dateStr,
+            $headerEmoji,
+            $catLabel,
+            $itemsText,
+            $by ? "\n👤 {$by}" : '',
+            $catTag
+        ], $template);
+
+        $message = mb_substr($message, 0, 4096);
 
         if (!empty($imagePaths)) {
             if (count($imagePaths) === 1) {
-                $this->telegramService->sendPhoto($chatId, $imagePaths[0], $message, $threadId);
+                \App\Jobs\SendTelegramPhotoJob::dispatch($chatId, $imagePaths[0], $message, $threadId, true);
             } else {
-                $this->telegramService->sendMediaGroup($chatId, $imagePaths, $message, $threadId);
+                \App\Jobs\SendTelegramMediaGroupJob::dispatch($chatId, $imagePaths, $message, $threadId, true);
             }
         } else {
-            $this->telegramService->sendMessage($chatId, $message, $threadId);
+            \App\Jobs\SendTelegramMessageJob::dispatch($chatId, $message, $threadId);
         }
     }
 
@@ -305,6 +405,8 @@ class MovementController extends Controller
         ]);
 
         $count = 0;
+        $outItems = [];
+        
         foreach ($data['items'] as $item) {
             $material = Material::find($item['material_id']);
             if (! $material) continue;
@@ -325,10 +427,81 @@ class MovementController extends Controller
 
             $this->alertService->checkAndAlert($material);
             $count++;
+            
+            if ($data['type'] === 'out') {
+                $outItems[] = [
+                    'material' => $material,
+                    'qty'      => $item['quantity'],
+                    'notes'    => $item['notes'] ?? null
+                ];
+            }
+        }
+
+        if ($data['type'] === 'out' && !empty($outItems)) {
+            $chatId = \App\Models\Setting::get('daily_usage_chat_id');
+            if ($chatId) {
+                $threadId = \App\Models\Setting::get('daily_usage_thread_id');
+                $by = $data['performed_by'] ? " 👤 {$data['performed_by']}" : '';
+                
+                $msg = "📉 <b>Live Stock Usage (Bulk)</b>\n";
+                foreach ($outItems as $out) {
+                    $mat = $out['material'];
+                    $itemName = $mat->name_km ?: $mat->name;
+                    $qty = number_format($out['qty'], 2) + 0;
+                    $msg .= "• " . htmlspecialchars($itemName) . ": បានប្រើ <b>-{$qty} {$mat->unit}</b> (សល់ <b>" . $mat->currentStock() . " {$mat->unit}</b>)\n";
+                    if (!empty($out['notes'])) {
+                        $msg .= "   📝 Note: " . htmlspecialchars($out['notes']) . "\n";
+                    }
+                }
+                if ($by) {
+                    $msg .= "\n$by";
+                }
+                
+                $this->telegramService->sendMessage($chatId, $msg, $threadId ? (int)$threadId : null, 'HTML');
+            }
         }
 
         $label = $data['type'] === 'in' ? 'Stock In' : 'Stock Out';
         return redirect()->route('stock.movements.index')
             ->with('success', "{$label}: {$count} items recorded");
+    }
+
+    /**
+     * Export stock movements to Excel
+     */
+    public function exportExcel(Request $request, ExcelExportService $exportService)
+    {
+        try {
+            $query = StockMovement::with('material');
+            
+            // Apply filters if provided
+            if ($request->filled('start_date')) {
+                $query->where('movement_date', '>=', $request->start_date);
+            }
+            if ($request->filled('end_date')) {
+                $query->where('movement_date', '<=', $request->end_date);
+            }
+            if ($request->filled('material_id')) {
+                $query->where('material_id', $request->material_id);
+            }
+            if ($request->filled('type')) {
+                $query->where('type', $request->type);
+            }
+            
+            $movements = $query->orderByDesc('movement_date')
+                ->orderByDesc('created_at')
+                ->get();
+            
+            $filename = 'stock_movements_' . now()->format('Y-m-d') . '.xlsx';
+            
+            return $exportService->exportStockMovements($movements, $filename);
+        } catch (\Throwable $e) {
+            \Log::error('Stock movements export failed: ' . $e->getMessage(), [
+                'file' => $e->getFile(),
+                'line' => $e->getLine()
+            ]);
+            
+            return back()->with('error', 'មិនអាចទាញយក Excel បានទេ។ សូមព្យាយាមម្តងទៀត។ / Unable to export Excel. Please try again.');
+        }
     }
 }

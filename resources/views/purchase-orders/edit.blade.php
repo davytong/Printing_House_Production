@@ -15,7 +15,7 @@
 </div>
 
 <form action="{{ route('purchase-orders.update',$purchaseOrder) }}"
-      method="POST" id="poForm">
+      method="POST" id="poForm" enctype="multipart/form-data">
 @csrf @method('PUT')
 
 <div class="row g-4">
@@ -173,6 +173,60 @@
   </div>
 
   <div class="col-lg-4">
+    {{-- Current Attachments --}}
+    @if($purchaseOrder->attachments && count($purchaseOrder->attachments) > 0)
+    <div class="panel mb-4">
+      <div class="panel-header">
+        <div class="ph-title">
+          <div class="ph-icon" style="background:#fef3c7;color:#d97706">
+            <i class="bi bi-paperclip"></i>
+          </div>
+          <span>ឯកសារបច្ចុប្បន្ន</span>
+        </div>
+      </div>
+      <div class="panel-body">
+        @foreach($purchaseOrder->attachments as $idx => $att)
+          <div style="display:flex;align-items:center;gap:.5rem;padding:.5rem;background:var(--surface-2);border-radius:6px;margin-bottom:.5rem">
+            <div style="flex:1;min-width:0">
+              <div style="font-size:.75rem;font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">
+                {{ $att['original_name'] }}
+              </div>
+              <div style="font-size:.65rem;color:var(--text-muted);font-family:var(--font-latin)">
+                {{ number_format(($att['size']??0)/1024, 1) }} KB
+              </div>
+            </div>
+            <a href="{{ asset('storage/'.$att['path']) }}" target="_blank" class="btn btn-ghost btn-sm" style="padding:.25rem .5rem">
+              <i class="bi bi-eye"></i>
+            </a>
+          </div>
+        @endforeach
+        <div style="font-size:.7rem;color:var(--text-muted);margin-top:.5rem">
+          <i class="bi bi-info-circle"></i> បន្ថែមឯកសារថ្មីខាងក្រោម ឯកសារចាស់នឹងរក្សាទុក
+        </div>
+      </div>
+    </div>
+    @endif
+
+    {{-- Add New Attachments --}}
+    <div class="panel mb-4">
+      <div class="panel-header">
+        <div class="ph-title">
+          <div class="ph-icon" style="background:#fef3c7;color:#d97706">
+            <i class="bi bi-plus-circle"></i>
+          </div>
+          <span>បន្ថែមឯកសារថ្មី (ស្រេចចិត្ត)</span>
+        </div>
+      </div>
+      <div class="panel-body">
+        <input type="file" name="attachments[]" class="form-control form-control-sm" 
+               multiple accept=".jpg,.jpeg,.png,.pdf,.doc,.docx,.xls,.xlsx" 
+               style="font-size:.8rem">
+        <div style="font-size:.7rem;color:var(--text-muted);margin-top:.5rem">
+          <i class="bi bi-info-circle"></i> ទទួលយក: JPG, PNG, PDF, DOC, XLS (10MB)
+        </div>
+      </div>
+    </div>
+
     <div class="panel">
       <div class="panel-body d-flex flex-column gap-3">
         <div style="background:#fffbeb;border:1px solid #fde68a;border-radius:var(--radius);

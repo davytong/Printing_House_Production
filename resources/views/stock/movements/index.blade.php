@@ -2,6 +2,14 @@
 @section('title','Stock Movements')
 @section('page-title','Stock Movements')
 
+@section('breadcrumbs')
+<div class="breadcrumbs">
+  <a href="{{ route('dashboard') }}"><i class="bi bi-house"></i></a>
+  <i class="bi bi-chevron-right bc-sep"></i>
+  <span class="bc-active">Stock Movements</span>
+</div>
+@endsection
+
 @section('content')
 <div class="d-flex justify-content-between align-items-start flex-wrap gap-3 mb-4">
   <div>
@@ -9,6 +17,7 @@
     <p class="section-sub">បញ្ចូល / ដក / កែតម្រូវ Stock</p>
   </div>
   <div class="d-flex gap-2">
+    <a href="{{ route('stock.movements.export') }}" class="btn btn-success btn-sm"><i class="bi bi-file-earmark-excel"></i> Export</a>
     <a href="{{ route('stock.movements.bulk') }}" class="btn btn-outline-primary btn-sm"><i class="bi bi-list-columns"></i> Bulk Entry</a>
     <a href="{{ route('stock.movements.create') }}" class="btn btn-primary btn-sm"><i class="bi bi-plus-lg"></i> Record Movement</a>
   </div>
@@ -81,7 +90,12 @@
             <td style="font-size:.82rem;color:var(--text-muted)">{{ $mv->performed_by ?? '—' }}</td>
           </tr>
         @empty
-          <tr><td colspan="6"><div class="empty-state"><div class="empty-icon"><i class="bi bi-arrow-left-right"></i></div><p style="font-weight:600;margin:0">មិនទាន់មានចលនា Stock</p></div></td></tr>
+          <tr><td colspan="6">
+            <div class="empty-box">
+              <i class="bi bi-arrow-left-right"></i>
+              <div class="empty-text">មិនទាន់មានចលនា Stock ទេ</div>
+            </div>
+          </td></tr>
         @endforelse
       </tbody>
     </table>

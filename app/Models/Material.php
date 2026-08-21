@@ -51,31 +51,44 @@ class Material extends Model
     }
 
     /**
-     * Calculate current stock from movements (never static!)
+     * Calculate current stock from movements.
+     * Loads this material's movements in ONE query, then computes in PHP.
      */
     public function currentStock(): float
     {
-        $in  = (float) $this->movements()->where('type', 'in')->sum('quantity');
-        $out = (float) $this->movements()->where('type', 'out')->sum('quantity');
+        return self::currentStockFromMovements($this->movements()->get());
+    }
 
-        // Adjustments set absolute value — get the latest one
-        $lastAdjust = $this->movements()
-            ->where('type', 'adjust')
-            ->latest('movement_date')
-            ->first();
+    /**
+     * Compute current stock from an already-loaded movements collection.
+     * Use this in loops (with movements eager-loaded/grouped) to avoid N+1.
+     *
+     * Logic: if there is an "adjust" movement, the latest one sets an absolute
+     * value, and only in/out movements created AFTER it are added/subtracted.
+     */
+    public static function currentStockFromMovements($movements): float
+    {
+        $movements = $movements instanceof \Illuminate\Support\Collection
+            ? $movements
+            : collect($movements);
+
+        // Latest adjustment (by movement_date, then created_at as tiebreak)
+        $lastAdjust = $movements->where('type', 'adjust')
+            ->sortBy([
+                ['movement_date', 'asc'],
+                ['created_at', 'asc'],
+            ])
+            ->last();
 
         if ($lastAdjust) {
-            // After last adjustment, only count movements AFTER it
-            $afterAdj = $this->movements()
-                ->where('created_at', '>', $lastAdjust->created_at)
-                ->get();
-
-            $adjIn  = $afterAdj->where('type', 'in')->sum('quantity');
-            $adjOut = $afterAdj->where('type', 'out')->sum('quantity');
-
+            $after  = $movements->where('created_at', '>', $lastAdjust->created_at);
+            $adjIn  = (float) $after->where('type', 'in')->sum('quantity');
+            $adjOut = (float) $after->where('type', 'out')->sum('quantity');
             return (float) $lastAdjust->quantity + $adjIn - $adjOut;
         }
 
+        $in  = (float) $movements->where('type', 'in')->sum('quantity');
+        $out = (float) $movements->where('type', 'out')->sum('quantity');
         return $in - $out;
     }
 

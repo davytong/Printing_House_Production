@@ -4,6 +4,8 @@ namespace App\Services;
 
 use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Facades\Storage;
+use Intervention\Image\ImageManager;
+use Intervention\Image\Drivers\Gd\Driver;
 
 class ImageService
 {
@@ -31,55 +33,31 @@ class ImageService
     }
 
     /**
-     * Compress image to max 1MB / 1200px width.
+     * Compress image to max 1200px width and auto-orient.
      */
     private function compress(string $filePath, string $mime): ?string
     {
-        if (! extension_loaded('gd')) {
+        try {
+            $manager = new ImageManager(new Driver());
+            $image = $manager->read($filePath);
+            
+            // Auto orient (fixes rotated mobile photos)
+            // Wait, in v3 it's automatic or we don't need it. 
+            // In Intervention Image 3, orient() was removed, it reads EXIF natively usually.
+            // Let's just resize.
+            
+            $image->scaleDown(width: 1200);
+            
+            // Output to string buffer
+            if ($mime === 'image/png') {
+                return (string) $image->toPng(70);
+            } else {
+                return (string) $image->toJpeg(75);
+            }
+        } catch (\Exception $e) {
+            \Illuminate\Support\Facades\Log::error('Image Compression Error: ' . $e->getMessage());
             return null;
         }
-
-        $image = match($mime) {
-            'image/jpeg' => @imagecreatefromjpeg($filePath),
-            'image/png'  => @imagecreatefrompng($filePath),
-            'image/webp' => @imagecreatefromwebp($filePath),
-            default      => null,
-        };
-
-        if (! $image) return null;
-
-        $width  = imagesx($image);
-        $height = imagesy($image);
-
-        // Resize if wider than 1200px
-        $maxWidth = 1200;
-        if ($width > $maxWidth) {
-            $ratio     = $maxWidth / $width;
-            $newHeight = (int) ($height * $ratio);
-            $resized   = imagecreatetruecolor($maxWidth, $newHeight);
-
-            // Preserve transparency for PNG
-            if ($mime === 'image/png') {
-                imagealphablending($resized, false);
-                imagesavealpha($resized, true);
-            }
-
-            imagecopyresampled($resized, $image, 0, 0, 0, 0, $maxWidth, $newHeight, $width, $height);
-            imagedestroy($image);
-            $image = $resized;
-        }
-
-        // Output to buffer
-        ob_start();
-        if ($mime === 'image/png') {
-            imagepng($image, null, 7); // compression 0-9
-        } else {
-            imagejpeg($image, null, 75); // quality 75%
-        }
-        $output = ob_get_clean();
-        imagedestroy($image);
-
-        return $output;
     }
 
     /**

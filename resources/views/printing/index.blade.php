@@ -23,10 +23,15 @@
 {{-- ════  PAGE HEADER  ════ --}}
 <div class="d-flex align-items-start justify-content-between flex-wrap gap-3 mb-4">
   <div>
-    <h1 class="section-title">ការបោះពុម្ព</h1>
-    <p class="section-sub">គ្រប់គ្រង និងតាមដានការបោះពុម្ពសៀវភៅ</p>
+    <h1 class="section-title">{{ app()->getLocale() == 'km' ? 'ការបោះពុម្ព' : 'Production' }}</h1>
+    <p class="section-sub">{{ app()->getLocale() == 'km' ? 'គ្រប់គ្រង និងតាមដានការបោះពុម្ពសៀវភៅ' : 'Manage and track book printing' }}</p>
   </div>
   <div class="d-flex gap-2 flex-wrap align-items-center">
+    {{-- Export to Excel button --}}
+    <a href="{{ route('printing.export') }}" class="btn btn-success btn-sm" title="Export to Excel">
+      <i class="bi bi-file-earmark-excel"></i> Export
+    </a>
+
     {{-- Current batch indicator --}}
     <span style="display:inline-flex;align-items:center;gap:.4rem;background:#eef2ff;
                  border:1px solid #c7d2fe;color:#4338ca;padding:.35rem .75rem;
@@ -36,20 +41,54 @@
       <span style="font-weight:400;font-size:.72rem;opacity:.8">(active)</span>
     </span>
 
-    {{-- Batch history dropdown --}}
-    @if($allBatches->where('status','completed')->count() > 0)
+    {{-- Batch management dropdown - includes suspended and completed batches --}}
+    @php
+      $otherBatches = $allBatches->whereIn('status', ['suspended', 'completed'])->where('id', '!=', $currentBatch->id);
+    @endphp
+    @if($otherBatches->count() > 0)
     <div class="dropdown">
       <button class="btn btn-outline-secondary btn-sm dropdown-toggle" type="button" data-bs-toggle="dropdown">
-        <i class="bi bi-clock-history"></i> ប្រវត្តិ Batch
+        <i class="bi bi-clock-history"></i> {{ app()->getLocale() == 'km' ? 'ប្រវត្តិ Batch' : 'Batch History' }}
       </button>
-      <ul class="dropdown-menu dropdown-menu-end" style="min-width:220px">
-        <li><h6 class="dropdown-header">Completed Batches — ចុច Switch ដើម្បីត្រឡប់</h6></li>
-        @foreach($allBatches->where('status','completed') as $b)
+      <ul class="dropdown-menu dropdown-menu-end" style="min-width:240px">
+        <li><h6 class="dropdown-header">អតីតកាល Batches — ចុច Switch ដើម្បីត្រឡប់</h6></li>
+        
+        {{-- Suspended Batches --}}
+        @foreach($otherBatches->where('status', 'suspended') as $b)
           <li class="px-2 py-1">
             <div class="d-flex align-items-center justify-content-between gap-2">
               <a class="text-decoration-none flex-grow-1" href="{{ route('printing.batch-history', $b) }}"
                  style="font-size:.82rem;color:var(--text-primary)">
-                <i class="bi bi-layers me-1"></i>{{ $b->name }}
+                <i class="bi bi-pause-circle me-1" style="color:#f59e0b"></i>{{ $b->name }}
+                <span style="font-size:.68rem;color:#f59e0b;font-weight:600">⏸ Suspended</span>
+              </a>
+              <div class="d-flex gap-1">
+                <form action="{{ route('printing.batch-restore', $b) }}" method="POST" class="m-0"
+                      onsubmit="return confirm('ប្ដូរទៅ {{ $b->name }}? Batch បច្ចុប្បន្ននឹងត្រូវរក្សាទុក។')">
+                  @csrf
+                  <button class="btn btn-sm btn-outline-success py-0 px-2" type="submit" title="Switch to this batch">
+                    <i class="bi bi-box-arrow-in-left"></i> Switch
+                  </button>
+                </form>
+                <form action="{{ route('printing.batch-delete', $b) }}" method="POST" class="m-0"
+                      onsubmit="return confirm('⚠️ លុប {{ $b->name }} ជាអចិន្ត្រៃយ៍? សៀវភៅ និងលទ្ធផលរបស់វានឹងបាត់បង់ទាំងស្រុង។')">
+                  @csrf @method('DELETE')
+                  <button class="btn btn-sm btn-outline-danger py-0 px-2" type="submit" title="Delete this batch">
+                    <i class="bi bi-trash3"></i>
+                  </button>
+                </form>
+              </div>
+            </div>
+          </li>
+        @endforeach
+
+        {{-- Completed Batches --}}
+        @foreach($otherBatches->where('status', 'completed') as $b)
+          <li class="px-2 py-1">
+            <div class="d-flex align-items-center justify-content-between gap-2">
+              <a class="text-decoration-none flex-grow-1" href="{{ route('printing.batch-history', $b) }}"
+                 style="font-size:.82rem;color:var(--text-primary)">
+                <i class="bi bi-check-circle me-1" style="color:#10b981"></i>{{ $b->name }}
                 <span style="font-size:.68rem;color:#94a3b8">{{ $b->completed_at?->format('d/m/y') }}</span>
               </a>
               <div class="d-flex gap-1">
@@ -76,13 +115,13 @@
     @endif
 
     <button class="btn btn-success btn-sm" data-bs-toggle="modal" data-bs-target="#newBatchModal">
-      <i class="bi bi-arrow-repeat"></i> ចាប់ផ្ដើម Batch ថ្មី
+      <i class="bi bi-arrow-repeat"></i> {{ app()->getLocale() == 'km' ? 'ចាប់ផ្ដើម Batch ថ្មី' : 'New Batch' }}
     </button>
     <button class="btn btn-primary btn-sm" data-bs-toggle="modal" data-bs-target="#addBookModal">
-      <i class="bi bi-plus-lg"></i> បន្ថែមសៀវភៅ
+      <i class="bi bi-plus-lg"></i> {{ app()->getLocale() == 'km' ? 'បន្ថែមសៀវភៅ' : 'Add Book' }}
     </button>
     <a href="{{ route('printing.report') }}" class="btn btn-outline-primary btn-sm">
-      <i class="bi bi-bar-chart-line"></i> របាយការណ៍
+      <i class="bi bi-bar-chart-line"></i> {{ app()->getLocale() == 'km' ? 'របាយការណ៍' : 'Report' }}
     </a>
   </div>
 </div>
@@ -94,8 +133,8 @@
       <div class="kpi-icon"><i class="bi bi-journals"></i></div>
       <div>
         <div class="kpi-value">{{ $totalBooks }}</div>
-        <div class="kpi-label">ចំនួនសៀវភៅ</div>
-        <div class="kpi-sub">Total Books</div>
+        <div class="kpi-label">{{ app()->getLocale() == 'km' ? 'ចំនួនសៀវភៅ' : 'Total Books' }}</div>
+        <div class="kpi-sub">{{ app()->getLocale() == 'km' ? 'Total Books' : 'All titles' }}</div>
       </div>
     </div>
   </div>
@@ -104,8 +143,8 @@
       <div class="kpi-icon"><i class="bi bi-check2-circle"></i></div>
       <div>
         <div class="kpi-value">{{ number_format($totalPrinted) }}</div>
-        <div class="kpi-label">បានបោះពុម្ព</div>
-        <div class="kpi-sub">{{ $overallPct }}% of target</div>
+        <div class="kpi-label">{{ app()->getLocale() == 'km' ? 'បានបោះពុម្ព' : 'Total Printed' }}</div>
+        <div class="kpi-sub">{{ $overallPct }}% {{ app()->getLocale() == 'km' ? 'នៃគោលដៅ' : 'of target' }}</div>
       </div>
     </div>
   </div>
@@ -114,8 +153,8 @@
       <div class="kpi-icon"><i class="bi bi-hourglass-split"></i></div>
       <div>
         <div class="kpi-value">{{ number_format($totalRemaining) }}</div>
-        <div class="kpi-label">នៅសល់</div>
-        <div class="kpi-sub">Copies remaining</div>
+        <div class="kpi-label">{{ app()->getLocale() == 'km' ? 'នៅសល់' : 'Remaining' }}</div>
+        <div class="kpi-sub">{{ app()->getLocale() == 'km' ? 'Copies remaining' : 'Copies remaining' }}</div>
       </div>
     </div>
   </div>
@@ -124,8 +163,8 @@
       <div class="kpi-icon"><i class="bi bi-trophy"></i></div>
       <div>
         <div class="kpi-value">{{ $doneCount }}</div>
-        <div class="kpi-label">រួចរាល់</div>
-        <div class="kpi-sub">{{ $inProgress }} in progress</div>
+        <div class="kpi-label">{{ app()->getLocale() == 'km' ? 'រួចរាល់' : 'Done' }}</div>
+        <div class="kpi-sub">{{ $inProgress }} {{ app()->getLocale() == 'km' ? 'កំពុងបោះពុម្ព' : 'in progress' }}</div>
       </div>
     </div>
   </div>
@@ -135,7 +174,7 @@
 <div class="panel mb-4">
   <div class="panel-body" style="padding:1.1rem 1.5rem">
     <div class="d-flex justify-content-between align-items-center mb-2">
-      <span style="font-weight:700;font-size:.9rem">ដំណើរការបោះពុម្ពរួម</span>
+      <span style="font-weight:700;font-size:.9rem">{{ app()->getLocale() == 'km' ? 'ដំណើរការបោះពុម្ពរួម' : 'Overall Progress' }}</span>
       <span style="font-family:var(--font-latin);font-size:.82rem;font-weight:700;color:var(--primary)">
         {{ number_format($totalPrinted) }} / {{ number_format($totalTarget) }} · {{ $overallPct }}%
       </span>
@@ -182,8 +221,9 @@
             <span style="font-size:.72rem">
               Category: <code style="font-family:var(--font-latin);background:#f1f5f9;padding:.1em .35em;border-radius:3px">perfect_binding</code>
               ឬ <code style="font-family:var(--font-latin);background:#f1f5f9;padding:.1em .35em;border-radius:3px">staple</code>
-              &nbsp;·&nbsp; Max file size: 20 MB
-              &nbsp;·&nbsp; Encoding: UTF-8 &nbsp;·&nbsp; <strong>.xlsx</strong> ក៏ទទួលយកដែរ
+              &nbsp;·&nbsp; target_qty អាចស្មើ 0 (កំណត់ក្រោយបាន)
+              <br>Max file size: 20 MB
+              &nbsp;·&nbsp; Encoding: UTF-8 &nbsp;·&nbsp; <strong>.xlsx</strong> និង <strong>.csv</strong> ទាំងពីរទទួលយកបាន
             </span>
           </p>
 
@@ -222,7 +262,7 @@
           <div class="ph-icon" style="background:#ede9fe;color:#7c3aed">
             <i class="bi bi-printer-fill"></i>
           </div>
-          <span>បញ្ចូលចំនួនបោះពុម្ព</span>
+          <span>{{ app()->getLocale() == 'km' ? 'បញ្ចូលចំនួនបោះពុម្ព' : 'Enter Print Amount' }}</span>
         </div>
         <span style="font-family:var(--font-latin);font-size:.72rem;background:#eff6ff;
                      color:#1d4ed8;border:1px solid #bfdbfe;padding:.25em .65em;
@@ -263,7 +303,7 @@
           </div>
 
           <div class="mb-3">
-            <label class="form-label" for="bookSelect">ឈ្មោះសៀវភៅ</label>
+            <label class="form-label" for="bookSelect">{{ app()->getLocale() == 'km' ? 'ឈ្មោះសៀវភៅ' : 'Book Title' }}</label>
             <select id="bookSelect" name="book_id" class="form-select" required>
               @foreach($books as $book)
                 @php
@@ -291,9 +331,10 @@
 
           <div class="mb-4">
             <label class="form-label" for="printedInput">
-              ចំនួនបោះពុម្ពថ្ងៃនេះ
+            <label class="form-label" for="printedInput">
+              {{ app()->getLocale() == 'km' ? 'ចំនួនបោះពុម្ពថ្ងៃនេះ' : 'Printed Today' }}
               <span style="float:right;font-weight:400;color:var(--text-muted)">
-                នៅសល់:
+                {{ app()->getLocale() == 'km' ? 'នៅសល់:' : 'Remaining:' }}
                 <strong id="remainingQty" style="color:var(--primary);font-family:var(--font-latin)">0</strong>
               </span>
             </label>
@@ -303,7 +344,7 @@
                 <i class="bi bi-dash-lg"></i>
               </button>
               <input id="printedInput" type="number" name="printed_today"
-                     class="form-control" value="1" min="1"
+                     class="form-control" value="1"
                      style="text-align:center;font-family:var(--font-latin);
                             font-weight:700;font-size:1.1rem" required>
               <button type="button" id="incBtn" class="btn btn-ghost btn-icon"
@@ -314,9 +355,56 @@
           </div>
 
           <button class="btn btn-primary w-100 btn-lg" type="submit" id="submitBtn">
-            <i class="bi bi-save2-fill"></i> រក្សាទុក
+            <i class="bi bi-save2-fill"></i> {{ app()->getLocale() == 'km' ? 'រក្សាទុក' : 'Save' }}
           </button>
         </form>
+      </div>
+    </div>
+
+    {{-- ════ TODAY'S ENTRIES — UNDO PANEL ════ --}}
+    <div class="panel mt-3">
+      <div class="panel-header">
+        <div class="ph-title">
+          <div class="ph-icon" style="background:#fef3c7;color:#b45309"><i class="bi bi-clock-history"></i></div>
+          <span>{{ app()->getLocale() == 'km' ? 'កំណត់ត្រាថ្ងៃនេះ' : 'Today\'s Entries' }}</span>
+          <span class="badge badge-staple" style="font-family:var(--font-latin)">{{ $todayEntries->count() }}</span>
+        </div>
+        <span style="font-size:.72rem;color:var(--text-muted)">ចុច 🗑 ដើម្បីលុប បើបញ្ចូលខុស</span>
+      </div>
+      <div class="panel-body" style="max-height:320px;overflow-y:auto;padding:.5rem .75rem">
+        @forelse($todayEntries as $entry)
+          @php
+            $eqty   = (int) $entry->printed_today;
+            $isNeg  = $eqty < 0;
+            $egrade = $entry->book->grade ?? null;
+          @endphp
+          <div class="d-flex align-items-center justify-content-between gap-2"
+               style="padding:.5rem .25rem;border-bottom:1px solid var(--border)">
+            <div style="min-width:0">
+              <div style="font-weight:600;font-size:.85rem;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">
+                {{ $entry->book->title ?? '—' }}
+              </div>
+              <div style="font-size:.72rem;color:var(--text-muted)">
+                @if($egrade)<span>{{ is_numeric($egrade)?'ថ្នាក់ '.$egrade:$egrade }}</span> · @endif
+                <span style="font-family:var(--font-latin);font-weight:700;color:{{ $isNeg ? 'var(--danger)' : 'var(--success)' }}">
+                  {{ $isNeg ? '' : '+' }}{{ number_format($eqty) }} ក្បាល
+                </span>
+              </div>
+            </div>
+            <form action="{{ route('printing.daily-print.destroy', $entry->id) }}" method="POST" class="m-0"
+                  data-confirm="លុបកំណត់ត្រានេះ? ចំនួន {{ number_format($eqty) }} នឹងត្រូវដកវិញពី « {{ addslashes($entry->book->title ?? '') }} »។">
+              @csrf @method('DELETE')
+              <button type="submit" class="btn btn-sm btn-outline-danger py-0 px-2" title="លុប / Undo">
+                <i class="bi bi-trash3"></i>
+              </button>
+            </form>
+          </div>
+        @empty
+          <div class="empty-box">
+            <i class="bi bi-inbox"></i>
+            <div class="empty-text">មិនទាន់មានកំណត់ត្រាថ្ងៃនេះទេ</div>
+          </div>
+        @endforelse
       </div>
     </div>
 
@@ -327,28 +415,43 @@
     <div class="panel" style="display:flex;flex-direction:column;height:100%">
 
       {{-- BATCH TOOLBAR --}}
-      <div id="batchBar" style="display:none;background:#1e293b;color:#fff;padding:.6rem 1.25rem;
-           border-radius:8px;margin:.75rem 1rem;align-items:center;gap:.75rem;flex-wrap:wrap;">
-        <span style="font-size:.78rem;font-weight:700;opacity:.85"><i class="bi bi-check2-square me-1"></i>Bulk Update:</span>
-        <span id="batchSelCount" style="font-size:.82rem;font-weight:600;">0 selected</span>
-        <button class="btn btn-sm btn-success" onclick="openBatchModal('set_done')">
-          <i class="bi bi-check-circle-fill me-1"></i>Mark All Done (100%)
-        </button>
-        <button class="btn btn-sm btn-warning" onclick="openBatchModal('add')">
-          <i class="bi bi-plus-circle me-1"></i>Add Copies to Each
-        </button>
-        <button class="btn btn-sm btn-info text-white" onclick="openBatchModal('set_progress')">
-          <i class="bi bi-pencil me-1"></i>Set Exact Printed Qty
-        </button>
-        <button class="btn btn-sm btn-outline-light ms-auto" onclick="clearBatchSelection()">
-          <i class="bi bi-x-lg"></i> Clear
+      <div id="batchBar" style="display:none;background:linear-gradient(135deg,#1e293b 0%,#334155 100%);
+           color:#fff;padding:.7rem 1rem;border-radius:12px;margin:.75rem 1rem;
+           align-items:center;gap:.6rem;flex-wrap:wrap;box-shadow:0 6px 18px rgba(15,23,42,.25)">
+        <span style="display:inline-flex;align-items:center;gap:.45rem;font-size:.8rem;font-weight:700">
+          <i class="bi bi-check2-square" style="font-size:.95rem;opacity:.9"></i>Bulk Update
+        </span>
+        <span id="batchSelCount"
+              style="display:inline-flex;align-items:center;font-size:.74rem;font-weight:700;
+                     background:rgba(255,255,255,.14);padding:.2em .7em;border-radius:999px">
+          0 selected
+        </span>
+
+        <span style="width:1px;height:22px;background:rgba(255,255,255,.18);margin:0 .15rem"></span>
+
+        <div style="display:flex;gap:.45rem;flex-wrap:wrap">
+          <button class="btn btn-sm btn-success" style="border-radius:8px;font-weight:600" onclick="openBatchModal('set_done')">
+            <i class="bi bi-check-circle-fill me-1"></i>Mark Done
+          </button>
+          <button class="btn btn-sm btn-warning" style="border-radius:8px;font-weight:600" onclick="openBatchModal('add')">
+            <i class="bi bi-plus-circle me-1"></i>Add Copies
+          </button>
+          <button class="btn btn-sm btn-info text-white" style="border-radius:8px;font-weight:600" onclick="openBatchModal('set_progress')">
+            <i class="bi bi-pencil me-1"></i>Set Exact Qty
+          </button>
+        </div>
+
+        <button class="btn btn-sm ms-auto" style="border-radius:8px;font-weight:600;color:#fff;
+                background:rgba(255,255,255,.1);border:1px solid rgba(255,255,255,.25)"
+                onclick="clearBatchSelection()">
+          <i class="bi bi-x-lg me-1"></i>Clear
         </button>
       </div>
 
       <div class="panel-header" style="flex-wrap:wrap;gap:.6rem">
         <div class="ph-title">
           <div class="ph-icon" style="background:#dcfce7;color:#15803d"><i class="bi bi-table"></i></div>
-          <span>បញ្ជីសៀវភៅ</span>
+          <span>{{ app()->getLocale() == 'km' ? 'បញ្ជីសៀវភៅ' : 'Book List' }}</span>
           <span class="badge badge-binding" style="font-family:var(--font-latin)">{{ $totalBooks }}</span>
         </div>
         <div style="display:flex;gap:.5rem;flex-wrap:wrap;align-items:center;margin-left:auto">
@@ -510,8 +613,8 @@
                       <i class="bi bi-pencil" style="color:var(--primary)"></i>
                     </button>
                     {{-- Delete --}}
-                    <form action="{{ route('books.destroy', $book) }}" method="POST"
-                          onsubmit="return confirm('លុបសៀវភៅ « {{ addslashes($book->title) }} »?')">
+                        <form action="{{ route('books.destroy', $book->id) }}" method="POST"
+                              data-confirm="លុបសៀវភៅ « {{ addslashes($book->title) }} »?">
                       @csrf @method('DELETE')
                       <button class="btn btn-ghost btn-sm" type="submit" title="Delete">
                         <i class="bi bi-trash3" style="color:var(--danger)"></i>
@@ -793,12 +896,18 @@
     else if (printed > 0){ sb.textContent='កំពុងបោះពុម្ព'; sb.className='badge badge-progress'; }
     else                 { sb.textContent='មិនទាន់បោះ';    sb.className='badge badge-pending'; }
 
-    printedInput.disabled = done;
-    submitBtn.disabled    = done;
+    printedInput.disabled = false; // Always allow input for negative corrections even if done
     if (!done) {
-      const cur = parseInt(printedInput.value, 10);
-      if (cur < 1 || cur > rem) printedInput.value = Math.min(1, rem);
+      submitBtn.disabled = false;
+    } else {
+      // If it's done, they can only submit negative corrections
+      submitBtn.disabled = false;
     }
+    
+    const cur = parseInt(printedInput.value, 10);
+    const minVal = -printed;
+    if (cur > rem) printedInput.value = rem;
+    if (cur < minVal) printedInput.value = minVal;
   }
 
   bookSelect?.addEventListener('change', updatePreview);
@@ -807,7 +916,10 @@
   /* ── Stepper ─────────────────────── */
   document.getElementById('decBtn')?.addEventListener('click', () => {
     const v = parseInt(printedInput.value, 10);
-    if (v > 1) printedInput.value = v - 1;
+    const opt = bookSelect?.selectedOptions[0];
+    const printed = opt ? parseInt(opt.dataset.printed, 10) : 0;
+    const minVal = -printed;
+    if (v > minVal) printedInput.value = v - 1;
   });
   document.getElementById('incBtn')?.addEventListener('click', () => {
     const v  = parseInt(printedInput.value, 10);
@@ -817,9 +929,16 @@
   });
   printedInput?.addEventListener('input', () => {
     const mx = parseInt(printedInput.max, 10);
+    const opt = bookSelect?.selectedOptions[0];
+    const printed = opt ? parseInt(opt.dataset.printed, 10) : 0;
+    const minVal = -printed;
+    
     if (parseInt(printedInput.value, 10) > mx) {
       printedInput.value = mx;
       showToast('warning', 'ចំនួនមិនអាចលើស ' + mx.toLocaleString() + ' ក្បាល');
+    } else if (parseInt(printedInput.value, 10) < minVal) {
+      printedInput.value = minVal;
+      showToast('warning', 'មិនអាចដកលើស ' + printed.toLocaleString() + ' ក្បាល');
     }
   });
 

@@ -4,6 +4,8 @@ namespace App\Http\Controllers\Stock;
 
 use App\Http\Controllers\Controller;
 use App\Models\Material;
+use App\Models\StockMovement;
+use App\Services\ExcelExportService;
 use App\Services\StockService;
 use Illuminate\Http\Request;
 use Illuminate\Http\RedirectResponse;
@@ -18,12 +20,18 @@ class MaterialController extends Controller
         $materials = Material::where('status', 'active')
             ->orderBy('category')
             ->orderBy('name')
+            ->get();
+
+        // Load all movements in ONE query, then compute stock in PHP (no N+1)
+        $movesByMaterial = StockMovement::whereIn('material_id', $materials->pluck('id'))
             ->get()
-            ->map(function (Material $m) {
-                $m->calculated_stock = $m->currentStock();
-                $m->is_low = $m->isLowStock();
-                return $m;
-            });
+            ->groupBy('material_id');
+
+        $materials->each(function (Material $m) use ($movesByMaterial) {
+            $stock = Material::currentStockFromMovements($movesByMaterial->get($m->id, collect()));
+            $m->calculated_stock = $stock;
+            $m->is_low = $stock <= (float) $m->min_stock;
+        });
 
         $summary = $this->stockService->getSummaryByCategory();
 
@@ -127,5 +135,74 @@ class MaterialController extends Controller
         $material->update(['status' => 'inactive']);
         return redirect()->route('stock.materials.index')
             ->with('success', "{$material->name} ត្រូវបានបិទ");
+    }
+
+    /**
+     * Export materials stock to Excel
+     */
+    public function exportExcel(ExcelExportService $exportService)
+    {
+        try {
+            $materials = Material::where('status', 'active')
+                ->orderBy('category')
+                ->orderBy('name')
+                ->get();
+
+            $movesByMaterial = StockMovement::whereIn('material_id', $materials->pluck('id'))
+                ->get()
+                ->groupBy('material_id');
+
+            $materials->each(function (Material $m) use ($movesByMaterial) {
+                $m->current_stock = Material::currentStockFromMovements($movesByMaterial->get($m->id, collect()));
+                $m->min_stock_level = $m->min_stock;
+            });
+            
+            $filename = 'materials_stock_' . now()->format('Y-m-d') . '.xlsx';
+            
+            return $exportService->exportMaterialsStock($materials, $filename);
+        } catch (\Throwable $e) {
+            \Log::error('Materials export failed: ' . $e->getMessage(), [
+                'file' => $e->getFile(),
+                'line' => $e->getLine()
+            ]);
+            
+            return back()->with('error', 'មិនអាចទាញយក Excel បានទេ។ សូមព្យាយាមម្តងទៀត។ / Unable to export Excel. Please try again.');
+        }
+    }
+
+    /**
+     * Manually trigger low stock alert for all low stock items
+     */
+    public function sendLowStockAlert(Request $request): RedirectResponse
+    {
+        $materials = Material::where('status', 'active')
+            ->orderBy('category')
+            ->orderBy('name')
+            ->get();
+
+        $movesByMaterial = StockMovement::whereIn('material_id', $materials->pluck('id'))
+            ->get()
+            ->groupBy('material_id');
+
+        $lowStockItems = [];
+
+        $materials->each(function (Material $m) use ($movesByMaterial, &$lowStockItems) {
+            $stock = Material::currentStockFromMovements($movesByMaterial->get($m->id, collect()));
+            if ($stock <= (float) $m->min_stock) {
+                $m->calculated_stock = $stock;
+                $lowStockItems[] = $m;
+            }
+        });
+
+        if (empty($lowStockItems)) {
+            return back()->with('info', 'មិនមានសម្ភារៈណាដែលស្តុកទាបទេបច្ចុប្បន្ន។');
+        }
+
+        $alertService = app(\App\Services\AlertService::class);
+        $alertService->sendGroupedLowStockAlert($lowStockItems, true);
+
+        return back()->with('success', 'សារប្រកាសស្តុកទាបត្រូវបានផ្ញើទៅកាន់ Telegram ដោយជោគជ័យ។');
+
+        return back()->with('error', 'មិនទាន់មានការកំណត់ Telegram Alert Chat ID នៅក្នុងប្រព័ន្ធទេ។');
     }
 }

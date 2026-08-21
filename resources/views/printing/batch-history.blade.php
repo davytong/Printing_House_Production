@@ -33,8 +33,8 @@
     <a href="{{ route('printing.index') }}" class="btn btn-outline-secondary btn-sm">
       <i class="bi bi-arrow-left"></i> Back
     </a>
-    <form action="{{ route('printing.batch-restore', $batch) }}" method="POST" class="m-0"
-          onsubmit="return confirm('ប្ដូរទៅ {{ $batch->name }} ហើយធ្វើឱ្យវាសកម្ម? Batch បច្ចុប្បន្ននឹងត្រូវរក្សាទុកជាប្រវត្តិ។')">
+    <form action="{{ route('printing.batch-restore', $batch->id) }}" method="POST"
+          data-confirm="ប្ដូរទៅ {{ $batch->name }} ហើយធ្វើឱ្យវាសកម្ម? Batch បច្ចុប្បន្ននឹងត្រូវរក្សាទុកជាប្រវត្តិ។">
       @csrf
       <button type="submit" class="btn btn-success btn-sm">
         <i class="bi bi-box-arrow-in-left"></i> ប្ដូរទៅ Batch នេះ (Make Active)
@@ -44,8 +44,8 @@
       <i class="bi bi-printer"></i> Print / PDF
     </button>
     @if($batch->status !== 'active')
-    <form action="{{ route('printing.batch-delete', $batch) }}" method="POST" class="m-0"
-          onsubmit="return confirm('⚠️ លុប {{ $batch->name }} ជាអចិន្ត្រៃយ៍? សៀវភៅ និងលទ្ធផលរបស់វានឹងបាត់បង់ទាំងស្រុង។')">
+    <form action="{{ route('printing.batch-delete', $batch->id) }}" method="POST"
+          data-confirm="⚠️ លុប {{ $batch->name }} ជាអចិន្ត្រៃយ៍? សៀវភៅ និងលទ្ធផលរបស់វានឹងបាត់បង់ទាំងស្រុង។">
       @csrf @method('DELETE')
       <button type="submit" class="btn btn-outline-danger btn-sm">
         <i class="bi bi-trash3"></i> លុប Batch

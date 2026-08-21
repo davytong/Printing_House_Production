@@ -47,12 +47,33 @@ echo     Done.
 REM ── Open browser ─────────────────────────────
 echo  [5/5] Opening PrintTracker...
 timeout /t 2 /nobreak >nul
-start "" "http://localhost:8080"
+start "" "http://localhost:8081"
+
+REM Get local IP for display
+for /f "tokens=2 delims=:" %%I in ('ipconfig ^| findstr /i "IPv4" ^| findstr /v "169.254"') do (
+    set "LAN_IP=%%I"
+    goto :showIP
+)
+:showIP
+set "LAN_IP=%LAN_IP:~1%"
 
 echo.
 echo  ============================================
 echo    PrintTracker Pro is RUNNING
-echo    URL  : http://localhost:8080
+echo  ============================================
+echo.
+echo    LOCAL  (this PC):
+echo      http://localhost:8081
+echo.
+echo    NETWORK (other PCs in office):
+echo      http://%LAN_IP%:8081
+echo      http://OFFICE-Printing:8081
+echo.
+echo    TIP: Share the NETWORK URL with your team.
+echo    For permanent access without IP issues, run:
+echo      setup-static-ip.bat  (this PC, as Admin)
+echo      client-setup.bat     (other PCs, as Admin)
+echo.
 echo    Stop : run stop-printing-tracker.bat
 echo  ============================================
 echo.

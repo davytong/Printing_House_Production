@@ -2,6 +2,7 @@
 
 use App\Http\Controllers\TelegramController;
 use App\Http\Controllers\ProductionTaskController;
+use App\Http\Controllers\Api\AutocompleteController;
 use Illuminate\Support\Facades\Route;
 
 // Telegram webhook (called by Telegram servers — no CSRF needed, exempt from auth)
@@ -10,6 +11,16 @@ Route::post('/telegram/webhook',     [TelegramController::class, 'webhook']);
 // Telegram outbound (called by the front-end report page)
 Route::post('/telegram/send-image',  [TelegramController::class, 'sendImage'])->name('telegram.send.image');
 Route::post('/telegram/send-report', [TelegramController::class, 'sendReport'])->name('telegram.send');
+
+// ── Autocomplete APIs ────────────────────────────────────
+Route::prefix('autocomplete')->group(function () {
+    Route::get('/suppliers',           [AutocompleteController::class, 'suppliers']);
+    Route::get('/materials',           [AutocompleteController::class, 'materials']);
+    Route::get('/departments',         [AutocompleteController::class, 'departments']);
+    Route::get('/requesters',          [AutocompleteController::class, 'requesters']);
+});
+
+Route::get('/procurement/items',      [AutocompleteController::class, 'procurementItems']);
 
 // ── Production Task Scheduling API ────────────────────────
 Route::prefix('tasks')->group(function () {

@@ -8,7 +8,10 @@
     <h1 class="section-title">ការបញ្ជាទិញ (PO)</h1>
     <p class="section-sub">គ្រប់គ្រង Purchase Orders និងការទទួលទំនិញ</p>
   </div>
-  <a href="{{ route('purchase-orders.create') }}" class="btn btn-primary"><i class="bi bi-plus-lg"></i> PO ថ្មី</a>
+  <div class="d-flex gap-2">
+    <a href="{{ route('purchase-orders.export') }}" class="btn btn-success btn-sm"><i class="bi bi-file-earmark-excel"></i> Export</a>
+    <a href="{{ route('purchase-orders.create') }}" class="btn btn-primary"><i class="bi bi-plus-lg"></i> PO ថ្មី</a>
+  </div>
 </div>
 
 <div class="row g-3 mb-4">
@@ -70,7 +73,12 @@
             </td>
           </tr>
         @empty
-          <tr><td colspan="7"><div class="empty-state"><div class="empty-icon"><i class="bi bi-cart3"></i></div><p style="font-weight:600;margin:0">មិនទាន់មាន PO</p></div></td></tr>
+          <tr><td colspan="7">
+            <div class="empty-box">
+              <i class="bi bi-cart3"></i>
+              <div class="empty-text">មិនទាន់មានការបញ្ជាទិញ (PO) ទេ</div>
+            </div>
+          </td></tr>
         @endforelse
       </tbody>
     </table>

@@ -80,10 +80,38 @@ class TelegramSetupController extends Controller
         $appUrl  = config('app.url');
 
         $alertTemplate = \App\Models\Setting::get('stock_alert_template', \App\Services\AlertService::DEFAULT_TEMPLATE);
+        $dailyReportTemplate = \App\Models\Setting::get('daily_report_template', $this->getDefaultDailyReportTemplate());
+
+        // Low-stock alert destination + cooldown (DB-driven, falls back to .env)
+        $alertConfig = [
+            'chat_id'   => \App\Models\Setting::get('alert_chat_id', config('services.telegram.alert_chat_id')),
+            'thread_id' => \App\Models\Setting::get('alert_thread_id', config('services.telegram.alert_thread_id')),
+            'cooldown'  => (int) \App\Models\Setting::get('alert_cooldown_hours', config('services.telegram.alert_cooldown', 24)),
+        ];
+        
+        // Daily Stock Usage destination (DB-driven)
+        $dailyUsageConfig = [
+            'chat_id'   => \App\Models\Setting::get('daily_usage_chat_id', ''),
+            'thread_id' => \App\Models\Setting::get('daily_usage_thread_id', ''),
+        ];
+        
+        // Category labels
+        $categoryLabels = [
+            'paper' => \App\Models\Setting::get('category_label_paper', 'ក្រដាស (Paper)'),
+            'film' => \App\Models\Setting::get('category_label_film', 'Lamination Film (ស្គុត)'),
+            'consumable' => \App\Models\Setting::get('category_label_consumable', 'Consumable (សម្ភារៈប្រើប្រាស់)'),
+        ];
+        
+        // Language format for item names (per category)
+        $itemNameFormats = [
+            'paper' => \App\Models\Setting::get('telegram_item_name_format_paper', 'both'),
+            'film' => \App\Models\Setting::get('telegram_item_name_format_film', 'both'),
+            'consumable' => \App\Models\Setting::get('telegram_item_name_format_consumable', 'both'),
+        ];
 
         return view('telegram.setup', compact(
             'token', 'botInfo', 'webhookInfo', 'botError',
-            'groups', 'groupedChats', 'appUrl', 'alertTemplate'
+            'groups', 'groupedChats', 'appUrl', 'alertTemplate', 'dailyReportTemplate', 'categoryLabels', 'itemNameFormats', 'alertConfig', 'dailyUsageConfig'
         ));
     }
 
@@ -110,6 +138,167 @@ class TelegramSetupController extends Controller
         \App\Models\Setting::set('stock_alert_template', \App\Services\AlertService::DEFAULT_TEMPLATE);
         return redirect()->route('telegram.setup')
             ->with('success', 'បានកំណត់ Template ត្រឡប់ទៅលំនាំដើម!');
+    }
+
+    // ─────────────────────────────────────────────
+    // Save Low-Stock Alert destination + cooldown (no .env editing needed)
+    // ─────────────────────────────────────────────
+    public function saveAlertConfig(Request $request): RedirectResponse
+    {
+        $data = $request->validate([
+            'alert_target'   => 'nullable|string|max:100', // "chatId|threadId" composite
+            'alert_cooldown' => 'required|integer|min:1|max:168',
+        ]);
+
+        $chatId   = '';
+        $threadId = '';
+        if (!empty($data['alert_target'])) {
+            [$chatId, $threadPart] = array_pad(explode('|', $data['alert_target'], 2), 2, '');
+            $threadId = ($threadPart !== '' && $threadPart !== null) ? (string) (int) $threadPart : '';
+        }
+
+        \App\Models\Setting::set('alert_chat_id', $chatId);
+        \App\Models\Setting::set('alert_thread_id', $threadId);
+        \App\Models\Setting::set('alert_cooldown_hours', (string) $data['alert_cooldown']);
+
+        return redirect()->route('telegram.setup')
+            ->with('success', 'បានរក្សាទុកគោលដៅ Alert!');
+    }
+
+    // ─────────────────────────────────────────────
+    // Save Daily Stock Usage destination
+    // ─────────────────────────────────────────────
+    public function saveDailyUsageConfig(Request $request): RedirectResponse
+    {
+        $data = $request->validate([
+            'daily_usage_target' => 'nullable|string|max:100', // "chatId|threadId" composite
+        ]);
+
+        $chatId   = '';
+        $threadId = '';
+        if (!empty($data['daily_usage_target'])) {
+            [$chatId, $threadPart] = array_pad(explode('|', $data['daily_usage_target'], 2), 2, '');
+            $threadId = $threadPart;
+        }
+
+        \App\Models\Setting::set('daily_usage_chat_id', $chatId);
+        \App\Models\Setting::set('daily_usage_thread_id', $threadId);
+
+        return redirect()->route('telegram.setup')
+            ->with('success', 'បានរក្សាទុកគោលដៅ Daily Stock Usage Report!');
+    }
+
+    // ─────────────────────────────────────────────
+    // Send a test alert to verify formatting
+    // ─────────────────────────────────────────────
+    public function sendTestAlert(\App\Services\AlertService $alertService): RedirectResponse
+    {
+        $chatId = \App\Models\Setting::get('alert_chat_id') ?: config('services.telegram.alert_chat_id');
+        if (!$chatId) {
+            return redirect()->back()->with('error', 'មិនអាចផ្ញើបានទេ៖ សូមជ្រើសរើស ក្រុម/Topic គោលដៅ ជាមុនសិន!');
+        }
+
+        $dummy1 = new \App\Models\Material([
+            'name' => 'Premium Glossy Paper 200gsm',
+            'category' => 'paper',
+            'min_stock' => 500,
+        ]);
+        $dummy1->calculated_stock = 450.5;
+
+        $dummy2 = new \App\Models\Material([
+            'name' => 'Lamination Film Matte',
+            'category' => 'film',
+            'min_stock' => 10,
+        ]);
+        $dummy2->calculated_stock = 0;
+
+        $alertService->sendGroupedLowStockAlert(collect([$dummy1, $dummy2]), true);
+
+        return redirect()->back()->with('success', 'សារសាកល្បងត្រូវបានបញ្ជូនទៅ Telegram របស់អ្នក!');
+    }
+
+    // ─────────────────────────────────────────────
+    // Save daily report template
+    // ─────────────────────────────────────────────
+    public function saveDailyReportTemplate(Request $request): RedirectResponse
+    {
+        $data = $request->validate([
+            'daily_report_template' => 'required|string|max:2000',
+        ]);
+
+        \App\Models\Setting::set('daily_report_template', $data['daily_report_template']);
+
+        return redirect()->route('telegram.setup')
+            ->with('success', 'បានរក្សាទុក Template រាយការណ៍ប្រចាំថ្ងៃ!');
+    }
+
+    // ─────────────────────────────────────────────
+    // Reset daily report template to default
+    // ─────────────────────────────────────────────
+    public function resetDailyReportTemplate(): RedirectResponse
+    {
+        \App\Models\Setting::set('daily_report_template', $this->getDefaultDailyReportTemplate());
+        return redirect()->route('telegram.setup')
+            ->with('success', 'បានកំណត់ Template ត្រឡប់ទៅលំនាំដើម!');
+    }
+
+    // ─────────────────────────────────────────────
+    // Get default daily report template
+    // ─────────────────────────────────────────────
+    private function getDefaultDailyReportTemplate(): string
+    {
+        return "សូមគោរពរាយការណ៍ជូនបង ពូ 📩\nថ្ងៃទី {date}\n\n{emoji} {category} នៅសល់មានចំនួន:\n{items}\n{person}\n{hashtag}";
+    }
+
+    // ─────────────────────────────────────────────
+    // Save category labels
+    // ─────────────────────────────────────────────
+    public function saveCategoryLabels(Request $request): RedirectResponse
+    {
+        $data = $request->validate([
+            'label_paper' => 'required|string|max:100',
+            'label_film' => 'required|string|max:100',
+            'label_consumable' => 'required|string|max:100',
+        ]);
+
+        \App\Models\Setting::set('category_label_paper', $data['label_paper']);
+        \App\Models\Setting::set('category_label_film', $data['label_film']);
+        \App\Models\Setting::set('category_label_consumable', $data['label_consumable']);
+
+        return redirect()->route('telegram.setup')
+            ->with('success', 'បានរក្សាទុក Category Labels!');
+    }
+
+    // ─────────────────────────────────────────────
+    // Reset category labels to default
+    // ─────────────────────────────────────────────
+    public function resetCategoryLabels(): RedirectResponse
+    {
+        \App\Models\Setting::set('category_label_paper', 'ក្រដាស (Paper)');
+        \App\Models\Setting::set('category_label_film', 'Lamination Film (ស្គុត)');
+        \App\Models\Setting::set('category_label_consumable', 'Consumable (សម្ភារៈប្រើប្រាស់)');
+        
+        return redirect()->route('telegram.setup')
+            ->with('success', 'បានកំណត់ Category Labels ត្រឡប់ទៅលំនាំដើម!');
+    }
+
+    // ─────────────────────────────────────────────
+    // Save item name format (both languages or Khmer only) - per category
+    // ─────────────────────────────────────────────
+    public function saveItemNameFormat(Request $request): RedirectResponse
+    {
+        $data = $request->validate([
+            'format_paper' => 'required|in:both,khmer,english',
+            'format_film' => 'required|in:both,khmer,english',
+            'format_consumable' => 'required|in:both,khmer,english',
+        ]);
+
+        \App\Models\Setting::set('telegram_item_name_format_paper', $data['format_paper']);
+        \App\Models\Setting::set('telegram_item_name_format_film', $data['format_film']);
+        \App\Models\Setting::set('telegram_item_name_format_consumable', $data['format_consumable']);
+
+        return redirect()->route('telegram.setup')
+            ->with('success', 'បានរក្សាទុកទម្រង់ឈ្មោះទំនិញ!');
     }
 
     // ─────────────────────────────────────────────

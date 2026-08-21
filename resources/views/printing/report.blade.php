@@ -1,7 +1,6 @@
 @extends('layouts.app')
 @section('title',        'របាយការណ៍ការបោះពុម្ព')
 @section('page-title',   'របាយការណ៍')
-@section('loading-text', 'កំពុងផ្ញើរបាយការណ៍...')
 
 @section('content')
 
@@ -27,9 +26,165 @@
       <span class="latin">{{ now()->format('d F Y') }}</span>
     </p>
   </div>
-  <a href="{{ route('printing.index') }}" class="btn btn-outline-secondary btn-sm">
-    <i class="bi bi-arrow-left"></i> ត្រឡប់ទៅគ្រប់គ្រង
-  </a>
+  <div class="d-flex gap-2 flex-wrap">
+    <button type="button" class="btn btn-success btn-sm" data-bs-toggle="modal" data-bs-target="#telegramModal">
+      <i class="bi bi-telegram"></i> Send Telegram
+    </button>
+    <a href="{{ route('printing.index') }}" class="btn btn-outline-secondary btn-sm">
+      <i class="bi bi-arrow-left"></i> ត្រឡប់ទៅគ្រប់គ្រង
+    </a>
+  </div>
+</div>
+
+{{-- ════════════════════════════════════════════
+     PREVIEW MODAL (Simplified)
+════════════════════════════════════════════ --}}
+<div class="modal fade" id="previewModal" tabindex="-1">
+  <div class="modal-dialog modal-fullscreen p-sm-4 p-2">
+    <div class="modal-content" style="border-radius: 20px; border: 1px solid rgba(255,255,255,0.8); box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.25); background: linear-gradient(145deg, #ffffff 0%, #f8fafc 100%);">
+      <div class="modal-header" style="background: linear-gradient(135deg, var(--primary) 0%, var(--primary-light) 100%); border-radius: 20px 20px 0 0; padding: 1.25rem 1.5rem; color: white;">
+        <h5 class="modal-title" style="font-weight: 800; letter-spacing: -0.01em;">
+          <i class="bi bi-file-text me-2"></i> របាយការណ៍ប្រចាំថ្ងៃ - {{ today()->format('d/m/Y') }}
+        </h5>
+        <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+      </div>
+      <div class="modal-body">
+        <div class="row">
+          {{-- Left: Controls --}}
+          <div class="col-lg-3" style="border-right:1px solid #dee2e6;padding-right:1.5rem">
+            
+            {{-- Instructions --}}
+            <div class="alert alert-info" role="alert" style="font-size:.85rem">
+              <i class="bi bi-info-circle-fill"></i> <strong>របៀបប្រើប្រាស់:</strong>
+              <ol class="mb-0 mt-2" style="padding-left:1.2rem">
+                <li>ជ្រើស Level (ឬទុកទាំងអស់)</li>
+                <li>រង់ចាំ Preview ផ្ទុក</li>
+                <li>ចុច "Copy (Mobile)" ដើម្បី copy</li>
+              </ol>
+            </div>
+            
+            {{-- Grade Filter --}}
+            <div class="mb-3">
+              <label class="form-label" style="font-size:.9rem;font-weight:600">
+                <i class="bi bi-funnel"></i> ជ្រើស Level / Grade
+              </label>
+              <select id="previewGradeFilter" class="form-select form-select-lg" onchange="loadPreviewWithFilter()">
+                <option value="">📚 ទាំងអស់ (All Levels)</option>
+                @isset($grades)
+                  @foreach($grades as $g)
+                    <option value="{{ $g }}">{{ $g }}</option>
+                  @endforeach
+                @endisset
+              </select>
+            </div>
+            
+          </div>
+          
+          {{-- Right: Preview Content --}}
+          <div class="col-lg-9" style="max-height:80vh;overflow-y:auto">
+            <div id="previewLoading" class="text-center py-5" style="display:none">
+              <div class="spinner-border text-primary" role="status" style="width:3rem;height:3rem">
+                <span class="visually-hidden">Loading...</span>
+              </div>
+              <p class="mt-3 text-muted" style="font-size:1.1rem">កំពុងដំណើរការ...</p>
+              <small class="text-muted">សូមរង់ចាំ បង្កើតរបាយការណ៍</small>
+            </div>
+            
+            <div id="previewContent" style="background:#ffffff;border:2px solid #e2e8f0;border-radius:12px;padding:2rem;font-family:monospace;white-space:pre-wrap;min-height:400px;font-size:.85rem;line-height:1.8;box-shadow:0 4px 6px rgba(0,0,0,0.05)">
+              <!-- Preview will load here -->
+            </div>
+            
+            {{-- Mobile Copy Textarea (hidden by default) --}}
+            <div id="mobileCopyArea" style="display:none;margin-top:1rem">
+              <div class="alert alert-success" role="alert">
+                <i class="bi bi-phone-fill"></i> <strong>សម្រាប់ Mobile:</strong><br>
+                ចុចយូរលើ textarea ខាងក្រោម → ជ្រើស "Select All" → ចុច "Copy"
+              </div>
+              <textarea id="mobileCopyTextarea" class="form-control" readonly style="font-family:monospace;font-size:.8rem;height:350px;white-space:pre-wrap;border:2px solid #10b981"></textarea>
+              <button class="btn btn-outline-secondary btn-sm mt-2" onclick="hideCopyTextarea()">
+                <i class="bi bi-x-lg"></i> បិទ
+              </button>
+            </div>
+          </div>
+        </div>
+      </div>
+      <div class="modal-footer bg-light">
+        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">
+          <i class="bi bi-x-circle"></i> បិទ
+        </button>
+        <button type="button" class="btn btn-info" onclick="selectAllPreview()">
+          <i class="bi bi-check2-square"></i> Select All
+        </button>
+        <button type="button" class="btn btn-success" onclick="downloadReport()">
+          <i class="bi bi-download"></i> Download
+        </button>
+        <button type="button" class="btn btn-primary" onclick="showCopyTextarea()">
+          <i class="bi bi-phone"></i> Copy (Mobile)
+        </button>
+      </div>
+    </div>
+  </div>
+</div>
+
+{{-- ════════════════════════════════════════════
+     TELEGRAM SEND MODAL
+════════════════════════════════════════════ --}}
+<div class="modal fade" id="telegramModal" tabindex="-1">
+  <div class="modal-dialog modal-dialog-centered">
+    <div class="modal-content" style="border-radius: 20px; border: 1px solid rgba(255,255,255,0.8); box-shadow: 0 25px 50px -12px rgba(16, 185, 129, 0.25); background: linear-gradient(145deg, #ffffff 0%, #f8fafc 100%);">
+      <div class="modal-header" style="background: linear-gradient(135deg, #d1fae5 0%, #ecfdf5 100%); border-radius: 20px 20px 0 0; border-bottom: 1px solid #a7f3d0; padding: 1.25rem 1.5rem;">
+        <h5 class="modal-title" style="font-weight: 800; color: #065f46; letter-spacing: -0.01em;"><i class="bi bi-telegram text-success me-2" style="font-size: 1.2rem;"></i> ផ្ញើរបាយការណ៍ទៅ Telegram</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+      </div>
+      <form id="telegramForm" action="{{ route('printing.send-telegram') }}" method="POST">
+        @csrf
+        <div class="modal-body" style="padding: 1.75rem;">
+          <div class="mb-4">
+            <label class="form-label" style="font-weight: 700; color: #334155;">ថ្ងៃរបាយការណ៍</label>
+            <input type="date" name="date" class="form-control" value="{{ today()->toDateString() }}" required style="background: #f8fafc; border-radius: 10px; padding: 0.75rem;">
+          </div>
+          <div class="mb-4">
+            <label class="form-label" style="font-weight: 700; color: #334155;">ទម្រង់</label>
+            <select name="format" class="form-select" style="background: #f8fafc; border-radius: 10px; padding: 0.75rem;">
+              <option value="compact">Compact (សម្រាប់ Telegram)</option>
+              <option value="full">Full (លម្អិត)</option>
+            </select>
+          </div>
+          <div class="mb-4">
+            <label class="form-label" style="font-weight: 700; color: #334155;">ជ្រើសរើស Level (កម្រិត)</label>
+            <select name="grade" class="form-select" style="background: #f8fafc; border-radius: 10px; padding: 0.75rem;">
+              <option value="">— គ្រប់ Level (All Levels) —</option>
+              @foreach($grades as $g)
+                <option value="{{ $g }}">{{ $g }}</option>
+              @endforeach
+            </select>
+          </div>
+          <div class="mb-4">
+            <label class="form-label" style="font-weight: 700; color: #334155;">ផ្ញើទៅក្រុម</label>
+            <select name="group_id" class="form-select" style="background: #f8fafc; border-radius: 10px; padding: 0.75rem;">
+              <option value="">ផ្ញើទៅគ្រប់ក្រុម (Active)</option>
+              @foreach($telegramGroups as $group)
+                <option value="{{ $group->id }}">{{ $group->name }}</option>
+              @endforeach
+            </select>
+          </div>
+          <div class="alert alert-info" style="font-size:.85rem">
+            <i class="bi bi-info-circle"></i> របាយការណ៍នឹងត្រូវបានផ្ញើដោយស្វ័យប្រវត្តិទៅ Telegram group ដែលបានជ្រើសរើស
+          </div>
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">បោះបង់</button>
+          <button type="submit" class="btn btn-success" id="telegramSendBtn">
+            <span class="tg-btn-label"><i class="bi bi-send"></i> ផ្ញើឥឡូវ</span>
+            <span class="tg-btn-loading" style="display:none">
+              <span class="spinner-border spinner-border-sm" role="status" aria-hidden="true"></span>
+              កំពុងផ្ញើ...
+            </span>
+          </button>
+        </div>
+      </form>
+    </div>
+  </div>
 </div>
 
 {{-- ════════════════════════════════════════════
@@ -167,7 +322,7 @@
             </div>
           </div>
           <div class="prog-track" style="height:7px">
-            <div style="height:100%;width:{{ $item['pct'] }}%;background:{{ $item['color'] }};border-radius:999px;transition:width .6s ease"></div>
+            <div class="prog-fill" style="width:{{ $item['pct'] }}%;background:{{ $item['color'] }} !important;border-radius:999px;"></div>
           </div>
         </div>
         @endforeach
@@ -232,11 +387,13 @@
 
         {{-- Custom caption --}}
         <div>
-          <label class="form-label">
-            Caption / ចំណងជើង
-            <span style="float:right;font-weight:400;color:var(--text-muted);font-family:var(--font-latin)"
-                  id="captionCount">0 / 200</span>
-          </label>
+          <div class="d-flex justify-content-between align-items-center mb-1">
+            <label class="form-label mb-0">Caption / ចំណងជើង</label>
+            <div class="btn-group btn-group-sm" role="group">
+              <button type="button" class="btn btn-outline-success active" id="btnCaptionSummary" style="font-size:.7rem;padding:.15rem .5rem">📊 Summary</button>
+              <button type="button" class="btn btn-outline-success" id="btnCaptionFull" style="font-size:.7rem;padding:.15rem .5rem">📜 Full Details</button>
+            </div>
+          </div>
           @php
 $months = [
     1 => 'មករា', 'កុម្ភៈ', 'មីនា', 'មេសា',
@@ -250,8 +407,8 @@ $year = now()->format('Y');
 $time = now()->format('H:i');
 @endphp
 
-<textarea id="telegramCaption" class="form-control" rows="14"
-          maxlength="1024"
+<textarea id="telegramCaption" class="form-control" rows="12"
+          maxlength="4096"
           style="font-size:.84rem;resize:vertical;line-height:1.7">📄 សូមគោរពរាយការណ៍
 សូមគោរពជម្រាបជូន ឯកឧត្តមបណ្ឌិត ឯកឧត្តម លោកជំទាវ និងសមាជិកក្រុមការងារ
 📅 ថ្ងៃទី {{ $day }} ខែ{{ $month }} ឆ្នាំ {{ $year }}
@@ -266,20 +423,33 @@ $time = now()->format('H:i');
 នៅខ្វះសរុប៖ {{ number_format($totalRemaining) }} ក្បាល
 
 សូមគោរពអរគុណ 🙏</textarea>
-          <p style="font-size:.72rem;color:var(--text-muted);margin-top:.35rem">
-            <i class="bi bi-info-circle me-1"></i>
-            ប្រព័ន្ធនឹងបន្ថែមតារាងស្ថានភាព Level និងសរុបដោយស្វ័យប្រវត្តិ
-          </p>
+          <div class="d-flex justify-content-between align-items-center mt-1">
+            <span style="font-size:.72rem;color:var(--text-muted)">
+              <i class="bi bi-info-circle me-1"></i> ជ្រើសរើសប្រភេទ Caption ខាងលើ
+            </span>
+            <span style="font-size:.72rem;font-weight:600;color:var(--text-muted);font-family:var(--font-latin)" id="captionCount">0 / 4096</span>
+          </div>
+
+          <div class="form-check mt-2">
+            <input class="form-check-input" type="checkbox" id="sendFullTextAlso" checked>
+            <label class="form-check-label" for="sendFullTextAlso" style="font-size:.75rem;font-weight:600;color:#334155">
+              ⚡ ផ្ញើសារអត្ថបទលម្អិតបន្ថែមជាសារទី ២ (Send Details as 2nd Message)
+            </label>
+          </div>
         </div>
 
-        {{-- Send button --}}
-        <button id="sendTelegramBtn" class="btn btn-success btn-lg w-100 mt-auto">
-          <i class="bi bi-send-fill"></i> ផ្ញើទៅ Telegram
-        </button>
+        {{-- Send buttons --}}
+        <div class="d-flex gap-2 mt-auto pt-2">
+          <button id="sendTelegramBtn" class="btn btn-success btn-lg flex-grow-1" style="font-size:.88rem">
+            <i class="bi bi-image me-1"></i> ផ្ញើរូបភាព + Caption
+          </button>
+          <button id="sendTextBtn" class="btn btn-outline-success btn-lg" style="font-size:.88rem" title="ផ្ញើតែអត្ថបទលម្អិត">
+            <i class="bi bi-chat-text-fill me-1"></i> ផ្ញើអត្ថបទ
+          </button>
+        </div>
 
-        <p style="font-size:.75rem;color:var(--text-muted);margin:0;text-align:center">
-          <i class="bi bi-image me-1"></i>
-          Image PNG · Max 10 MB · Snapshot of selected levels only
+        <p style="font-size:.72rem;color:var(--text-muted);margin:0;text-align:center">
+          <i class="bi bi-shield-check me-1"></i> ផ្ញើទៅ Telegram Topic/Group ដោយសុវត្ថិភាព
         </p>
 
       </div>
@@ -615,6 +785,8 @@ const TODAY_TOTAL = {{ $todayTotal }};
   }
 
   function updatePreview() {
+    if (!previewList || !previewCnt) return;
+
     const books = filteredBooks();
 
     // Preview badge
@@ -658,6 +830,10 @@ const TODAY_TOTAL = {{ $todayTotal }};
         const bPct   = b.target_qty > 0 ? Math.min(Math.floor(b.total_printed / b.target_qty * 100), 100) : 0;
         const bRem   = Math.max(b.target_qty - b.total_printed, 0);
         const bToday = b.today_qty || 0;
+
+        // Skip books completed before today to save space
+        if (bRem <= 0 && bToday <= 0) return;
+
         const barColor = bPct >= 100 ? '#059669' : bPct >= 50 ? '#4f46e5' : '#d97706';
         const cat    = b.category === 'perfect_binding' ? 'បិត' : 'កិប';
 
@@ -766,6 +942,10 @@ const TODAY_TOTAL = {{ $todayTotal }};
         const rem = Math.max(b.target_qty - b.total_printed, 0);
         const pct = b.target_qty > 0 ? Math.min(Math.floor(b.total_printed/b.target_qty*100),100) : 0;
         const todayQ = b.today_qty || 0;
+
+        // Skip books completed before today to save space
+        if (rem <= 0 && todayQ <= 0) return;
+
         const pctColor = pct>=100?'#059669':pct>=50?'#4f46e5':'#d97706';
         rowsHtml += `<tr style="border-bottom:1px solid #f1f5f9">
           <td style="padding:3px 8px 3px 16px;font-family:'Hanuman',sans-serif;font-size:9px">${b.title}</td>
@@ -787,6 +967,209 @@ const TODAY_TOTAL = {{ $todayTotal }};
         ${worstLevels.length ? `<span>⚠️ ត្រូវបន្ត: <strong>${worstLevels.join(', ')}</strong></span>` : ''}
       </div>`;
     }
+
+    // Auto-update Telegram Caption text to match selected levels and caption mode
+    if (captionEl) {
+      captionEl.value = currentCaptionMode === 'full' 
+        ? generateCaptionText(books) 
+        : generateSummaryCaptionText(books);
+      if (captionCnt) {
+        const len = captionEl.value.length;
+        captionCnt.textContent = len + ' / 4096';
+        captionCnt.style.color = len > 3950 ? 'var(--danger)' : 'var(--text-muted)';
+      }
+    }
+  }
+
+  function generateSummaryCaptionText(books) {
+    if (!books || !books.length) return '';
+
+    const byGrade = {};
+    books.forEach(b => {
+      const g = b.grade || '—';
+      if (!byGrade[g]) byGrade[g] = [];
+      byGrade[g].push(b);
+    });
+
+    const now = new Date();
+    const day = String(now.getDate()).padStart(2, '0');
+    const monthsKhmer = ['មករា', 'កុម្ភៈ', 'មីនា', 'មេសា', 'ឧសភា', 'មិថុនា', 'កក្កដា', 'សីហា', 'កញ្ញា', 'តុលា', 'វិច្ឆិកា', 'ធ្នូ'];
+    const month = monthsKhmer[now.getMonth()];
+    const year = now.getFullYear();
+
+    let text = `សូមគោរពរាយការណ៍ជូនឯកឧត្តមបណ្ឌិត ឯកឧត្តម លោកជំទាវ និងសមាជិកក្រុមការងារ\n`;
+    text += `ថ្ងៃទី ${day} ខែ ${month} ឆ្នាំ ${year}\n\n`;
+    text += `ក្រុមការងារខ្ញុំ សូមគោរពរាយការណ៍អំពីស្ថានភាពការងារបោះពុម្ពសៀវភៅ ដូចខាងក្រោម៖\n\n`;
+
+    let summariesText = "━━━━━【បូកសរុប】━━━━━\n";
+    let grandToday = 0;
+    let grandTotal = 0;
+    let grandRemaining = 0;
+
+    for (const [grade, gbooks] of Object.entries(byGrade)) {
+      let gradeToday = 0;
+      let gradeTotal = 0;
+      let gradeRemaining = 0;
+
+      gbooks.forEach(b => {
+        const rem = Math.max(b.target_qty - b.total_printed, 0);
+        const todayQ = b.today_qty || 0;
+        gradeToday += todayQ;
+        gradeTotal += b.total_printed;
+        gradeRemaining += rem;
+      });
+
+      const gTarget = gbooks.reduce((s, b) => s + b.target_qty, 0);
+      summariesText += `បូកសរុប ${grade}\n`;
+      summariesText += `ចំនួន Order សរុប៖ ${gTarget.toLocaleString()} ក្បាល\n`;
+      summariesText += `សរុបមុន និងក្រោយ៖ ${gradeTotal.toLocaleString()} ក្បាល\n`;
+      summariesText += `នៅខ្វះសរុប៖ ${gradeRemaining.toLocaleString()} ក្បាល\n\n`;
+
+      grandToday += gradeToday;
+      grandTotal += gradeTotal;
+      grandRemaining += gradeRemaining;
+    }
+
+    text += summariesText;
+
+    text += `━━【បូកសរុបការងារបោះពុម្ព】━━\n\n`;
+    text += `សម្រេចបានសរុបទាំងអស់ថ្ងៃនេះ៖ ${grandToday.toLocaleString()} ក្បាល\n`;
+    text += `សរុបការងារបោះពុម្ពរួច៖ ${grandTotal.toLocaleString()} ក្បាល\n`;
+    if (grandRemaining > 0) {
+      text += `នៅខ្វះសរុប៖ ${grandRemaining.toLocaleString()} ក្បាល\n\n`;
+    } else {
+      text += `ការងារបានសម្រចរួចរាល់\n\n`;
+    }
+    text += `សូមគោរពអរគុណ 🙏`;
+
+    return text;
+  }
+
+  function getBookCategoryLabel(title, category) {
+    const t = (title || '').toLowerCase();
+    if (t.includes('textbook')) return 'Textbook';
+    if (t.includes('workbook')) return 'Workbook';
+    if (t.includes('song')) return 'Song';
+    if (t.includes('forktale') || t.includes('folktale')) return 'Folktale';
+    if (t.includes('eloquence')) return 'Eloquence';
+    if (t.includes('flashcard')) return 'Flashcard';
+    if (t.includes('guidebook')) return 'Guidebook';
+
+    if (category && category.trim()) {
+      const c = category.trim();
+      return c.charAt(0).toUpperCase() + c.slice(1);
+    }
+
+    const parts = (title || '').trim().split(' ');
+    const last = parts[parts.length - 1];
+    return last ? (last.charAt(0).toUpperCase() + last.slice(1)) : 'Other';
+  }
+
+  function generateCaptionText(books) {
+    if (!books || !books.length) return '';
+
+    const byGrade = {};
+    books.forEach(b => {
+      const g = b.grade || '—';
+      if (!byGrade[g]) byGrade[g] = [];
+      byGrade[g].push(b);
+    });
+
+    const now = new Date();
+    const day = String(now.getDate()).padStart(2, '0');
+    const monthsKhmer = ['មករា', 'កុម្ភៈ', 'មីនា', 'មេសា', 'ឧសភា', 'មិថុនា', 'កក្កដា', 'សីហា', 'កញ្ញា', 'តុលា', 'វិច្ឆិកា', 'ធ្នូ'];
+    const month = monthsKhmer[now.getMonth()];
+    const year = now.getFullYear();
+
+    let text = `សូមគោរពរាយការណ៍ជូនឯកឧត្តមបណ្ឌិត ឯកឧត្តម លោកជំទាវ និងសមាជិកក្រុមការងារ\n`;
+    text += `ថ្ងៃទី ${day} ខែ ${month} ឆ្នាំ ${year}\n\n`;
+    text += `ក្រុមការងារខ្ញុំ សូមគោរពរាយការណ៍អំពីស្ថានភាពការងារបោះពុម្ពសៀវភៅ ដូចខាងក្រោម៖\n\n`;
+
+    let detailsText = "";
+    let summariesText = "━━━━━【បូកសរុប】━━━━━\n";
+
+    let grandToday = 0;
+    let grandTotal = 0;
+    let grandRemaining = 0;
+
+    for (const [grade, gbooks] of Object.entries(byGrade)) {
+      const typeTargets = {};
+      gbooks.forEach(b => {
+        const catLabel = getBookCategoryLabel(b.title, b.category);
+        typeTargets[catLabel] = (typeTargets[catLabel] || 0) + b.target_qty;
+      });
+
+      const targets = [];
+      for (const [label, qty] of Object.entries(typeTargets)) {
+        if (qty > 0) {
+          targets.push(`${label} = ${qty.toLocaleString()} ក្បាល`);
+        }
+      }
+
+      let gradeToday = 0;
+      let gradeTotal = 0;
+      let gradeRemaining = 0;
+      let counter = 1;
+      let gradeItemsText = "";
+
+      gbooks.forEach(b => {
+        const rem = Math.max(b.target_qty - b.total_printed, 0);
+        const todayQ = b.today_qty || 0;
+
+        gradeToday += todayQ;
+        gradeTotal += b.total_printed;
+        gradeRemaining += rem;
+
+        // Skip if completed before today
+        if (rem <= 0 && todayQ <= 0) return;
+
+        gradeItemsText += `${counter}/ ${b.title}\n`;
+        if (todayQ > 0) {
+          gradeItemsText += `សម្រេចបានថ្ងៃនេះ៖ ${todayQ.toLocaleString()} ក្បាល\n`;
+        }
+        gradeItemsText += `សរុបមុន និងក្រោយ៖ ${b.total_printed.toLocaleString()} ក្បាល\n`;
+        if (rem > 0) {
+          gradeItemsText += `នៅខ្វះសរុប៖ ${rem.toLocaleString()} ក្បាល\n`;
+        }
+        gradeItemsText += '\n';
+        counter++;
+      });
+
+      if (gradeItemsText.trim().length > 0) {
+        detailsText += `***សៀវភៅ ${grade}\n`;
+        if (targets.length > 0) {
+          detailsText += targets.join(' / ') + '\n\n';
+        } else {
+          detailsText += '\n';
+        }
+        detailsText += gradeItemsText;
+      }
+
+      const gTarget = gbooks.reduce((s, b) => s + b.target_qty, 0);
+      summariesText += `បូកសរុប ${grade}\n`;
+      summariesText += `ចំនួន Order សរុប៖ ${gTarget.toLocaleString()} ក្បាល\n`;
+      summariesText += `សរុបមុន និងក្រោយ៖ ${gradeTotal.toLocaleString()} ក្បាល\n`;
+      summariesText += `នៅខ្វះសរុប៖ ${gradeRemaining.toLocaleString()} ក្បាល\n\n`;
+
+      grandToday += gradeToday;
+      grandTotal += gradeTotal;
+      grandRemaining += gradeRemaining;
+    }
+
+    text += detailsText;
+    text += summariesText;
+
+    text += `━━【បូកសរុបការងារបោះពុម្ព】━━\n\n`;
+    text += `សម្រេចបានសរុបទាំងអស់ថ្ងៃនេះ៖ ${grandToday.toLocaleString()} ក្បាល\n`;
+    text += `សរុបការងារបោះពុម្ពរួច៖ ${grandTotal.toLocaleString()} ក្បាល\n`;
+    if (grandRemaining > 0) {
+      text += `នៅខ្វះសរុប៖ ${grandRemaining.toLocaleString()} ក្បាល\n\n`;
+    } else {
+      text += `ការងារបានសម្រចរួចរាល់\n\n`;
+    }
+    text += `សូមគោរពអរគុណ 🙏`;
+
+    return text;
   }
 
   // Chip click handlers
@@ -835,8 +1218,8 @@ const TODAY_TOTAL = {{ $todayTotal }};
   captionEl?.addEventListener('input', () => {
     const len = captionEl.value.length;
     if (captionCnt) {
-      captionCnt.textContent = len + ' / 1024';
-      captionCnt.style.color = len > 950 ? 'var(--danger)' : 'var(--text-muted)';
+      captionCnt.textContent = len + ' / 4096';
+      captionCnt.style.color = len > 3950 ? 'var(--danger)' : 'var(--text-muted)';
     }
     updatePreview();
   });
@@ -862,8 +1245,28 @@ const TODAY_TOTAL = {{ $todayTotal }};
   catFilter?.addEventListener('change', applyFilters);
   statusFilter?.addEventListener('change', applyFilters);
 
-  // ── Telegram Send ─────────────────────────────────
+  // ── Caption Mode Toggles ─────────────────────────────
+  let currentCaptionMode = 'summary';
+  const btnCaptionSummary = document.getElementById('btnCaptionSummary');
+  const btnCaptionFull    = document.getElementById('btnCaptionFull');
+
+  btnCaptionSummary?.addEventListener('click', () => {
+    currentCaptionMode = 'summary';
+    btnCaptionSummary.classList.add('active');
+    btnCaptionFull?.classList.remove('active');
+    updatePreview();
+  });
+
+  btnCaptionFull?.addEventListener('click', () => {
+    currentCaptionMode = 'full';
+    btnCaptionFull.classList.add('active');
+    btnCaptionSummary?.classList.remove('active');
+    updatePreview();
+  });
+
+  // ── Telegram Send (Image + Caption) ───────────────────
   const sendBtn     = document.getElementById('sendTelegramBtn');
+  const sendTextBtn = document.getElementById('sendTextBtn');
   const groupSelect = document.getElementById('telegramGroup');
   const reportEl    = document.getElementById('telegramReport');
 
@@ -871,7 +1274,6 @@ const TODAY_TOTAL = {{ $todayTotal }};
     const raw = groupSelect?.value;
     if (!raw) { showToast('warning', 'សូមជ្រើសរើសក្រុម Telegram មុន'); return; }
 
-    // Parse "chatId|threadId" — keep display intact, only parse at send time
     const parts    = raw.split('|');
     const chatId   = parts[0];
     const threadId = parts[1] || null;
@@ -880,13 +1282,9 @@ const TODAY_TOTAL = {{ $todayTotal }};
     const books = filteredBooks();
     if (!books.length) { showToast('warning', 'មិនមានសៀវភៅដែលជ្រើស — សូមជ្រើស Level ណាមួយ'); return; }
 
-    // Update snapshot content before capture
     updatePreview();
+    showLoading(true, 'កំពុងផ្ញើរូបភាពរបាយការណ៍...');
 
-    showLoading(true);
-
-    // html2canvas needs the element to be in the normal document flow
-    // Temporarily show it at the bottom of the page
     reportEl.style.position = 'fixed';
     reportEl.style.left = '0';
     reportEl.style.top = '0';
@@ -894,7 +1292,7 @@ const TODAY_TOTAL = {{ $todayTotal }};
     reportEl.style.pointerEvents = 'none';
 
     try {
-      await new Promise(r => setTimeout(r, 300)); // ensure DOM renders fully
+      await new Promise(r => setTimeout(r, 300));
       const canvas = await html2canvas(reportEl, {
         scale: 2,
         useCORS: true,
@@ -903,16 +1301,17 @@ const TODAY_TOTAL = {{ $todayTotal }};
         windowWidth: 680,
       });
       
-      // Hide again
       reportEl.style.left = '-9999px';
       reportEl.style.zIndex = '';
       reportEl.style.pointerEvents = '';
+
+      const sendFullTextAlso = document.getElementById('sendFullTextAlso')?.checked;
+      const fullTextReport   = generateCaptionText(books);
 
       await new Promise((resolve, reject) => {
         canvas.toBlob(async blob => {
           if (!blob) { reject(new Error('Capture failed')); return; }
 
-          // Caption = just the user's short greeting text (image has the details)
           const finalCaption = captionEl.value.trim() || '📄 របាយការណ៍ការបោះពុម្ព';
 
           const fd = new FormData();
@@ -920,6 +1319,10 @@ const TODAY_TOTAL = {{ $todayTotal }};
           if (threadId) fd.append('message_thread_id', threadId);
           fd.append('photo', blob, 'report.png');
           fd.append('caption', finalCaption);
+          if (sendFullTextAlso) {
+            fd.append('send_full_text', '1');
+            fd.append('full_text', fullTextReport);
+          }
           fd.append('_token', document.querySelector('meta[name=csrf-token]').content);
 
           const res  = await fetch('{{ route("telegram.send.image") }}', { method:'POST', body:fd });
@@ -929,7 +1332,7 @@ const TODAY_TOTAL = {{ $todayTotal }};
       });
 
       showLoading(false);
-      showToast('success', 'ផ្ញើរបាយការណ៍ទៅ Telegram បានដោយជោគជ័យ 🎉');
+      showToast('success', sendFullTextAlso ? 'ផ្ញើរូបភាព + អត្ថបទលម្អិតទី ២ ទៅ Telegram ជោគជ័យ! 🎉' : 'ផ្ញើរូបភាពទៅ Telegram ជោគជ័យ! 🎉');
     } catch (err) {
       reportEl.style.left = '-9999px';
       reportEl.style.zIndex = '';
@@ -939,10 +1342,240 @@ const TODAY_TOTAL = {{ $todayTotal }};
     }
   });
 
+  // ── Telegram Send (Text Report Only) ─────────────────
+  sendTextBtn?.addEventListener('click', async () => {
+    const raw = groupSelect?.value;
+    if (!raw) { showToast('warning', 'សូមជ្រើសរើសក្រុម Telegram មុន'); return; }
+
+    const parts    = raw.split('|');
+    const chatId   = parts[0];
+    const threadId = parts[1] || null;
+    if (!chatId) { showToast('warning', 'សូមជ្រើសរើសក្រុម Telegram មុន'); return; }
+
+    const books = filteredBooks();
+    if (!books.length) { showToast('warning', 'មិនមានសៀវភៅដែលជ្រើស — សូមជ្រើស Level ណាមួយ'); return; }
+
+    const fullTextReport = generateCaptionText(books);
+
+    showLoading(true, 'កំពុងផ្ញើសារអត្ថបទទៅ Telegram...');
+
+    try {
+      const res = await fetch('{{ route("telegram.send") }}', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'X-CSRF-TOKEN': document.querySelector('meta[name=csrf-token]').content,
+          'Accept': 'application/json'
+        },
+        body: JSON.stringify({
+          chat_id: chatId,
+          message_thread_id: threadId,
+          message: fullTextReport
+        })
+      });
+
+      const data = await res.json();
+      showLoading(false);
+
+      if (res.ok && data.ok) {
+        showToast('success', 'ផ្ញើសារអត្ថបទទៅ Telegram ជោគជ័យ! 🎉');
+      } else {
+        showToast('error', 'មិនអាចផ្ញើបានទេ: ' + (data.message || 'Server error'));
+      }
+    } catch (err) {
+      showLoading(false);
+      showToast('error', 'មានបញ្ហា: ' + err.message);
+    }
+  });
+
   // Initial render
   updatePreview();
 
 })();
+
+// ─── PREVIEW REPORT (Simplified) ─────────────────────────────────────────────
+let currentPreviewReport = '';
+
+async function loadPreview() {
+  const previewContent = document.getElementById('previewContent');
+  const previewLoading = document.getElementById('previewLoading');
+  const gradeFilter = document.getElementById('previewGradeFilter').value;
+  
+  // Show loading
+  previewLoading.style.display = 'block';
+  previewContent.style.display = 'none';
+  
+  try {
+    let url = `/report/daily?date={{ today()->toDateString() }}&format=full`;
+    if (gradeFilter) {
+      url += `&grade=${encodeURIComponent(gradeFilter)}`;
+    }
+    
+    const response = await fetch(url);
+    
+    if (!response.ok) {
+      throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+    }
+    
+    const data = await response.json();
+    
+    if (data.success) {
+      currentPreviewReport = data.report;
+      previewContent.textContent = data.report;
+      previewContent.style.display = 'block';
+      previewLoading.style.display = 'none';
+    } else {
+      throw new Error(data.message || 'Failed to load preview');
+    }
+  } catch (error) {
+    console.error('Load preview error:', error);
+    previewContent.innerHTML = `<div class="alert alert-danger">
+      <i class="bi bi-exclamation-triangle-fill"></i> 
+      <strong>មិនអាចផ្ទុក Preview:</strong><br>${error.message}
+    </div>`;
+    previewContent.style.display = 'block';
+    previewLoading.style.display = 'none';
+    showToast('error', 'មិនអាចផ្ទុក Preview: ' + error.message);
+  }
+}
+
+async function loadPreviewWithFilter() {
+  loadPreview();
+}
+
+// Auto-load preview when modal opens
+document.getElementById('previewModal').addEventListener('shown.bs.modal', function () {
+  loadPreview();
+});
+
+// ─── TELEGRAM SEND (AJAX + spinner + double-send guard) ───────────
+(function () {
+  const form = document.getElementById('telegramForm');
+  if (!form) return;
+
+  const btn     = document.getElementById('telegramSendBtn');
+  const label   = btn.querySelector('.tg-btn-label');
+  const loading = btn.querySelector('.tg-btn-loading');
+  let sending   = false;
+
+  form.addEventListener('submit', async function (e) {
+    e.preventDefault();
+    e.stopPropagation();
+
+    // Client-side guard: block while a send is in flight
+    if (sending) return;
+    sending = true;
+
+    // Show spinner, disable button
+    btn.disabled = true;
+    label.style.display = 'none';
+    loading.style.display = 'inline-flex';
+
+    try {
+      const res = await fetch(form.action, {
+        method: 'POST',
+        headers: {
+          'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]').content,
+          'Accept': 'application/json'
+        },
+        body: new FormData(form)
+      });
+
+      const data = await res.json().catch(() => ({}));
+
+      if (res.ok && data.success) {
+        showToast('success', data.message || '✅ ផ្ញើជោគជ័យ!');
+        const modalEl = document.getElementById('telegramModal');
+        const modal = bootstrap.Modal.getInstance(modalEl);
+        if (modal) modal.hide();
+      } else if (res.status === 429) {
+        showToast('error', data.message || 'កំពុងផ្ញើរួចហើយ សូមរង់ចាំ...');
+      } else {
+        showToast('error', data.message || 'មិនអាចផ្ញើបានទេ។');
+      }
+    } catch (err) {
+      showToast('error', 'មានបញ្ហា៖ ' + err.message);
+    } finally {
+      // Restore button
+      sending = false;
+      btn.disabled = false;
+      label.style.display = 'inline';
+      loading.style.display = 'none';
+    }
+  });
+})();
+
+// Select all text in preview
+function selectAllPreview() {
+  const previewContent = document.getElementById('previewContent');
+  const range = document.createRange();
+  range.selectNodeContents(previewContent);
+  const selection = window.getSelection();
+  selection.removeAllRanges();
+  selection.addRange(range);
+  
+  showToast('info', 'ជ្រើសរើសរួច! ចុច Ctrl+C ដើម្បី Copy');
+}
+
+// Show textarea for mobile copying
+function showCopyTextarea() {
+  const previewContent = document.getElementById('previewContent');
+  const textarea = document.getElementById('mobileCopyTextarea');
+  const mobileArea = document.getElementById('mobileCopyArea');
+  
+  const textToCopy = previewContent.textContent || previewContent.innerText;
+  
+  if (!textToCopy || textToCopy.trim().length === 0) {
+    showToast('error', 'សូមរង់ចាំ preview ផ្ទុករួចជាមុន');
+    return;
+  }
+  
+  // Show textarea with report text
+  textarea.value = textToCopy;
+  mobileArea.style.display = 'block';
+  previewContent.style.display = 'none';
+  
+  // Auto-select the text
+  textarea.select();
+  textarea.setSelectionRange(0, textarea.value.length);
+  
+  showToast('info', '👆 ចុចយូរលើ textarea ហើយជ្រើស Copy');
+}
+
+// Hide mobile copy textarea
+function hideCopyTextarea() {
+  const previewContent = document.getElementById('previewContent');
+  const mobileArea = document.getElementById('mobileCopyArea');
+  
+  mobileArea.style.display = 'none';
+  previewContent.style.display = 'block';
+}
+
+// Download report as text file
+function downloadReport() {
+  const previewContent = document.getElementById('previewContent');
+  const textToDownload = previewContent.textContent || previewContent.innerText;
+  
+  if (!textToDownload || textToDownload.trim().length === 0) {
+    showToast('error', 'សូមរង់ចាំ preview ផ្ទុករួចជាមុន');
+    return;
+  }
+  
+  // Create blob and download
+  const blob = new Blob([textToDownload], { type: 'text/plain;charset=utf-8' });
+  const url = window.URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = 'daily-report-' + new Date().toISOString().split('T')[0] + '.txt';
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  window.URL.revokeObjectURL(url);
+  
+  showToast('success', '✅ របាយការណ៍ត្រូវបាន Download! បើកឯកសារ .txt ហើយ copy ចេញ។');
+}
+
+// ─── DAILY REPORT COPY TO CLIPBOARD ────────────────────────────────
 </script>
 
 <style>

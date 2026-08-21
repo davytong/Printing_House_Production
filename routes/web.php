@@ -15,25 +15,35 @@ use App\Http\Controllers\ScheduleController;
 use App\Http\Controllers\Stock\MaterialController;
 use App\Http\Controllers\Stock\MovementController;
 use App\Http\Controllers\Stock\StockReportController;
+use App\Http\Controllers\SettingsController;
+use App\Http\Controllers\SearchController;
 
 // ── Entry Screen (name + position) ────────────────────────
 Route::get('/entry', [App\Http\Controllers\EntryController::class, 'show'])->name('entry');
 Route::post('/entry', [App\Http\Controllers\EntryController::class, 'login'])->name('entry.login');
 Route::post('/logout', [App\Http\Controllers\EntryController::class, 'logout'])->name('entry.logout');
 
+// ── Language Switcher ────────────────────────────────────
+Route::get('/lang/{locale}', [App\Http\Controllers\LanguageController::class, 'switch'])->name('lang.switch');
+
 // ── Root → Executive Dashboard ────────────────────────────
 Route::get('/', [DashboardController::class, 'index'])->name('dashboard');
+Route::get('/search', [SearchController::class, 'index'])->name('search');
 
 // ── Production ────────────────────────────────────────────
 Route::get('/production',        [PrintingController::class, 'index'])->name('printing.index');
 Route::post('/books/import',     [PrintingController::class, 'importCsv'])->name('books.import');
 Route::post('/printing/store',   [PrintingController::class, 'store'])->name('printing.store');
+Route::delete('/printing/daily-print/{print}', [PrintingController::class, 'destroyDailyPrint'])->name('printing.daily-print.destroy');
 Route::post('/printing/batch',   [PrintingController::class, 'batchUpdate'])->name('printing.batch');
 Route::post('/printing/new-batch', [PrintingController::class, 'startNewBatch'])->name('printing.new-batch');
 Route::get('/printing/batch/{batch}', [PrintingController::class, 'showBatch'])->name('printing.batch-history');
 Route::post('/printing/batch/{batch}/restore', [PrintingController::class, 'restoreBatch'])->name('printing.batch-restore');
 Route::delete('/printing/batch/{batch}', [PrintingController::class, 'deleteBatch'])->name('printing.batch-delete');
 Route::get('/report',            [PrintingController::class, 'report'])->name('printing.report');
+Route::get('/report/daily',      [PrintingController::class, 'generateDailyReport'])->name('printing.daily-report');
+Route::post('/report/telegram',  [PrintingController::class, 'sendDailyReportTelegram'])->name('printing.send-telegram');
+Route::get('/production/export', [PrintingController::class, 'exportExcel'])->name('printing.export');
 // Book CRUD (individual, no CSV)
 Route::post('/books',            [PrintingController::class, 'storeBook'])->name('books.store');
 Route::put('/books/{book}',      [PrintingController::class, 'updateBook'])->name('books.update');
@@ -44,14 +54,14 @@ Route::prefix('requests')->name('requests.')->group(function () {
     Route::get('/',                       [PrintRequestController::class, 'index'])->name('index');
     Route::get('/create',                 [PrintRequestController::class, 'create'])->name('create');
     Route::post('/',                      [PrintRequestController::class, 'store'])->name('store');
-    Route::get('/{request}',              [PrintRequestController::class, 'show'])->name('show');
-    Route::get('/{request}/edit',         [PrintRequestController::class, 'edit'])->name('edit');
-    Route::put('/{request}',              [PrintRequestController::class, 'update'])->name('update');
-    Route::post('/{request}/approve',     [PrintRequestController::class, 'approve'])->name('approve');
-    Route::post('/{request}/reject',      [PrintRequestController::class, 'reject'])->name('reject');
-    Route::post('/{request}/status',      [PrintRequestController::class, 'updateStatus'])->name('status');
-    Route::delete('/{request}/attachment',[PrintRequestController::class, 'removeAttachment'])->name('remove-attachment');
-    Route::delete('/{request}',           [PrintRequestController::class, 'destroy'])->name('destroy');
+    Route::get('/{printRequest}',         [PrintRequestController::class, 'show'])->name('show');
+    Route::get('/{printRequest}/edit',    [PrintRequestController::class, 'edit'])->name('edit');
+    Route::put('/{printRequest}',         [PrintRequestController::class, 'update'])->name('update');
+    Route::post('/{printRequest}/approve',[PrintRequestController::class, 'approve'])->name('approve');
+    Route::post('/{printRequest}/reject', [PrintRequestController::class, 'reject'])->name('reject');
+    Route::post('/{printRequest}/status', [PrintRequestController::class, 'updateStatus'])->name('status');
+    Route::delete('/{printRequest}/attachment',[PrintRequestController::class, 'removeAttachment'])->name('remove-attachment');
+    Route::delete('/{printRequest}',      [PrintRequestController::class, 'destroy'])->name('destroy');
 });
 
 // ── Suppliers ─────────────────────────────────────────────
@@ -78,11 +88,14 @@ Route::prefix('purchase-orders')->name('purchase-orders.')->group(function () {
     Route::get('/',                              [PurchaseOrderController::class, 'index'])->name('index');
     Route::get('/create',                        [PurchaseOrderController::class, 'create'])->name('create');
     Route::post('/',                             [PurchaseOrderController::class, 'store'])->name('store');
+    Route::get('/export',                        [PurchaseOrderController::class, 'exportExcel'])->name('export');
     Route::get('/{purchaseOrder}',               [PurchaseOrderController::class, 'show'])->name('show');
     Route::get('/{purchaseOrder}/edit',          [PurchaseOrderController::class, 'edit'])->name('edit');
     Route::put('/{purchaseOrder}',               [PurchaseOrderController::class, 'update'])->name('update');
     Route::post('/{purchaseOrder}/status',       [PurchaseOrderController::class, 'updateStatus'])->name('status');
     Route::post('/{purchaseOrder}/receive',      [PurchaseOrderController::class, 'receive'])->name('receive');
+    Route::post('/{purchaseOrder}/attachments',  [PurchaseOrderController::class, 'addAttachments'])->name('attachments.add');
+    Route::delete('/{purchaseOrder}/attachments',[PurchaseOrderController::class, 'removeAttachment'])->name('attachments.remove');
     Route::delete('/{purchaseOrder}',            [PurchaseOrderController::class, 'destroy'])->name('destroy');
 });
 
@@ -113,18 +126,29 @@ Route::prefix('machines')->name('machines.')->group(function () {
 
 // ── Production Schedule ───────────────────────────────────
 Route::prefix('schedule')->name('schedule.')->group(function () {
+    // Schedule Routes
     Route::get('/',               [ScheduleController::class, 'index'])->name('index');
     Route::post('/store',         [ScheduleController::class, 'store'])->name('store');
     Route::post('/bulk',          [ScheduleController::class, 'bulkSave'])->name('bulk');
     Route::get('/export',         [ScheduleController::class, 'exportCalendar'])->name('export');
+    Route::post('/export-telegram', [ScheduleController::class, 'sendExportTelegram'])->name('export-telegram');
     Route::post('/alert',         [ScheduleController::class, 'sendTelegramAlert'])->name('alert');
     Route::post('/copy',          [ScheduleController::class, 'copyToMonth'])->name('copy');
+    Route::post('/move',          [ScheduleController::class, 'moveCell'])->name('move');
     Route::post('/clear',         [ScheduleController::class, 'clearMonth'])->name('clear');
+
+    // Weekly Schedule Report
+    Route::get('/report/weekly', [ScheduleController::class, 'weeklyReport'])->name('weekly-report');
+    Route::get('/report/weekly/json', [ScheduleController::class, 'generateWeeklyReportJson'])->name('weekly-report.json');
+    Route::post('/report/weekly/telegram', [ScheduleController::class, 'sendWeeklyReportTelegram'])->name('send-weekly-telegram');
     Route::post('/urgent',        [ScheduleController::class, 'urgentTask'])->name('urgent');
     Route::post('/downtime',      [ScheduleController::class, 'machineDowntime'])->name('downtime');
     Route::get('/delay-report',   [ScheduleController::class, 'delayReport'])->name('delay-report');
     Route::get('/delay-json',     [ScheduleController::class, 'delayReportJson'])->name('delay-json');
+    Route::delete('/delay-log/{id}', [ScheduleController::class, 'destroyDelayLog'])->name('delay-log.delete');
     Route::post('/status',        [ScheduleController::class, 'updateStatus'])->name('status');
+    Route::get('/progress',       [ScheduleController::class, 'showProgress'])->name('progress.show');
+    Route::post('/progress',      [ScheduleController::class, 'updateProgress'])->name('progress.update');
 });
 
 // ── Analytics ─────────────────────────────────────────────
@@ -132,11 +156,14 @@ Route::get('/analytics', [AnalyticsController::class, 'index'])->name('analytics
 
 // ── Production Tasks (advanced scheduling) ────────────────
 Route::get('/tasks', [App\Http\Controllers\ProductionTaskController::class, 'index'])->name('tasks.index');
+Route::get('/tasks/kanban', [App\Http\Controllers\ProductionTaskController::class, 'kanban'])->name('tasks.kanban');
 
 // ── Stock Management ──────────────────────────────────────
 Route::prefix('stock')->name('stock.')->group(function () {
     // Materials CRUD
+    Route::post('/materials/alert',       [MaterialController::class, 'sendLowStockAlert'])->name('materials.alert');
     Route::resource('materials', MaterialController::class);
+    Route::get('/materials-export',       [MaterialController::class, 'exportExcel'])->name('materials.export');
     // Daily Update (simple current-qty form)
     Route::get('/movements/daily',        [MovementController::class, 'dailyUpdate'])->name('movements.daily');
     Route::post('/movements/daily',       [MovementController::class, 'dailyStore'])->name('movements.daily-store');
@@ -144,6 +171,7 @@ Route::prefix('stock')->name('stock.')->group(function () {
     Route::get('/movements',              [MovementController::class, 'index'])->name('movements.index');
     Route::get('/movements/create',       [MovementController::class, 'create'])->name('movements.create');
     Route::post('/movements',             [MovementController::class, 'store'])->name('movements.store');
+    Route::get('/movements/export',       [MovementController::class, 'exportExcel'])->name('movements.export');
     Route::get('/movements/bulk',         [MovementController::class, 'bulkCreate'])->name('movements.bulk');
     Route::post('/movements/bulk',        [MovementController::class, 'bulkStore'])->name('movements.bulk-store');
     // Stock Reports
@@ -160,12 +188,13 @@ Route::prefix('notifications')->name('notifications.')->group(function () {
     Route::get('/',                          [NotificationController::class, 'index'])->name('index');
     Route::get('/count',                     [NotificationController::class, 'count'])->name('count');
     Route::post('/mark-all-read',            [NotificationController::class, 'markAllRead'])->name('mark-all-read');
+    Route::post('/clear-all',                [NotificationController::class, 'clearAll'])->name('clear-all');
     Route::post('/{notification}/read',      [NotificationController::class, 'markRead'])->name('read');
     Route::delete('/{notification}',         [NotificationController::class, 'destroy'])->name('destroy');
 });
 
 // ── Telegram ─────────────────────────────────────────────
-Route::prefix('telegram')->name('telegram.')->group(function () {
+Route::prefix('telegram')->name('telegram.')->middleware('admin')->group(function () {
     Route::get('/',                          [TelegramSetupController::class, 'index'])->name('setup');
     Route::post('/set-webhook',              [TelegramSetupController::class, 'setWebhook'])->name('set-webhook');
     Route::post('/delete-webhook',           [TelegramSetupController::class, 'deleteWebhook'])->name('delete-webhook');
@@ -176,6 +205,17 @@ Route::prefix('telegram')->name('telegram.')->group(function () {
     Route::post('/groups/{group}/purpose',   [TelegramSetupController::class, 'updatePurpose'])->name('update-purpose');
     Route::post('/alert-template',            [TelegramSetupController::class, 'saveAlertTemplate'])->name('alert-template');
     Route::post('/alert-template/reset',      [TelegramSetupController::class, 'resetAlertTemplate'])->name('alert-template-reset');
+    Route::post('/alert-test',                [TelegramSetupController::class, 'sendTestAlert'])->name('alert-test');
+    Route::post('/alert-config',              [TelegramSetupController::class, 'saveAlertConfig'])->name('alert-config');
+    Route::post('/daily-usage-config',        [TelegramSetupController::class, 'saveDailyUsageConfig'])->name('daily-usage-config');
+    Route::post('/daily-report-template',     [TelegramSetupController::class, 'saveDailyReportTemplate'])->name('daily-report-template');
+    Route::post('/daily-report-template/reset', [TelegramSetupController::class, 'resetDailyReportTemplate'])->name('daily-report-template-reset');
+    Route::post('/category-labels',           [TelegramSetupController::class, 'saveCategoryLabels'])->name('category-labels');
+    Route::post('/category-labels/reset',     [TelegramSetupController::class, 'resetCategoryLabels'])->name('category-labels-reset');
+    Route::post('/item-name-format',          [TelegramSetupController::class, 'saveItemNameFormat'])->name('item-name-format');
 });
+
+// ── Settings & Profile ────────────────────────────────────
+Route::get('/settings', [SettingsController::class, 'index'])->name('settings.index');
 
 

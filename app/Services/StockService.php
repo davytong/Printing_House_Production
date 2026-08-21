@@ -33,14 +33,23 @@ class StockService
 
     /**
      * Get current stock for all active materials.
+     * Loads every material's movements in a single query (no N+1).
      */
     public function getAllStockLevels(): Collection
     {
-        return Material::where('status', 'active')
+        $materials = Material::where('status', 'active')
             ->orderBy('category')
             ->orderBy('name')
+            ->get();
+
+        $movesByMaterial = StockMovement::whereIn('material_id', $materials->pluck('id'))
             ->get()
-            ->map(fn(Material $m) => [
+            ->groupBy('material_id');
+
+        return $materials->map(function (Material $m) use ($movesByMaterial) {
+            $moves = $movesByMaterial->get($m->id, collect());
+            $stock = Material::currentStockFromMovements($moves);
+            return [
                 'id'           => $m->id,
                 'code'         => $m->code,
                 'name'         => $m->name,
@@ -48,39 +57,57 @@ class StockService
                 'sub_type'     => $m->sub_type,
                 'size'         => $m->size,
                 'unit'         => $m->unit,
-                'current_stock'=> $m->currentStock(),
+                'current_stock'=> $stock,
                 'min_stock'    => (float) $m->min_stock,
-                'is_low'       => $m->isLowStock(),
+                'is_low'       => $stock <= (float) $m->min_stock,
                 'location'     => $m->location,
                 'unit_cost'    => (float) $m->unit_cost,
-            ]);
+            ];
+        });
     }
 
     /**
-     * Get low-stock materials only.
+     * Get low-stock materials only (single query for movements).
      */
     public function getLowStockMaterials(): Collection
     {
-        return Material::where('status', 'active')
+        $materials = Material::where('status', 'active')->get();
+
+        $movesByMaterial = StockMovement::whereIn('material_id', $materials->pluck('id'))
             ->get()
-            ->filter(fn(Material $m) => $m->isLowStock());
+            ->groupBy('material_id');
+
+        return $materials->filter(function (Material $m) use ($movesByMaterial) {
+            $stock = Material::currentStockFromMovements($movesByMaterial->get($m->id, collect()));
+            return $stock <= (float) $m->min_stock;
+        })->values();
     }
 
     /**
-     * Get stock summary by category.
+     * Get stock summary by category (single query for movements).
      */
     public function getSummaryByCategory(): array
     {
         $materials = Material::where('status', 'active')->get();
-        $summary   = [];
 
+        $movesByMaterial = StockMovement::whereIn('material_id', $materials->pluck('id'))
+            ->get()
+            ->groupBy('material_id');
+
+        // Precompute stock once per material
+        $stockById = [];
+        foreach ($materials as $m) {
+            $stockById[$m->id] = Material::currentStockFromMovements($movesByMaterial->get($m->id, collect()));
+        }
+
+        $summary = [];
         foreach (['paper', 'film', 'offset', 'consumable'] as $cat) {
             $catMaterials = $materials->where('category', $cat);
             $summary[$cat] = [
-                'total_items'   => $catMaterials->count(),
-                'total_value'   => $catMaterials->sum(fn($m) => $m->currentStock() * (float) $m->unit_cost),
-                'low_stock'     => $catMaterials->filter(fn($m) => $m->isLowStock())->count(),
-                'out_of_stock'  => $catMaterials->filter(fn($m) => $m->currentStock() <= 0)->count(),
+                'total_items'  => $catMaterials->count(),
+                'total_value'  => $catMaterials->sum(fn($m) => $stockById[$m->id] * (float) $m->unit_cost),
+                'low_stock'    => $catMaterials->filter(fn($m) => $stockById[$m->id] <= (float) $m->min_stock)->count(),
+                'out_of_stock' => $catMaterials->filter(fn($m) => $stockById[$m->id] <= 0)->count(),
             ];
         }
 

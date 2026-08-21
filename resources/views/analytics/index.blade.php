@@ -8,13 +8,30 @@
     <h1 class="section-title">Analytics</h1>
     <p class="section-sub">ការវិភាគទិន្នន័យ — Production, Inventory, Machines</p>
   </div>
-  <form method="GET" class="d-flex gap-2 align-items-center">
+  <form method="GET" class="d-flex gap-2 align-items-center flex-wrap">
     <label class="form-label mb-0" style="white-space:nowrap;font-size:.82rem">ចន្លោះ:</label>
     <select name="period" class="form-select form-select-sm" style="width:auto;font-family:var(--font-latin)" onchange="this.form.submit()">
       @foreach(['7'=>'7 Days','14'=>'14 Days','30'=>'30 Days','90'=>'90 Days'] as $v=>$l)
         <option value="{{ $v }}" {{ $period==$v?'selected':'' }}>{{ $l }}</option>
       @endforeach
     </select>
+    
+    <label class="form-label mb-0 ms-3" style="white-space:nowrap;font-size:.82rem">Batch:</label>
+    <select name="batch" class="form-select form-select-sm" style="width:auto;min-width:140px" onchange="this.form.submit()">
+      <option value="">All Batches — ទាំងអស់</option>
+      @foreach($batches as $batch)
+        <option value="{{ $batch->id }}" {{ $batchId==$batch->id?'selected':'' }}>
+          {{ $batch->name }}
+          @if($batch->status === 'active') ⚡ @endif
+        </option>
+      @endforeach
+    </select>
+    
+    @if($selectedBatch)
+    <span class="badge badge-progress" style="font-family:var(--font-latin)">
+      Filtering: {{ $selectedBatch->name }}
+    </span>
+    @endif
   </form>
 </div>
 

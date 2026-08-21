@@ -27,15 +27,28 @@ class EntryController extends Controller
             'position'  => 'required|in:paper_report,press_report,finishing_report,procurement,store,admin',
         ]);
 
+        // Sanitize name to prevent XSS
+        $fullName = strip_tags(trim($data['full_name']));
+        if (empty($fullName)) {
+            return back()->withErrors(['full_name' => 'Invalid name format. / ឈ្មោះមិនត្រឹមត្រូវ។'])->withInput();
+        }
+
+        // Get role for position
+        $role = \App\Services\RoleService::getRoleForPosition($data['position']);
+
+        // Prevent Session Fixation by regenerating the session identifier
+        $request->session()->regenerate();
+
         // Store in session
         session([
-            'user_name'     => $data['full_name'],
+            'user_name'     => $fullName,
             'user_position' => $data['position'],
+            'user_role'     => $role,
             'logged_in_at'  => now()->toDateTimeString(),
         ]);
 
         // Log activity
-        ActivityLog::record('Login', "Entered system as " . self::positionLabel($data['position']));
+        ActivityLog::record('Login', "Entered system as " . self::positionLabel($data['position']) . " (Role: {$role})");
 
         // Redirect by position
         return redirect(self::dashboardRoute($data['position']));
@@ -44,10 +57,11 @@ class EntryController extends Controller
     /**
      * Logout — clear session.
      */
-    public function logout(): RedirectResponse
+    public function logout(Request $request): RedirectResponse
     {
         ActivityLog::record('Logout', 'Left the system');
-        session()->forget(['user_name', 'user_position', 'logged_in_at']);
+        $request->session()->invalidate();
+        $request->session()->regenerateToken();
         return redirect()->route('entry');
     }
 

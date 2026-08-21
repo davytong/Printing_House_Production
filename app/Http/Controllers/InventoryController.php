@@ -124,10 +124,13 @@ class InventoryController extends Controller
             'adjustment' => $data['quantity'],
         };
 
+        // Calculate the actual change (can be negative for adjustments)
+        $actualChange = $after - $before;
+
         $inventoryItem->update(['quantity_in_stock' => $after]);
         $inventoryItem->transactions()->create([
             'type'           => $data['type'],
-            'quantity'       => abs($after - $before),
+            'quantity'       => $data['type'] === 'adjustment' ? $actualChange : $data['quantity'],
             'quantity_before'=> $before,
             'quantity_after' => $after,
             'reference'      => $data['reference'] ?? null,

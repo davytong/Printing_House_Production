@@ -15,11 +15,11 @@ class Supplier extends Model
 
     protected static function booted(): void
     {
-        static::created(function (Supplier $m) {
+        static::creating(function (Supplier $m) {
             if (! $m->code) {
-                $m->updateQuietly([
-                    'code' => 'SUP-' . str_pad($m->id, 3, '0', STR_PAD_LEFT),
-                ]);
+                $last = static::orderBy('id', 'desc')->first();
+                $next = $last ? $last->id + 1 : 1;
+                $m->code = 'SUP-' . str_pad($next, 3, '0', STR_PAD_LEFT);
             }
         });
     }

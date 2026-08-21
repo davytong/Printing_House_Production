@@ -41,4 +41,10 @@ class NotificationController extends Controller
         $notification->delete();
         return back()->with('success', 'ការជូនដំណឹងត្រូវបានលុប');
     }
+
+    public function clearAll(): RedirectResponse
+    {
+        SystemNotification::truncate(); // Or delete() if scoping to user in future
+        return back()->with('success', 'ការជូនដំណឹងទាំងអស់ត្រូវបានលុប');
+    }
 }

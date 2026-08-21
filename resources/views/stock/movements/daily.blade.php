@@ -1,18 +1,29 @@
-﻿@extends('layouts.app')
+@extends('layouts.app')
 @php
+  // Get category labels from settings for consistency
   $catMeta = [
-    'paper'      => ['📄','ក្រដាស','background:#dbeafe;color:#1d4ed8','kpi-blue'],
-    'film'       => ['🎞️','Film (ហ្វីម)','background:#f5f3ff;color:#7c3aed','kpi-purple'],
-    'consumable' => ['🧴','Consumable (សម្ភារៈប្រើប្រាស់)','background:#dcfce7;color:#15803d','kpi-green'],
+    'paper'      => ['❖', '<i class="fa-solid fa-file-lines"></i>', \App\Models\Setting::get('category_label_paper', 'ក្រដាស (Paper)'), 'background:#dbeafe;color:#1d4ed8','kpi-blue'],
+    'film'       => ['❖', '<i class="fa-solid fa-tape"></i>', \App\Models\Setting::get('category_label_film', 'Lamination Film (ស្គុត)'), 'background:#f5f3ff;color:#7c3aed','kpi-purple'],
+    'consumable' => ['❖', '<i class="fa-solid fa-bottle-droplet"></i>', \App\Models\Setting::get('category_label_consumable', 'Consumable (សម្ភារៈប្រើប្រាស់)'), 'background:#dcfce7;color:#15803d','kpi-green'],
   ];
   // Fall back if an unknown category comes in
   if (!isset($catMeta[$category])) {
-    $catMeta[$category] = ['📦', ucfirst($category), 'background:#f1f5f9;color:#475569', 'kpi-blue'];
+    $catMeta[$category] = ['📦', '<i class="bi bi-box-seam-fill"></i>', ucfirst($category), 'background:#f1f5f9;color:#475569', 'kpi-blue'];
   }
-  [$catEmoji,$catLabel,$catStyle,$catCls] = $catMeta[$category];
+  [$catEmoji,$catIcon,$catLabel,$catStyle,$catCls] = $catMeta[$category];
 @endphp
 @section('title',"បច្ចុប្បន្នភាព {$catLabel}")
 @section('page-title','Daily Stock Update')
+
+@section('breadcrumbs')
+<div class="breadcrumbs">
+  <a href="{{ route('dashboard') }}"><i class="bi bi-house"></i></a>
+  <i class="bi bi-chevron-right bc-sep"></i>
+  <a href="{{ route('stock.movements.index') }}">Stock</a>
+  <i class="bi bi-chevron-right bc-sep"></i>
+  <span class="bc-active">Daily Report</span>
+</div>
+@endsection
 
 @section('content')
 
@@ -20,10 +31,10 @@
 <div class="panel mb-4">
   <div class="panel-body" style="display:flex;flex-wrap:wrap;gap:.6rem;align-items:center;padding:.75rem 1rem">
     <span style="font-size:.85rem;font-weight:700;color:var(--text-muted)">ជ្រើសរើសផ្នែក៖</span>
-    @foreach($catMeta as $val => [$e,$l,,])
+    @foreach($catMeta as $val => [$e,$i,$l,,])
       <a href="{{ route('stock.movements.daily') }}?category={{ $val }}"
          class="btn btn-sm {{ $category===$val ? 'btn-primary' : 'btn-outline-secondary' }}" style="font-size:.85rem">
-        {{ $e }} {{ $l }}
+        {!! $i !!} {{ $l }}
       </a>
     @endforeach
   </div>
@@ -33,7 +44,7 @@
 <div class="d-flex justify-content-between align-items-start flex-wrap gap-3 mb-4">
   <div>
     <h1 class="section-title" style="display:flex;align-items:center;gap:.5rem">
-      <span style="font-size:1.5rem">{{ $catEmoji }}</span>
+      <span style="font-size:1.5rem">{!! $catIcon !!}</span>
       <span>រាយការណ៍ {{ $catLabel }}</span>
     </h1>
     <p class="section-sub">បំពេញ​ចំនួន​ Stock​ ដែល​នៅ​សល់​ ហើយ​ចុច​ "រក្សាទុក &amp; ផ្ញើ"</p>
@@ -50,7 +61,7 @@
   <div class="panel">
     <div class="panel-body">
       <div class="empty-state">
-        <div class="empty-icon">{{ $catEmoji }}</div>
+        <div class="empty-icon">{!! $catIcon !!}</div>
         <p style="font-weight:600">មិនទាន់មានទំនិញ {{ $catLabel }}</p>
         <a href="{{ route('stock.materials.create') }}?category={{ $category }}" class="btn btn-primary btn-sm mt-2">
           <i class="bi bi-plus-lg"></i> បន្ថែម Material
@@ -60,9 +71,25 @@
   </div>
 @else
 
-<form action="{{ route('stock.movements.daily-store') }}" method="POST" enctype="multipart/form-data">
+<form id="stockDailyForm" action="{{ route('stock.movements.daily-store') }}" method="POST" enctype="multipart/form-data">
   @csrf
   <input type="hidden" name="category" value="{{ $category }}">
+
+  <style>
+    .qty-box { display:flex; align-items:center; gap:.35rem; justify-content:center; }
+    .qty-step {
+      width:40px; height:44px; flex-shrink:0;
+      border:1.5px solid var(--border); background:var(--surface-2);
+      border-radius:10px; font-size:1.4rem; font-weight:700; line-height:1;
+      color:var(--text-secondary); cursor:pointer; user-select:none;
+      display:flex; align-items:center; justify-content:center;
+      transition:transform .08s, background .15s, border-color .15s, color .15s;
+    }
+    .qty-step:active { transform:scale(.9); }
+    .qty-step.dec:hover { border-color:#f87171; background:#fef2f2; color:#dc2626; }
+    .qty-step.inc:hover { border-color:#34d399; background:#ecfdf5; color:#059669; }
+    .qty-result .pill { font-weight:700; }
+  </style>
 
   <div class="row g-4">
     {{-- LEFT: qty inputs --}}
@@ -72,16 +99,24 @@
       <div class="panel mb-4">
         <div class="panel-body" style="display:flex;flex-wrap:wrap;gap:1rem;align-items:flex-end;padding:1rem">
           <div style="flex:1;min-width:160px">
-            <label class="form-label" style="font-size:.8rem">📅 ថ្ងៃខែ</label>
+            <label class="form-label" style="font-size:.8rem"><i class="bi bi-calendar3"></i> ថ្ងៃខែ</label>
             <input type="date" name="update_date" class="form-control form-control-sm"
                    value="{{ now()->format('Y-m-d') }}" style="font-family:var(--font-latin)" required>
           </div>
           <div style="flex:2;min-width:160px">
-            <label class="form-label" style="font-size:.8rem">👤 ឈ្មោះអ្នករាយការណ៍</label>
+            <label class="form-label" style="font-size:.8rem"><i class="bi bi-person-fill"></i> ឈ្មោះអ្នករាយការណ៍</label>
             <input type="text" name="performed_by" class="form-control form-control-sm"
                    placeholder="ឧ. លោក សុខ" value="{{ old('performed_by') }}">
           </div>
         </div>
+      </div>
+
+      {{-- Simple hint --}}
+      <div style="background:#eff6ff;border:1px solid #bfdbfe;border-radius:var(--radius);
+                  padding:.55rem .9rem;margin-bottom:1rem;font-size:.82rem;color:#1e40af;
+                  display:flex;gap:.5rem;align-items:center">
+        <i class="bi bi-hand-index-thumb" style="font-size:1rem"></i>
+        <span>ចុច <strong>−</strong> ឬ <strong>+</strong> ដើម្បីកែចំនួន ឬធ្វើប្រមាណវិធីផ្ទាល់ក្នុងប្រអប់ — ប្រព័ន្ធបង្ហាញ «ស្តុកថ្មី» ភ្លាមៗ</span>
       </div>
 
       {{-- Materials grouped by sub_type --}}
@@ -93,7 +128,7 @@
         <div class="panel mb-3">
           <div class="panel-header" style="padding:.65rem 1rem">
             <div class="ph-title">
-              <div class="ph-icon" style="{{ $catStyle }};width:30px;height:30px;font-size:.9rem">{{ $catEmoji }}</div>
+              <div class="ph-icon" style="{{ $catStyle }};width:30px;height:30px;font-size:.9rem">{!! $catIcon !!}</div>
               <span style="font-size:.88rem;font-weight:700">{{ $subType ?: $catLabel }}</span>
               <span class="badge badge-binding" style="font-family:var(--font-latin)">{{ $items->count() }}</span>
             </div>
@@ -112,16 +147,16 @@
 
                 {{-- Name --}}
                 <div style="flex:1;min-width:140px">
-                  <div style="font-weight:700;font-size:.9rem" data-name="{{ $m->name }}" data-name-km="{{ $m->name_km }}">
+                  <div style="font-weight:700;font-size:.9rem" data-name="{{ $m->name }}" data-name-km="{{ $m->name_km }}" data-size="{{ $m->size }}">
                     {{ $m->name }}
                     @if($m->name_km)
                       <span style="display:block;font-size:.78rem;font-weight:500;color:var(--text-secondary);font-family:var(--font-khmer)">{{ $m->name_km }}</span>
                     @endif
                   </div>
                   @if($isLow && $stock > 0)
-                    <div style="font-size:.7rem;color:#d97706">⚠️ Stock ទាប (Min: {{ number_format($m->min_stock,0) }})</div>
+                    <div style="font-size:.7rem;color:#d97706"><i class="bi bi-exclamation-triangle-fill"></i> Stock ទាប (Min: {{ number_format($m->min_stock,0) }})</div>
                   @elseif($stock <= 0)
-                    <div style="font-size:.7rem;color:#dc2626">🔴 អស់ Stock</div>
+                    <div style="font-size:.7rem;color:#dc2626"><i class="bi bi-x-circle-fill"></i> អស់ Stock</div>
                   @endif
                 </div>
 
@@ -137,17 +172,29 @@
                 {{-- Arrow --}}
                 <div style="color:var(--text-muted);font-size:1rem">→</div>
 
-                {{-- New qty input --}}
-                <div style="min-width:110px">
-                  <div style="font-size:.68rem;color:var(--text-muted);margin-bottom:.1rem;text-align:center">Stock ថ្មី ({{ $m->unit }})</div>
-                  <input type="number"
+                {{-- New qty — tap −/+ or type (calc supported) --}}
+                <div style="min-width:170px">
+                  <div style="font-size:.68rem;color:var(--text-muted);margin-bottom:.2rem;text-align:center">Stock ថ្មី ({{ $m->unit }})</div>
+                  <div class="qty-box">
+                    <button type="button" class="qty-step dec" tabindex="-1" aria-label="ដក">−</button>
+                    <input type="text"
+                           class="form-control qty-input"
+                           value="{{ number_format($stock, 0, '.', '') }}"
+                           data-original="{{ number_format($stock, 0, '.', '') }}"
+                           data-value="{{ number_format($stock, 0, '.', '') }}"
+                           inputmode="text"
+                           autocomplete="off"
+                           spellcheck="false"
+                           style="font-family:var(--font-latin);font-weight:800;font-size:1.15rem;text-align:center;width:84px;padding-left:.3rem;padding-right:.3rem">
+                    <button type="button" class="qty-step inc" tabindex="-1" aria-label="បន្ថែម">+</button>
+                  </div>
+                  <input type="hidden"
                          name="items[{{ $loop->parent->index * 100 + $loop->index }}][current_stock]"
-                         class="form-control qty-input"
-                         value="{{ number_format($stock, 0, '.', '') }}"
-                         min="0" step="1"
-                         data-original="{{ number_format($stock, 0, '.', '') }}"
-                         style="font-family:var(--font-latin);font-weight:800;font-size:1.1rem;text-align:center;width:110px"
-                         required>
+                         class="qty-value"
+                         value="{{ number_format($stock, 0, '.', '') }}">
+                  <div class="qty-result"
+                       style="font-size:.74rem;text-align:center;margin-top:.3rem;min-height:1.1em;
+                              font-family:var(--font-khmer);color:var(--text-muted)"></div>
                 </div>
               </div>
             @endforeach
@@ -276,6 +323,7 @@
 const category = '{{ $category }}';
 const catLabel = @json($catLabel);
 const catEmoji = '{{ $catEmoji }}';
+const nameFormat = '{{ $nameFormat }}'; // 'both', 'khmer', or 'english'
 const catTags  = {
   paper: '#Paper_Stock', film: '#Film_Stock',
   consumable: '#Consumable_Stock'
@@ -298,26 +346,129 @@ document.getElementById('dailyGroupSelect')?.addEventListener('change', syncGrou
 // Sync on page load (set defaults from first option)
 syncGroupSelection();
 
-// ── Highlight changed rows ─────────────────────────────────
+// ── Calculator-style stock input ───────────────────────────
+// Accepts: "-5" (subtract from current), "-1,-2" (subtract 1 then 2),
+//          "100-5-3" or "100" (absolute). Shows live result + delta.
+function evalStockExpr(expr, original) {
+  expr = (expr || '').trim();
+  if (expr === '') return { ok: false };
+
+  // Comma list → sum of signed deltas relative to the original stock
+  if (expr.includes(',')) {
+    const parts = expr.split(',').map(s => s.trim()).filter(s => s !== '');
+    let sum = 0;
+    for (const p of parts) {
+      if (!/^[-+]?\d+(\.\d+)?$/.test(p)) return { ok: false };
+      sum += parseFloat(p);
+    }
+    return { ok: true, value: Math.max(0, Math.round(original + sum)) };
+  }
+
+  // Only allow safe math characters
+  if (!/^[-+*/().\d\s]+$/.test(expr)) return { ok: false };
+
+  // Leading + or - means "relative to current stock"
+  let toEval = /^[+\-]/.test(expr) ? (original + '+(' + expr + ')') : expr;
+
+  try {
+    const val = Function('"use strict"; return (' + toEval + ');')();
+    if (typeof val !== 'number' || !isFinite(val)) return { ok: false };
+    return { ok: true, value: Math.max(0, Math.round(val)) };
+  } catch (e) {
+    return { ok: false };
+  }
+}
+
 document.querySelectorAll('.qty-input').forEach(inp => {
-  inp.addEventListener('input', () => {
-    const orig = parseFloat(inp.dataset.original) || 0;
-    const now  = parseFloat(inp.value) || 0;
-    if (Math.abs(now - orig) >= 1) {
-      inp.style.background  = '#fffbeb';
-      inp.style.borderColor = '#fbbf24';
+  const original = parseFloat(inp.dataset.original) || 0;
+  const box      = inp.parentElement;               // .qty-box
+  const wrap     = box.parentElement;               // outer cell
+  const hidden   = wrap.querySelector('.qty-value');
+  const result   = wrap.querySelector('.qty-result');
+
+  function render() {
+    const r = evalStockExpr(inp.value, original);
+
+    if (!r.ok) {
+      inp.style.borderColor = '#ef4444';
+      inp.style.background  = '#fef2f2';
+      inp.style.setProperty('color', '#b91c1c', 'important'); // Force dark red text
+      if (result) { result.style.color = '#ef4444'; result.innerHTML = 'សូមវាយលេខ'; }
+      return null;
+    }
+
+    const val   = r.value;
+    const delta = val - original;
+    if (hidden) hidden.value = val;
+    inp.dataset.value = val;
+
+    if (delta < 0) {
+      inp.style.background = '#fffbeb'; inp.style.borderColor = '#fbbf24';
+      inp.style.setProperty('color', '#b45309', 'important'); // Force dark amber text
+      result.style.color = '#b45309';
+      result.innerHTML = `ស្តុកថ្មី <span class="pill">${val.toLocaleString()}</span> · បានប្រើ ${Math.abs(delta).toLocaleString()}`;
+    } else if (delta > 0) {
+      inp.style.background = '#ecfdf5'; inp.style.borderColor = '#34d399';
+      inp.style.setProperty('color', '#047857', 'important'); // Force dark emerald text
+      result.style.color = '#15803d';
+      result.innerHTML = `ស្តុកថ្មី <span class="pill">${val.toLocaleString()}</span> · ចូលស្តុក ${delta.toLocaleString()}`;
     } else {
-      inp.style.background  = '';
-      inp.style.borderColor = '';
+      inp.style.background = ''; inp.style.borderColor = '';
+      inp.style.removeProperty('color'); // Reset to theme default
+      result.style.color = 'var(--text-muted)';
+      result.innerHTML = `ស្តុកថ្មី <span class="pill">${val.toLocaleString()}</span>`;
     }
     updatePreview();
+    return val;
+  }
+
+  function setAbsolute(v) { inp.value = Math.max(0, v); render(); }
+  function currentVal() { return parseFloat(hidden.value) || 0; }
+
+  // −/+ stepper buttons
+  box.querySelector('.dec')?.addEventListener('click', () => setAbsolute(currentVal() - 1));
+  box.querySelector('.inc')?.addEventListener('click', () => setAbsolute(currentVal() + 1));
+
+  inp.addEventListener('input', render);
+  // On leaving the field, resolve any expression to the final number (e.g. "-5" → 95)
+  inp.addEventListener('blur', () => { const v = render(); if (v !== null) inp.value = v; });
+  inp.addEventListener('keydown', e => {
+    if (e.key === 'Enter') { e.preventDefault(); const v = render(); if (v !== null) inp.value = v; inp.blur(); }
   });
+
+  render(); // initialise
 });
 
 // "Save only" — uncheck telegram before submit
 document.getElementById('saveOnlyBtn')?.addEventListener('click', () => {
   document.getElementById('sendToggle').checked = false;
 });
+
+// ── Prevent double-submit: show overlay + disable buttons on submit ──
+(function () {
+  const form = document.getElementById('stockDailyForm');
+  if (!form) return;
+  let submitted = false;
+
+  form.addEventListener('submit', function (e) {
+    // Block any second submit (double-click on either button)
+    if (submitted) {
+      e.preventDefault();
+      return;
+    }
+    submitted = true;
+
+    // Disable both submit buttons so they can't be clicked again
+    form.querySelectorAll('button[type="submit"]').forEach(b => {
+      b.disabled = true;
+      b.style.opacity = '.65';
+      b.style.cursor = 'not-allowed';
+    });
+
+    // Show the global full-screen spinner overlay
+    if (typeof showLoading === 'function') showLoading(true, 'កំពុងរក្សាទុក និងផ្ញើ...');
+  });
+})();
 
 // Toggle Telegram section visibility
 document.getElementById('sendToggle')?.addEventListener('change', e => {
@@ -340,16 +491,56 @@ function updatePreview() {
     `${catEmoji} ${catLabel} នៅសល់មានចំនួន:`,
   ];
 
+  let groupedItems = {};
+
   document.querySelectorAll('.qty-input').forEach(inp => {
     const nameEl = inp.closest('div[style*="display:flex"]')?.querySelector('[data-name]');
     const name   = nameEl?.dataset?.name    || '';
     const nameKm = nameEl?.dataset?.nameKm  || '';
-    const qty    = parseInt(inp.value) || 0;
-    // Get unit from the label above the input
-    const unitLabel = inp.previousElementSibling?.textContent?.match(/\(([^)]+)\)/)?.[1] || '';
-    const display = nameKm ? `${name} — ${nameKm}` : name;
-    lines.push(`- ${display} : ${qty.toLocaleString()}${unitLabel ? ' ' + unitLabel : ''}`);
+    const size   = nameEl?.dataset?.size    || '';
+    const qty    = parseInt(inp.dataset.value ?? inp.value) || 0;
+    // Get unit from the "Stock ថ្មី (unit)" label in this cell
+    const cell = inp.closest('.qty-box')?.parentElement;
+    const unitLabel = cell?.querySelector('div')?.textContent?.match(/\(([^)]+)\)/)?.[1] || '';
+    
+    // Apply language format setting
+    let display;
+    if (nameFormat === 'khmer') {
+      display = nameKm || name; // Khmer only
+    } else if (nameFormat === 'english') {
+      display = name; // English only
+    } else {
+      display = nameKm ? `${name} — ${nameKm}` : name; // Both (default)
+    }
+    
+    if (size !== '') {
+      display = display.replace(/ \((Large|Small|ធំ|តូច|Large Roll|Small Roll)\)/gi, '');
+    }
+    
+    const original = parseFloat(inp.dataset.original) || 0;
+    const delta = qty - original;
+    let usageText = '';
+    if (delta < 0) {
+      usageText = ` (បានប្រើ ${Math.abs(delta).toLocaleString()})`;
+    } else if (delta > 0) {
+      usageText = ` (ចូលស្តុក ${delta.toLocaleString()})`;
+    }
+    
+    const itemStr = `- ${display} : ${qty.toLocaleString()}${unitLabel ? ' ' + unitLabel : ''}${usageText}`;
+    
+    if (!groupedItems[size]) {
+      groupedItems[size] = [];
+    }
+    groupedItems[size].push(itemStr);
   });
+
+  for (const [size, items] of Object.entries(groupedItems)) {
+    if (size !== '' && category !== 'paper') {
+      lines.push('');
+      lines.push(`◎ ${size}:`);
+    }
+    lines = lines.concat(items);
+  }
 
   if (by) { lines.push(''); lines.push(`👤 ${by}`); }
   lines.push(catTag);

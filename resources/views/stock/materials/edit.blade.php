@@ -1,4 +1,4 @@
-﻿@extends('layouts.app')
+@extends('layouts.app')
 @section('title','កែប្រែ — '.$material->name)
 @section('page-title','Edit Material')
 
@@ -34,10 +34,10 @@
                 $isOtherCat = !in_array($currentCat, $knownCats);
               @endphp
               <select name="category" id="catSelect" class="form-select" required>
-                <option value="paper"      {{ $currentCat==='paper'?'selected':'' }}>📄 ក្រដាស (Paper)</option>
-                <option value="film"       {{ $currentCat==='film'?'selected':'' }}>🎞️ Film (ហ្វីម)</option>
-                <option value="consumable" {{ $currentCat==='consumable'?'selected':'' }}>🧴 Consumable (សម្ភារៈប្រើប្រាស់)</option>
-                <option value="other"      {{ $isOtherCat?'selected':'' }}>➕ ផ្សេងទៀត (Other)</option>
+                <option value="paper"      {{ $currentCat==='paper'?'selected':'' }}>ក្រដាស (Paper)</option>
+                <option value="film"       {{ $currentCat==='film'?'selected':'' }}>Laminate (ស្គុត)</option>
+                <option value="consumable" {{ $currentCat==='consumable'?'selected':'' }}>Consumable (សម្ភារៈប្រើប្រាស់)</option>
+                <option value="other"      {{ $isOtherCat?'selected':'' }}>ផ្សេងទៀត (Other)</option>
               </select>
             </div>
 

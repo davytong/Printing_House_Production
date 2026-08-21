@@ -4,7 +4,7 @@
 
 @section('content')
 <div class="d-flex justify-content-between align-items-center mb-4">
-  <h1 class="section-title">New Procurement Request</h1>
+  <h1 class="section-title">ស្នើរសុំទិញ — New Procurement Request</h1>
   <a href="{{ route('procurement.index') }}" class="btn btn-outline-secondary btn-sm"><i class="bi bi-arrow-left"></i> Back</a>
 </div>
 
@@ -16,53 +16,50 @@
   <div class="panel-header">
     <div class="ph-title">
       <div class="ph-icon" style="background:#dbeafe;color:#1d4ed8"><i class="bi bi-info-circle"></i></div>
-      <span>Request Info</span>
+      <span>ព័ត៌មានសំណើរ — Request Info</span>
     </div>
   </div>
   <div class="panel-body">
     <div class="row g-3">
       <div class="col-md-3">
-        <label class="form-label">Date *</label>
+        <label class="form-label">ថ្ងៃខែ — Date *</label>
         <input type="date" name="request_date" class="form-control" value="{{ old('request_date', date('Y-m-d')) }}" required>
       </div>
       <div class="col-md-3">
-        <label class="form-label">Requester *</label>
-        <input type="text" name="requester" class="form-control" value="{{ old('requester', session('user_name')) }}" placeholder="Your name" required>
+        <label class="form-label">អ្នកស្នើរសុំ — Requester *</label>
+        <input type="text" name="requester" id="requesterInput" class="form-control" value="{{ old('requester', session('user_name')) }}" placeholder="Your name" required>
       </div>
       <div class="col-md-3">
-        <label class="form-label">Department</label>
-        <input type="text" name="department" class="form-control" value="{{ old('department') }}" placeholder="e.g. Production">
+        <label class="form-label">នាយកដ្ឋាន — Department</label>
+        <input type="text" name="department" id="departmentInput" class="form-control" value="{{ old('department') }}" placeholder="e.g. Production">
       </div>
       <div class="col-md-3">
-        <label class="form-label">Supplier / Store *</label>
-        <input type="text" name="supplier_name" class="form-control" value="{{ old('supplier_name') }}" placeholder="Vendor name" required list="supplierList">
-        <datalist id="supplierList">
-          @foreach($suppliers as $s)<option value="{{ $s }}">@endforeach
-        </datalist>
+        <label class="form-label">អ្នកផ្គត់ផ្គង់ — Supplier *</label>
+        <input type="text" name="supplier_name" id="supplierInput" class="form-control" value="{{ old('supplier_name') }}" placeholder="Supplier or store name" required>
       </div>
       <div class="col-md-3">
-        <label class="form-label">Priority *</label>
+        <label class="form-label">អាទិភាព — Priority *</label>
         <select name="priority" class="form-select" required>
-          <option value="low" {{ old('priority')==='low'?'selected':'' }}>Low</option>
-          <option value="medium" {{ old('priority','medium')==='medium'?'selected':'' }}>Medium</option>
-          <option value="high" {{ old('priority')==='high'?'selected':'' }}>High</option>
-          <option value="urgent" {{ old('priority')==='urgent'?'selected':'' }}>Urgent</option>
+          <option value="low" {{ old('priority')==='low'?'selected':'' }}>🟢 Low — ទាប</option>
+          <option value="medium" {{ old('priority','medium')==='medium'?'selected':'' }}>🟡 Medium — មធ្យម</option>
+          <option value="high" {{ old('priority')==='high'?'selected':'' }}>🟠 High — ខ្ពស់</option>
+          <option value="urgent" {{ old('priority')==='urgent'?'selected':'' }}>🔴 Urgent — បន្ទាន់</option>
         </select>
       </div>
       <div class="col-md-3">
-        <label class="form-label">Due Date</label>
+        <label class="form-label">ថ្ងៃផុតកំណត់ — Due Date</label>
         <input type="date" name="due_date" class="form-control" value="{{ old('due_date') }}">
       </div>
       <div class="col-md-3">
-        <label class="form-label">Status</label>
+        <label class="form-label">ស្ថានភាព — Status</label>
         <select name="status" class="form-select">
-          <option value="pending" selected>Pending</option>
-          <option value="approved">Approved</option>
-          <option value="ordered">Ordered</option>
+          <option value="pending" selected>⏳ Pending — រង់ចាំ</option>
+          <option value="approved">✅ Approved — អនុម័ត</option>
+          <option value="ordered">📦 Ordered — បញ្ជាទិញរួច</option>
         </select>
       </div>
       <div class="col-md-3">
-        <label class="form-label">Remarks</label>
+        <label class="form-label">កំណត់សម្គាល់ — Remarks</label>
         <input type="text" name="remarks" class="form-control" value="{{ old('remarks') }}" placeholder="Notes...">
       </div>
     </div>
@@ -140,8 +137,30 @@
 </form>
 @endsection
 
+@push('head')
+<script src="/js/smart-forms.js"></script>
+@endpush
+
 @push('scripts')
 <script>
+// Initialize smart autocomplete
+document.addEventListener('DOMContentLoaded', function() {
+  // Supplier autocomplete
+  smartForms.initAutocomplete('supplierInput', '/api/autocomplete/suppliers', {
+    placeholder: 'Type supplier name...'
+  });
+  
+  // Department autocomplete  
+  smartForms.initAutocomplete('departmentInput', '/api/autocomplete/departments', {
+    placeholder: 'Type department...'
+  });
+  
+  // Requester autocomplete
+  smartForms.initAutocomplete('requesterInput', '/api/autocomplete/requesters', {
+    placeholder: 'Type your name...'
+  });
+});
+
 const categories = {consumable:'Consumable',spare_part:'Spare Part',component:'Component',service:'Service',equipment:'Equipment',other:'Other'};
 const units = {pcs:'Pcs',pack:'Pack',roll:'Roll',can:'Can',bottle:'Bottle',box:'Box',kg:'Kg',liter:'Liter',sheet:'Sheet',set:'Set'};
 let itemIdx = 0;
@@ -152,8 +171,8 @@ function addItem() {
   tr.id = `item-${i}`;
   tr.innerHTML = `
     <td style="font-family:var(--font-latin);font-size:.78rem;color:var(--text-muted);text-align:center">${i+1}</td>
-    <td><input type="text" name="items[${i}][item_name]" class="form-control form-control-sm" placeholder="Item name" required></td>
-    <td><select name="items[${i}][category]" class="form-select form-select-sm">${Object.entries(categories).map(([v,l])=>`<option value="${v}">${l}</option>`).join('')}</select></td>
+    <td><input type="text" name="items[${i}][item_name]" id="itemName${i}" class="form-control form-control-sm" placeholder="Type to search..." required></td>
+    <td><select name="items[${i}][category]" id="itemCategory${i}" class="form-select form-select-sm">${Object.entries(categories).map(([v,l])=>`<option value="${v}">${l}</option>`).join('')}</select></td>
     <td><input type="number" name="items[${i}][quantity]" class="form-control form-control-sm item-qty" min="0.01" step="1" value="1" style="font-family:var(--font-latin)" required></td>
     <td><select name="items[${i}][unit]" class="form-select form-select-sm">${Object.entries(units).map(([v,l])=>`<option value="${v}">${l}</option>`).join('')}</select></td>
     <td><input type="number" name="items[${i}][unit_price]" class="form-control form-control-sm item-price" min="0" step="0.01" style="font-family:var(--font-latin)" placeholder="0.00"></td>
@@ -163,7 +182,13 @@ function addItem() {
   `;
   document.getElementById('itemsBody').appendChild(tr);
   updateItemCount();
-  tr.querySelector('input')?.focus();
+
+  // Initialize smart autocomplete for item name
+  const itemNameInput = document.getElementById(`itemName${i}`);
+  const categorySelect = document.getElementById(`itemCategory${i}`);
+  smartForms.initItemNameAutocomplete(itemNameInput, categorySelect);
+
+  itemNameInput?.focus();
 
   // Bind calc
   tr.querySelector('.item-qty').addEventListener('input', () => calcRow(tr));

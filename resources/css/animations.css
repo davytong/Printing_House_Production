@@ -1,0 +1,322 @@
+/**
+ * Animation & Transition Library
+ * Modern, smooth animations for printing-tracker
+ */
+
+/* ═══════════════════════════════════════════════════════
+   FADE ANIMATIONS
+═══════════════════════════════════════════════════════ */
+@keyframes fadeIn {
+    from { opacity: 0; }
+    to { opacity: 1; }
+}
+
+@keyframes fadeInUp {
+    from {
+        opacity: 0;
+        transform: translateY(20px);
+    }
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
+}
+
+@keyframes fadeInDown {
+    from {
+        opacity: 0;
+        transform: translateY(-20px);
+    }
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
+}
+
+@keyframes slideInRight {
+    from {
+        opacity: 0;
+        transform: translateX(30px);
+    }
+    to {
+        opacity: 1;
+        transform: translateX(0);
+    }
+}
+
+/* ═══════════════════════════════════════════════════════
+   UTILITY CLASSES
+═══════════════════════════════════════════════════════ */
+.animate-fade-in {
+    animation: fadeIn 0.4s ease-out;
+}
+
+.animate-fade-in-up {
+    animation: fadeInUp 0.5s ease-out;
+}
+
+.animate-fade-in-down {
+    animation: fadeInDown 0.5s ease-out;
+}
+
+.animate-slide-in-right {
+    animation: slideInRight 0.4s ease-out;
+}
+
+/* Stagger animations for lists */
+.stagger-animation > * {
+    opacity: 0;
+    animation: fadeInUp 0.5s ease-out forwards;
+}
+
+.stagger-animation > *:nth-child(1) { animation-delay: 0.05s; }
+.stagger-animation > *:nth-child(2) { animation-delay: 0.1s; }
+.stagger-animation > *:nth-child(3) { animation-delay: 0.15s; }
+.stagger-animation > *:nth-child(4) { animation-delay: 0.2s; }
+.stagger-animation > *:nth-child(5) { animation-delay: 0.25s; }
+.stagger-animation > *:nth-child(6) { animation-delay: 0.3s; }
+.stagger-animation > *:nth-child(7) { animation-delay: 0.35s; }
+.stagger-animation > *:nth-child(8) { animation-delay: 0.4s; }
+
+/* ═══════════════════════════════════════════════════════
+   HOVER EFFECTS
+═══════════════════════════════════════════════════════ */
+.hover-lift {
+    transition: transform 0.3s cubic-bezier(0.34, 1.56, 0.64, 1), box-shadow 0.3s ease;
+}
+
+.hover-lift:hover {
+    transform: translateY(-4px);
+    box-shadow: 0 8px 25px rgba(0, 0, 0, 0.1);
+}
+
+.hover-scale {
+    transition: transform 0.2s ease;
+}
+
+.hover-scale:hover {
+    transform: scale(1.05);
+}
+
+.hover-glow {
+    transition: box-shadow 0.3s ease;
+}
+
+.hover-glow:hover {
+    box-shadow: 0 0 20px rgba(79, 70, 229, 0.3);
+}
+
+/* ═══════════════════════════════════════════════════════
+   MOBILE OPTIMIZATIONS
+═══════════════════════════════════════════════════════ */
+@media (max-width: 768px) {
+    /* Disable expensive animations on mobile for performance */
+    .kpi-card::after {
+        display: none;
+    }
+    
+    /* Faster animations on mobile */
+    .animate-fade-in-up {
+        animation-duration: 0.3s;
+    }
+    
+    /* Reduce transform effects */
+    .hover-lift:hover {
+        transform: translateY(-2px);
+    }
+}
+
+/* ═══════════════════════════════════════════════════════
+   LOADING STATES
+═══════════════════════════════════════════════════════ */
+.pulse {
+    animation: pulse 2s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+}
+
+@keyframes pulse {
+    0%, 100% {
+        opacity: 1;
+    }
+    50% {
+        opacity: 0.5;
+    }
+}
+
+/* Button loading state */
+.btn-loading {
+    position: relative;
+    pointer-events: none;
+    opacity: 0.7;
+}
+
+.btn-loading::after {
+    content: '';
+    position: absolute;
+    width: 16px;
+    height: 16px;
+    top: 50%;
+    left: 50%;
+    margin-left: -8px;
+    margin-top: -8px;
+    border: 2px solid transparent;
+    border-top-color: currentColor;
+    border-radius: 50%;
+    animation: spin 0.6s linear infinite;
+}
+
+/* ═══════════════════════════════════════════════════════
+   PAGE TRANSITIONS
+═══════════════════════════════════════════════════════ */
+.page-enter {
+    animation: fadeInUp 0.4s ease-out;
+}
+
+.panel-enter {
+    animation: fadeIn 0.3s ease-out;
+}
+
+/* ═══════════════════════════════════════════════════════
+   TOAST NOTIFICATIONS
+═══════════════════════════════════════════════════════ */
+.toast-notification {
+    animation: slideInRight 0.3s ease-out;
+    box-shadow: 0 10px 40px rgba(0, 0, 0, 0.15);
+}
+
+@keyframes slideOutRight {
+    to {
+        opacity: 0;
+        transform: translateX(100%);
+    }
+}
+
+.toast-notification.hiding {
+    animation: slideOutRight 0.3s ease-in forwards;
+}
+
+/* ═══════════════════════════════════════════════════════
+   SMOOTH SCROLL
+═══════════════════════════════════════════════════════ */
+@media (prefers-reduced-motion: no-preference) {
+    html {
+        scroll-behavior: smooth;
+    }
+}
+
+/* ═══════════════════════════════════════════════════════
+   FOCUS STATES (Accessibility)
+═══════════════════════════════════════════════════════ */
+.form-control:focus,
+.form-select:focus,
+.btn:focus {
+    outline: 2px solid var(--primary);
+    outline-offset: 2px;
+}
+
+/* Remove outline for mouse users, keep for keyboard users */
+*:focus:not(:focus-visible) {
+    outline: none;
+}
+
+*:focus-visible {
+    outline: 2px solid var(--primary);
+    outline-offset: 2px;
+}
+
+/* ═══════════════════════════════════════════════════════
+   MOBILE-SPECIFIC IMPROVEMENTS
+═══════════════════════════════════════════════════════ */
+@media (max-width: 768px) {
+    /* Larger tap targets */
+    .btn,
+    .form-control,
+    .form-select,
+    a {
+        min-height: 44px;
+        min-width: 44px;
+    }
+    
+    /* Better spacing on mobile */
+    .mb-4 {
+        margin-bottom: 1.5rem !important;
+    }
+    
+    .gap-3 {
+        gap: 1rem !important;
+    }
+    
+    /* Mobile-friendly tables */
+    .data-table {
+        font-size: 0.85rem;
+    }
+    
+    .data-table thead th,
+    .data-table tbody td {
+        padding: 0.6rem 0.5rem;
+    }
+    
+    /* Stack KPI cards on mobile */
+    .kpi-card {
+        padding: 1.25rem;
+    }
+    
+    .kpi-card .kpi-value {
+        font-size: 1.8rem;
+    }
+}
+
+/* ═══════════════════════════════════════════════════════
+   TOUCH-FRIENDLY ENHANCEMENTS
+═══════════════════════════════════════════════════════ */
+@media (hover: none) and (pointer: coarse) {
+    /* Touch device - Remove hover effects */
+    .hover-lift:hover {
+        transform: none;
+    }
+    
+    /* Add active state instead */
+    .btn:active,
+    .sidebar-nav a:active {
+        transform: scale(0.97);
+    }
+    
+    /* Larger click areas */
+    .btn-icon {
+        width: 44px;
+        height: 44px;
+        font-size: 1.1rem;
+    }
+}
+
+/* ═══════════════════════════════════════════════════════
+   DARK MODE SUPPORT (Optional)
+═══════════════════════════════════════════════════════ */
+[data-theme="dark"] .loading-overlay-alpine .lo-card {
+    background: rgba(30, 41, 59, 0.98);
+    color: #f1f5f9;
+}
+
+[data-theme="dark"] .skeleton {
+    background: linear-gradient(90deg, rgba(51, 65, 85, 0.3) 25%, rgba(71, 85, 105, 0.5) 50%, rgba(51, 65, 85, 0.3) 75%);
+}
+
+/* ═══════════════════════════════════════════════════════
+   PERFORMANCE OPTIMIZATIONS
+═══════════════════════════════════════════════════════ */
+/* Use will-change for animations */
+.kpi-card {
+    will-change: transform, box-shadow;
+}
+
+/* Optimize transforms */
+.hover-lift,
+.hover-scale {
+    will-change: transform;
+}
+
+/* Force GPU acceleration */
+.animate-fade-in-up,
+.animate-slide-in-right {
+    transform: translateZ(0);
+    backface-visibility: hidden;
+}

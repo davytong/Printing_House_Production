@@ -28,7 +28,7 @@
         <div style="font-size:.9rem;color:var(--text-muted)">{{ $material->unit }} in stock</div>
         @if($material->isLowStock())
           <div style="margin-top:.75rem;padding:.4rem .85rem;background:#fffbeb;border:1px solid #fde68a;border-radius:999px;display:inline-block;font-size:.78rem;color:#92400e;font-weight:600">
-            ⚠️ Stock ទាប (Min: {{ number_format($material->min_stock, 1) }})
+            <i class="bi bi-exclamation-triangle-fill"></i> Stock ទាប (Min: {{ number_format($material->min_stock, 1) }})
           </div>
         @endif
       </div>
