@@ -231,8 +231,11 @@ class PrintRequestController extends Controller
     // ─────────────────────────────────────────────
     // Approve
     // ─────────────────────────────────────────────
-    public function approve(Request $request, PrintRequest $printRequest): RedirectResponse
+    public function approve(Request $request, $printRequest): RedirectResponse
     {
+        if (!($printRequest instanceof PrintRequest)) {
+            $printRequest = PrintRequest::findOrFail($printRequest);
+        }
         if ($printRequest->status !== 'pending') {
             return back()->with('error', 'ស្នើរសុំនេះមិនអាច approve បានទេ');
         }

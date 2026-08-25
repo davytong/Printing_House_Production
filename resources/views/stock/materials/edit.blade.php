@@ -119,10 +119,17 @@
             </div>
 
             <div class="col-md-4">
-              <label class="form-label">Min Stock *</label>
+              <label class="form-label">Low Threshold (Min) *</label>
               <input type="number" name="min_stock" class="form-control"
                      value="{{ old('min_stock',$material->min_stock) }}" min="0" step="1"
                      style="font-family:var(--font-latin)" required>
+            </div>
+
+            <div class="col-md-4">
+              <label class="form-label">Critical Threshold <span style="font-size:.72rem;color:var(--text-muted)">(ស្រេចចិត្ត)</span></label>
+              <input type="number" name="critical_stock" class="form-control"
+                     value="{{ old('critical_stock',$material->critical_stock) }}" min="0" step="1"
+                     placeholder="ឧ. 1" style="font-family:var(--font-latin)">
             </div>
 
             <div class="col-md-4">

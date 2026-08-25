@@ -192,11 +192,18 @@
       <div style="display:flex; gap:1rem; align-items:flex-start;">
         <div class="kpi-icon-wrap"><i class="bi bi-boxes"></i></div>
         <div>
-          <div class="kpi-val">{{ $lowStockItems }}</div>
+          <div class="kpi-val">{{ $totalLowStockMaterials ?? $lowStockItems }}</div>
           <div class="kpi-title">Stock ទាប — Low Stock</div>
-          <div class="kpi-desc">{{ $pendingPOs }} PO រង់ចាំ (Pending POs)</div>
+          <div class="kpi-desc" style="font-size:.78rem">
+            @if(($criticalCount ?? 0) > 0)
+              <span style="color:#ef4444;font-weight:700">🔴 {{ $criticalCount }} Critical</span> ·
+            @endif
+            <span style="color:#f59e0b;font-weight:700">🟡 {{ $lowCount ?? 0 }} ជិតអស់</span> ·
+            <span style="color:#6b7280;font-weight:700">⚫ {{ $outOfStockCount ?? 0 }} អស់</span>
+          </div>
         </div>
       </div>
+      <a href="{{ route('stock.materials.index') }}?stock=low" class="stretched-link" title="View Low Stock Items"></a>
     </div>
   </div>
 </div>

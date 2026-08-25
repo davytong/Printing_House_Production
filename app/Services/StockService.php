@@ -50,18 +50,23 @@ class StockService
             $moves = $movesByMaterial->get($m->id, collect());
             $stock = Material::currentStockFromMovements($moves);
             return [
-                'id'           => $m->id,
-                'code'         => $m->code,
-                'name'         => $m->name,
-                'category'     => $m->category,
-                'sub_type'     => $m->sub_type,
-                'size'         => $m->size,
-                'unit'         => $m->unit,
-                'current_stock'=> $stock,
-                'min_stock'    => (float) $m->min_stock,
-                'is_low'       => $stock <= (float) $m->min_stock,
-                'location'     => $m->location,
-                'unit_cost'    => (float) $m->unit_cost,
+                'id'             => $m->id,
+                'code'           => $m->code,
+                'name'           => $m->name,
+                'name_km'        => $m->name_km,
+                'category'       => $m->category,
+                'sub_type'       => $m->sub_type,
+                'size'           => $m->size,
+                'unit'           => $m->unit,
+                'current_stock'  => $stock,
+                'min_stock'      => (float) $m->min_stock,
+                'critical_stock' => $m->critical_stock !== null ? (float) $m->critical_stock : null,
+                'is_low'         => $m->isLowStock($stock),
+                'stock_status'   => $m->stockStatus($stock),
+                'status_label'   => $m->stockStatusLabel($stock),
+                'status_badge'   => $m->stockStatusBadge($stock),
+                'location'       => $m->location,
+                'unit_cost'      => (float) $m->unit_cost,
             ];
         });
     }
@@ -79,7 +84,8 @@ class StockService
 
         return $materials->filter(function (Material $m) use ($movesByMaterial) {
             $stock = Material::currentStockFromMovements($movesByMaterial->get($m->id, collect()));
-            return $stock <= (float) $m->min_stock;
+            $m->calculated_stock = $stock;
+            return $m->isLowStock($stock);
         })->values();
     }
 

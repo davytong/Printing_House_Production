@@ -11,7 +11,7 @@ use Tests\TestCase;
 
 class PurchaseOrderTest extends TestCase
 {
-    use RefreshDatabase;
+    use \Illuminate\Foundation\Testing\DatabaseTransactions;
 
     /**
      * Test user can create a purchase order.
@@ -100,7 +100,7 @@ class PurchaseOrderTest extends TestCase
 
         $po = PurchaseOrder::create([
             'supplier_id' => $supplier->id,
-            'status' => 'approved',
+            'status' => 'sent',
             'order_date' => now()->toDateString(),
             'currency' => 'USD',
             'total_amount' => 225.0,

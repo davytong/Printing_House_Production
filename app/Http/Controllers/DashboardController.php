@@ -128,6 +128,32 @@ class DashboardController extends Controller
             ->orderBy('scheduled_date')
             ->take(5)->get();
 
+        // ── Material Low Stock Summary (Category & Critical breakdown) ──
+        $allActiveMaterials = \App\Models\Material::where('status', 'active')->get();
+        $movesByMat = \App\Models\StockMovement::whereIn('material_id', $allActiveMaterials->pluck('id'))->get()->groupBy('material_id');
+
+        $criticalCount  = 0;
+        $lowCount       = 0;
+        $outOfStockCount= 0;
+        $materialLowStockAlerts = collect();
+
+        foreach ($allActiveMaterials as $m) {
+            $stock = \App\Models\Material::currentStockFromMovements($movesByMat->get($m->id, collect()));
+            $m->calculated_stock = $stock;
+            $status = $m->stockStatus($stock);
+
+            if ($status !== 'NORMAL') {
+                if ($status === 'OUT_OF_STOCK') $outOfStockCount++;
+                elseif ($status === 'CRITICAL') $criticalCount++;
+                elseif ($status === 'LOW_STOCK') $lowCount++;
+
+                $materialLowStockAlerts->push($m);
+            }
+        }
+
+        $totalLowStockMaterials = $materialLowStockAlerts->count();
+        $materialLowStockAlerts = $materialLowStockAlerts->take(5);
+
         // ── Telegram Bot Status ──────────────────
         $telegramToken = config('services.telegram.bot_token');
         $telegramAlertChatId = \App\Models\Setting::get('alert_chat_id', config('services.telegram.alert_chat_id'));
@@ -141,6 +167,7 @@ class DashboardController extends Controller
             'trendLabels', 'trendValues',
             'pendingRequests', 'urgentRequests', 'recentRequests',
             'lowStockItems', 'inventoryAlerts',
+            'totalLowStockMaterials', 'criticalCount', 'lowCount', 'outOfStockCount', 'materialLowStockAlerts',
             'operationalMachines', 'totalMachines', 'maintenanceDue', 'breakdowns',
             'pendingPOs', 'overduePOs',
             'unreadNotifs', 'notifications',

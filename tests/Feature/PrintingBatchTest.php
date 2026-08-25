@@ -9,16 +9,17 @@ use Tests\TestCase;
 
 class PrintingBatchTest extends TestCase
 {
-    use RefreshDatabase;
+    use \Illuminate\Foundation\Testing\DatabaseTransactions;
 
     /**
      * Test starting a new batch with cloned targets.
      */
     public function test_can_start_new_batch_cloning_targets(): void
     {
-        // 1. Create initial active batch
+        ProductionBatch::clearCache();
+        ProductionBatch::where('status', 'active')->update(['status' => 'completed']);
         $oldBatch = ProductionBatch::create([
-            'name' => 'Old Batch',
+            'name' => 'Old Active Batch',
             'status' => 'active',
             'started_at' => now()->subDays(5),
         ]);
@@ -52,7 +53,7 @@ class PrintingBatchTest extends TestCase
         $this->assertNotNull($oldBatch->completed_at);
 
         // Assert new active batch is created
-        $newBatch = ProductionBatch::where('status', 'active')->first();
+        $newBatch = ProductionBatch::where('status', 'active')->latest('id')->first();
         $this->assertNotNull($newBatch);
         $this->assertEquals('New Batch 2026', $newBatch->name);
 
@@ -95,7 +96,7 @@ class PrintingBatchTest extends TestCase
 
         $response->assertStatus(302);
 
-        $newBatch = ProductionBatch::where('status', 'active')->first();
+        $newBatch = ProductionBatch::where('status', 'active')->latest('id')->first();
         $this->assertNotNull($newBatch);
         $this->assertEquals('Fresh Batch', $newBatch->name);
 

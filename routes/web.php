@@ -160,6 +160,16 @@ Route::get('/tasks/kanban', [App\Http\Controllers\ProductionTaskController::clas
 
 // ── Stock Management ──────────────────────────────────────
 Route::prefix('stock')->name('stock.')->group(function () {
+    // Low Stock Alert & Leader Notification Routes
+    Route::post('/low-stock/check',                  [App\Http\Controllers\Stock\LowStockNotificationController::class, 'check'])->name('low-stock.check');
+    Route::post('/low-stock/preview',                [App\Http\Controllers\Stock\LowStockNotificationController::class, 'preview'])->name('low-stock.preview');
+    Route::post('/low-stock/send',                   [App\Http\Controllers\Stock\LowStockNotificationController::class, 'send'])->name('low-stock.send');
+    Route::get('/low-stock/history',                [App\Http\Controllers\Stock\LowStockNotificationController::class, 'history'])->name('low-stock.history');
+    Route::get('/low-stock/notifications/{id}',     [App\Http\Controllers\Stock\LowStockNotificationController::class, 'show'])->name('low-stock.show');
+    Route::post('/low-stock/notifications/{id}/retry', [App\Http\Controllers\Stock\LowStockNotificationController::class, 'retry'])->name('low-stock.retry');
+    Route::get('/low-stock/settings',               [App\Http\Controllers\Stock\LowStockNotificationController::class, 'settings'])->name('low-stock.settings');
+    Route::post('/low-stock/settings',              [App\Http\Controllers\Stock\LowStockNotificationController::class, 'updateSettings'])->name('low-stock.update-settings');
+
     // Materials CRUD
     Route::post('/materials/alert',       [MaterialController::class, 'sendLowStockAlert'])->name('materials.alert');
     Route::resource('materials', MaterialController::class);

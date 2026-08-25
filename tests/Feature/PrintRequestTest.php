@@ -9,7 +9,7 @@ use Tests\TestCase;
 
 class PrintRequestTest extends TestCase
 {
-    use RefreshDatabase;
+    use \Illuminate\Foundation\Testing\DatabaseTransactions;
 
     /**
      * Test user can create a print request.

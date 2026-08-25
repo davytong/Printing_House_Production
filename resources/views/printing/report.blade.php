@@ -172,14 +172,16 @@
             <i class="bi bi-info-circle"></i> របាយការណ៍នឹងត្រូវបានផ្ញើដោយស្វ័យប្រវត្តិទៅ Telegram group ដែលបានជ្រើសរើស
           </div>
         </div>
-        <div class="modal-footer">
-          <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">បោះបង់</button>
-          <button type="submit" class="btn btn-success" id="telegramSendBtn">
-            <span class="tg-btn-label"><i class="bi bi-send"></i> ផ្ញើឥឡូវ</span>
+        <div class="modal-footer d-flex flex-column flex-sm-row justify-content-end gap-2 p-3">
+          <button type="submit" class="btn btn-success px-4 py-2.5 fw-bold order-1 order-sm-2 w-100 w-sm-auto" id="telegramSendBtn">
+            <span class="tg-btn-label"><i class="bi bi-send-fill me-1"></i> ផ្ញើឥឡូវ (Send Now)</span>
             <span class="tg-btn-loading" style="display:none">
-              <span class="spinner-border spinner-border-sm" role="status" aria-hidden="true"></span>
+              <span class="spinner-border spinner-border-sm me-1" role="status" aria-hidden="true"></span>
               កំពុងផ្ញើ...
             </span>
+          </button>
+          <button type="button" class="btn btn-outline-secondary px-4 py-2.5 order-2 order-sm-1 w-100 w-sm-auto" data-bs-dismiss="modal">
+            <i class="bi bi-x-circle me-1"></i> បោះបង់ (Cancel)
           </button>
         </div>
       </form>

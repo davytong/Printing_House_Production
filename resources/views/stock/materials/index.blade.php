@@ -8,7 +8,13 @@
     <h1 class="section-title">វត្ថុធាតុដើម</h1>
     <p class="section-sub">ក្រដាស · Film · Offset Materials</p>
   </div>
-  <div class="d-flex gap-2">
+  <div class="d-flex flex-wrap gap-2">
+    <a href="{{ route('stock.low-stock.settings') }}" class="btn btn-outline-secondary btn-sm" title="Low Stock Settings">
+      <i class="bi bi-gear-fill me-1"></i> កំណត់ Low Stock
+    </a>
+    <a href="{{ route('stock.low-stock.history') }}" class="btn btn-outline-info btn-sm" title="Notification History">
+      <i class="bi bi-clock-history me-1"></i> ប្រវត្តិផ្ញើសារ
+    </a>
     <form action="{{ route('stock.materials.alert') }}" method="POST" style="display:inline" data-confirm="តើអ្នកពិតជាចង់ផ្ញើសារប្រកាសស្តុកទាបទៅកាន់ Telegram មែនទេ?">
       @csrf
       <button type="submit" class="btn btn-warning btn-sm">
@@ -120,13 +126,7 @@
               {{ number_format($m->min_stock, 1) }}
             </td>
             <td style="text-align:center">
-              @if($m->calculated_stock <= 0)
-                <span class="badge badge-pending">អស់</span>
-              @elseif($m->is_low)
-                <span class="badge badge-progress">ទាប</span>
-              @else
-                <span class="badge badge-done">ធម្មតា</span>
-              @endif
+              {!! $m->stockStatusBadge($m->calculated_stock) !!}
             </td>
             <td style="text-align:center; white-space:nowrap;">
               <a href="{{ route('stock.materials.show', $m) }}" class="btn btn-ghost btn-sm" title="View">

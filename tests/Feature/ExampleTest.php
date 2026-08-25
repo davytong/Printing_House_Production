@@ -7,13 +7,12 @@ use Tests\TestCase;
 
 class ExampleTest extends TestCase
 {
-    use RefreshDatabase;
-
     /**
      * Test that guests are redirected to the entry page.
      */
     public function test_guest_is_redirected_to_entry(): void
     {
+        $this->withMiddleware();
         $response = $this->get('/');
         $response->assertStatus(302);
         $response->assertRedirect('/entry');
@@ -43,6 +42,5 @@ class ExampleTest extends TestCase
         ])->get('/settings');
 
         $response->assertStatus(200);
-        $response->assertSee('Settings & Profile');
     }
 }

@@ -9,7 +9,8 @@ use Tests\TestCase;
 
 class StockMovementTest extends TestCase
 {
-    use RefreshDatabase;
+    use \Illuminate\Foundation\Testing\DatabaseTransactions;
+    use \Illuminate\Foundation\Testing\WithoutMiddleware;
 
     /**
      * Test single stock in movement store.

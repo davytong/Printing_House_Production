@@ -778,7 +778,7 @@
             </div>
           </div>
 
-          <div class="d-flex gap-2">
+          <div class="d-flex flex-wrap gap-2">
             {{-- Purpose assignment --}}
             <form action="{{ route('telegram.update-purpose', $baseGroup) }}" method="POST" style="display:flex;align-items:center;gap:.3rem">
               @csrf
@@ -857,7 +857,7 @@
                     </div>
                   </div>
 
-                  <div class="d-flex gap-2">
+                  <div class="d-flex flex-wrap gap-2">
                     {{-- Purpose --}}
                     <form action="{{ route('telegram.update-purpose', $topic) }}" method="POST" style="display:flex;align-items:center">
                       @csrf

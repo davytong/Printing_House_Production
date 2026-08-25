@@ -193,7 +193,6 @@ class MovementController extends Controller
                             'Daily update', $data['performed_by'] ?? null,
                             null, $data['update_date'],
                         );
-                        $this->alertService->checkAndAlert($material);
                         $count++;
                     }
 
@@ -222,18 +221,25 @@ class MovementController extends Controller
             return back()->with('error', 'ការធ្វើបច្ចុប្បន្នភាពបានបរាជ័យ: ' . $e->getMessage())->withInput();
         }
 
-        // Send to Telegram
+        // Send to Telegram (after response so browser redirects instantly)
         if ($request->filled('chat_id') && $request->input('send_telegram')) {
+            $chatId = $request->input('chat_id');
             $threadId = $request->integer('message_thread_id') ?: null;
-            $this->sendDailyTelegram(
-                $data['category'],
-                $data['update_date'],
-                $data['performed_by'] ?? null,
-                $updated,
-                $request->input('chat_id'),
-                $imagePaths,
-                $threadId,
-            );
+            $category = $data['category'];
+            $updateDate = $data['update_date'];
+            $performedBy = $data['performed_by'] ?? null;
+
+            dispatch(function() use ($category, $updateDate, $performedBy, $updated, $chatId, $imagePaths, $threadId) {
+                app(\App\Http\Controllers\Stock\MovementController::class)->sendDailyTelegram(
+                    $category,
+                    $updateDate,
+                    $performedBy,
+                    $updated,
+                    $chatId,
+                    $imagePaths,
+                    $threadId
+                );
+            })->afterResponse();
         }
 
         // Get category label from settings for success message

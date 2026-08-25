@@ -62,7 +62,9 @@ class PrintingController extends Controller
 
         $newBatch = \DB::transaction(function() use ($request, $current, $mode) {
             // 1. Complete the current batch (its book rows stay intact as history)
-            $current->update(['status' => 'completed', 'completed_at' => now()]);
+            if ($current) {
+                $current->update(['status' => 'completed', 'completed_at' => now()]);
+            }
 
             // 2. Create the new active batch
             $count = ProductionBatch::count();

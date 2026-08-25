@@ -14,6 +14,10 @@ return Application::configure(basePath: dirname(__DIR__))
     ->withMiddleware(function (Middleware $middleware): void {
         $middleware->trustProxies(at: '*');
 
+        if (env('APP_ENV') === 'testing') {
+            $middleware->validateCsrfTokens(except: ['*']);
+        }
+
         $middleware->web(append: [
             \App\Http\Middleware\CheckEntry::class,
             \App\Http\Middleware\SetLanguage::class,

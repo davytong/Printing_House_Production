@@ -9,7 +9,7 @@ class Material extends Model
 {
     protected $fillable = [
         'code', 'name', 'name_km', 'category', 'sub_type', 'size',
-        'unit', 'min_stock', 'location', 'unit_cost',
+        'unit', 'min_stock', 'critical_stock', 'location', 'unit_cost',
         'status', 'last_alerted_at', 'notes', 'icon',
     ];
 
@@ -25,6 +25,7 @@ class Material extends Model
 
     protected $casts = [
         'min_stock'      => 'decimal:2',
+        'critical_stock' => 'decimal:2',
         'unit_cost'      => 'decimal:2',
         'last_alerted_at'=> 'datetime',
     ];
@@ -92,9 +93,46 @@ class Material extends Model
         return $in - $out;
     }
 
-    public function isLowStock(): bool
+    public function isLowStock(?float $stock = null): bool
     {
-        return $this->currentStock() <= (float) $this->min_stock;
+        $stock = $stock ?? $this->currentStock();
+        return $stock <= (float) $this->min_stock;
+    }
+
+    public function stockStatus(?float $stock = null): string
+    {
+        $stock = $stock ?? $this->currentStock();
+        if ($stock <= 0) {
+            return 'OUT_OF_STOCK';
+        }
+        $critical = $this->critical_stock !== null ? (float) $this->critical_stock : null;
+        if ($critical !== null && $stock <= $critical) {
+            return 'CRITICAL';
+        }
+        if ($stock <= (float) $this->min_stock) {
+            return 'LOW_STOCK';
+        }
+        return 'NORMAL';
+    }
+
+    public function stockStatusLabel(?float $stock = null): string
+    {
+        return match ($this->stockStatus($stock)) {
+            'OUT_OF_STOCK' => 'អស់ស្តុក (Out of Stock)',
+            'CRITICAL'     => 'ស្តុកសល់តិចខ្លាំង (Critical)',
+            'LOW_STOCK'    => 'ស្តុកជិតអស់ (Low Stock)',
+            'NORMAL'       => 'ធម្មតា (Normal)',
+        };
+    }
+
+    public function stockStatusBadge(?float $stock = null): string
+    {
+        return match ($this->stockStatus($stock)) {
+            'OUT_OF_STOCK' => '<span class="badge bg-dark text-white"><i class="bi bi-x-circle-fill me-1"></i> ⚫ អស់ស្តុក</span>',
+            'CRITICAL'     => '<span class="badge bg-danger"><i class="bi bi-exclamation-octagon-fill me-1"></i> 🔴 Critical</span>',
+            'LOW_STOCK'    => '<span class="badge bg-warning text-dark"><i class="bi bi-exclamation-triangle-fill me-1"></i> 🟡 ជិតអស់</span>',
+            'NORMAL'       => '<span class="badge bg-success"><i class="bi bi-check-circle-fill me-1"></i> 🟢 ធម្មតា</span>',
+        };
     }
 
     public function categoryLabel(): string

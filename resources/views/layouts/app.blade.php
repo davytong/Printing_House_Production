@@ -24,10 +24,10 @@
 <meta name="csrf-token" content="{{ csrf_token() }}">
 <title>@yield('title', 'ប្រព័ន្ធគ្រប់គ្រងការបោះពុម្ព')</title>
 
-<!-- Google Fonts: Outfit (Latin) + Kantumruy Pro (Khmer) -->
+<!-- Google Fonts: Kantumruy Pro (Khmer) + Noto Sans Khmer + Outfit (Latin) -->
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=Outfit:wght@400;500;600;700;800&family=Kantumruy+Pro:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Kantumruy+Pro:ital,wght@0,400..700;1,400..700&family=Noto+Sans+Khmer:wght@400;500;600;700&family=Outfit:wght@400;500;600;700;800&display=swap" rel="stylesheet">
 
 <!-- Bootstrap 5 -->
 <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet">
@@ -89,7 +89,7 @@
 
   /* Typography */
   --font-latin:  'Outfit', sans-serif;
-  --font-khmer:  'Outfit', 'Kantumruy Pro', sans-serif;
+  --font-khmer:  'Kantumruy Pro', 'Noto Sans Khmer', 'Outfit', system-ui, -apple-system, sans-serif;
 
   /* Transitions */
   --ease: .2s ease;
@@ -159,11 +159,16 @@ body {
   -webkit-font-smoothing: antialiased;
 }
 
-/* Numbers & Latin chars use Poppins automatically */
-span, td, th, p, h1, h2, h3, h4, button, label, input, select {
+/* Khmer Typography & Input overrides */
+span, td, th, p, h1, h2, h3, h4, button, label, input, select, textarea, div {
   font-family: var(--font-khmer);
 }
-.latin, code, .badge-num, td.num, .stat-value {
+.font-monospace, textarea.font-monospace, div.font-monospace, .form-control.font-monospace {
+  font-family: 'Kantumruy Pro', 'Outfit', monospace !important;
+  letter-spacing: 0.01em;
+  line-height: 1.6;
+}
+.latin, .badge-num, td.num, .stat-value {
   font-family: var(--font-latin) !important;
 }
 
@@ -1979,6 +1984,77 @@ html {
 }
 @media (max-width: 640px) {
   .lang-btn .lang-text { display: none; }
+}
+
+/* ── System-wide Mobile & Tablet Layout Fixes ── */
+@media (max-width: 768px) {
+  html, body {
+    overflow-x: hidden !important;
+    max-width: 100vw !important;
+  }
+  .main-wrap {
+    overflow-x: hidden !important;
+    width: 100% !important;
+    max-width: 100vw !important;
+  }
+  .topbar {
+    padding: .5rem .75rem !important;
+    gap: .4rem !important;
+    max-width: 100vw !important;
+    flex-wrap: wrap !important;
+  }
+  .topbar-badge, #live-time {
+    display: none !important;
+  }
+  .page-content {
+    padding: .85rem .6rem 90px !important;
+    overflow-x: hidden !important;
+    max-width: 100vw !important;
+  }
+  /* Enforce flex-wrap on all header action rows and button groups */
+  .d-flex.justify-content-between,
+  .d-flex.align-items-start,
+  .d-flex.align-items-center,
+  .ph-title,
+  .panel-header,
+  .section-header {
+    flex-wrap: wrap !important;
+    gap: .5rem !important;
+  }
+  /* Responsive Tables & Data Wrappers */
+  .tbl-wrap, .table-responsive {
+    width: 100% !important;
+    max-width: 100% !important;
+    overflow-x: auto !important;
+    -webkit-overflow-scrolling: touch !important;
+    display: block !important;
+    margin-bottom: 1rem !important;
+  }
+  /* Responsive Grid Cards & Panels */
+  .panel, .card, .kpi-card {
+    max-width: 100% !important;
+    box-sizing: border-box !important;
+  }
+  /* Modals on Phones */
+  .modal-dialog {
+    margin: .5rem auto 5.5rem !important;
+    max-width: calc(100vw - 1rem) !important;
+  }
+  .modal-footer {
+    display: flex !important;
+    flex-direction: column-reverse !important;
+    gap: .5rem !important;
+    padding: .85rem !important;
+  }
+  .modal-footer .btn {
+    width: 100% !important;
+    margin: 0 !important;
+  }
+  .modal-footer .btn-primary,
+  .modal-footer .btn-success,
+  .modal-footer .btn-warning {
+    order: -1 !important;
+  }
 }
 </style>
 

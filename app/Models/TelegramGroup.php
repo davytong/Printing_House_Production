@@ -56,6 +56,10 @@ class TelegramGroup extends Model
             default      => 'general',
         };
 
-        return static::forPurpose($purpose) ?? static::forPurpose('general');
+        return static::forPurpose($purpose)
+            ?? static::where('topic_name', 'LIKE', "%{$category}%")->first()
+            ?? static::where('name', 'LIKE', "%{$category}%")->first()
+            ?? static::forPurpose('general')
+            ?? static::first();
     }
 }

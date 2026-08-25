@@ -168,8 +168,11 @@ class PurchaseOrderController extends Controller
         return back()->with('success', 'ស្ថានភាពបានធ្វើបច្ចុប្បន្នភាព');
     }
 
-    public function receive(Request $request, PurchaseOrder $purchaseOrder): RedirectResponse
+    public function receive(Request $request, $purchaseOrder): RedirectResponse
     {
+        if (!($purchaseOrder instanceof PurchaseOrder)) {
+            $purchaseOrder = PurchaseOrder::findOrFail($purchaseOrder);
+        }
         $request->validate([
             'items'                     => 'required|array',
             'items.*.id'                => 'required|exists:purchase_order_items,id',

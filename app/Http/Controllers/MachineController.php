@@ -147,32 +147,31 @@ class MachineController extends Controller
         return back()->with('success', 'គ្រោងការថែទាំត្រូវបានកំណត់');
     }
 
-    public function completeMaintenance(Request $request, MaintenanceSchedule $schedule): RedirectResponse
+    public function completeMaintenance(Request $request, $schedule): RedirectResponse
     {
-        $data = $request->validate([
-            'completed_date' => 'required|date',
-            'downtime_hours' => 'nullable|integer|min:0',
-            'findings'       => 'nullable|string|max:1000',
-            'parts_used'     => 'nullable|string|max:500',
-            'cost'           => 'nullable|numeric|min:0',
-        ]);
+        if (!($schedule instanceof MaintenanceSchedule)) {
+            $schedule = MaintenanceSchedule::findOrFail($schedule);
+        }
+        $completedDate = $request->input('completed_date') ?: now()->toDateString();
 
         $schedule->update([
             'status'         => 'completed',
-            'completed_date' => $data['completed_date'],
-            'downtime_hours' => $data['downtime_hours'] ?? 0,
-            'findings'       => $data['findings'] ?? null,
-            'parts_used'     => $data['parts_used'] ?? null,
-            'cost'           => $data['cost'] ?? 0,
+            'completed_date' => $completedDate,
+            'downtime_hours' => (int)$request->input('downtime_hours', 0),
+            'findings'       => $request->input('findings'),
+            'parts_used'     => $request->input('parts_used'),
+            'cost'           => (float)$request->input('cost', 0),
         ]);
 
         $machine = $schedule->machine;
-        $machine->update([
-            'last_maintenance' => $data['completed_date'],
-            'next_maintenance' => Carbon::parse($data['completed_date'])
-                ->addDays($machine->maintenance_interval_days)->toDateString(),
-            'status'           => 'operational',
-        ]);
+        if ($machine) {
+            $interval = (int)($machine->maintenance_interval_days ?: 30);
+            $machine->update([
+                'last_maintenance' => $completedDate,
+                'next_maintenance' => Carbon::parse($completedDate)->addDays($interval)->toDateString(),
+                'status'           => 'operational',
+            ]);
+        }
 
         return back()->with('success', 'ការថែទាំត្រូវបានបញ្ចប់ — ម៉ាស៊ីន Operational');
     }

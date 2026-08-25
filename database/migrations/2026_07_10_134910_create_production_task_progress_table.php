@@ -11,7 +11,8 @@ return new class extends Migration
      */
     public function up(): void
     {
-        Schema::create('production_task_progress', function (Blueprint $table) {
+        if (!Schema::hasTable('production_task_progress')) {
+            Schema::create('production_task_progress', function (Blueprint $table) {
             $table->id();
             $table->integer('year');
             $table->integer('month');
@@ -27,6 +28,7 @@ return new class extends Migration
             $table->index(['year', 'month', 'day', 'process']);
             $table->index(['task_name']);
         });
+        }
     }
 
     /**

@@ -149,6 +149,9 @@
                 <div style="flex:1;min-width:140px">
                   <div style="font-weight:700;font-size:.9rem" data-name="{{ $m->name }}" data-name-km="{{ $m->name_km }}" data-size="{{ $m->size }}">
                     {{ $m->name }}
+                    @if($m->size)
+                      <span class="badge bg-primary-subtle text-primary border border-primary-subtle ms-1" style="font-size:.7rem;vertical-align:middle;font-family:var(--font-latin)">{{ $m->size }}</span>
+                    @endif
                     @if($m->name_km)
                       <span style="display:block;font-size:.78rem;font-weight:500;color:var(--text-secondary);font-family:var(--font-khmer)">{{ $m->name_km }}</span>
                     @endif
@@ -234,17 +237,17 @@
               </div>
             @else
               {{-- Auto-assigned destination based on category --}}
-              @if($defaultGroup)
+              @php
+                $activeGroup = $defaultGroup ?? $telegramGroups->first();
+              @endphp
+              @if($activeGroup)
                 <div style="background:#dcfce7;border:1px solid #86efac;border-radius:var(--radius);
                             padding:.7rem .9rem;margin-bottom:.75rem;font-size:.82rem;color:#14532d">
                   <i class="bi bi-check-circle-fill me-1"></i>
-                  <strong>Send to:</strong> {{ $defaultGroup->displayLabel() }}
+                  <strong>Send to:</strong> <span id="selectedGroupLabel">{{ $activeGroup->displayLabel() }}</span>
                 </div>
-                <input type="hidden" name="chat_id" id="dailyChatId" value="{{ $defaultGroup->chat_id }}">
-                <input type="hidden" name="message_thread_id" id="dailyThreadId" value="{{ $defaultGroup->message_thread_id ?? '' }}">
-              @else
-                <input type="hidden" name="chat_id" id="dailyChatId" value="{{ $telegramGroups->first()?->chat_id }}">
-                <input type="hidden" name="message_thread_id" id="dailyThreadId" value="{{ $telegramGroups->first()?->message_thread_id ?? '' }}">
+                <input type="hidden" name="chat_id" id="dailyChatId" value="{{ $activeGroup->chat_id }}">
+                <input type="hidden" name="message_thread_id" id="dailyThreadId" value="{{ $activeGroup->message_thread_id ?? '' }}">
               @endif
 
               {{-- Optional override --}}
@@ -256,7 +259,7 @@
                   <select id="dailyGroupSelect" class="form-select form-select-sm">
                     @foreach($telegramGroups as $g)
                       <option value="{{ $g->chat_id }}|{{ $g->message_thread_id ?? '' }}"
-                        {{ isset($defaultGroup) && $g->id === $defaultGroup->id ? 'selected' : '' }}>
+                        {{ $activeGroup && $g->id === $activeGroup->id ? 'selected' : '' }}>
                         {{ $g->displayLabel() }}
                         @if($g->purpose) [{{ $g->purpose }}] @endif
                       </option>
@@ -315,6 +318,59 @@
   </div>
 </form>
 @endif
+
+{{-- Low Stock Alert Confirmation Modal --}}
+<div class="modal fade" id="lowStockAlertModal" tabindex="-1" aria-hidden="true" data-bs-backdrop="static">
+  <div class="modal-dialog modal-dialog-centered modal-dialog-scrollable modal-lg">
+    <div class="modal-content border-warning shadow-lg">
+      <div class="modal-header bg-warning-subtle text-dark p-3">
+        <h5 class="modal-title d-flex align-items-center gap-2 fw-bold fs-6 fs-sm-5 mb-0">
+          <i class="bi bi-exclamation-triangle-fill text-warning fs-4 flex-shrink-0"></i>
+          <span>Low Stock Alert — របាយការណ៍ស្តុក ជិតអស់</span>
+        </h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+      </div>
+      <div class="modal-body p-3 p-sm-4">
+        <p class="fs-6 fw-bold text-danger mb-3">
+          <i class="bi bi-info-circle-fill me-1"></i> មានសម្ភារៈមួយចំនួនមានស្តុកជិតអស់ ឬអស់ពីស្តុក។
+        </p>
+
+        {{-- Low stock items preview table --}}
+        <div class="table-responsive mb-3 rounded border">
+          <table class="table table-sm table-bordered align-middle mb-0" style="font-size:.85rem; min-width: 460px;">
+            <thead class="table-light">
+              <tr>
+                <th>ឈ្មោះទំនិញ</th>
+                <th>ផ្នែក</th>
+                <th>Stock ថ្មី</th>
+                <th>Low Threshold</th>
+                <th>ស្ថានភាព (Status)</th>
+              </tr>
+            </thead>
+            <tbody id="lowStockModalItemsTable">
+              {{-- Filled dynamically by JS --}}
+            </tbody>
+          </table>
+        </div>
+
+        <div class="p-3 bg-light border rounded text-center my-2">
+          <p class="fs-6 fw-bold mb-1" style="color:var(--text-main)">
+            តើអ្នកចង់ផ្ញើរសារទៅអ្នកដឹកនាំអំពី "របាយការណ៍ស្តុក ជិតអស់" ដែរឬទេ?
+          </p>
+          <span class="text-muted fs-8 d-block">(Do you want to send a Low Stock report notification to the Leader Group?)</span>
+        </div>
+      </div>
+      <div class="modal-footer p-3 d-flex flex-column flex-sm-row justify-content-between gap-2">
+        <button type="button" class="btn btn-outline-secondary w-100 w-sm-auto px-4 order-2 order-sm-1" id="btnSkipLeaderAlert">
+          <i class="bi bi-x-circle me-1"></i> មិនផ្ញើ (No)
+        </button>
+        <button type="button" class="btn btn-primary w-100 w-sm-auto px-4 fw-bold order-1 order-sm-2" id="btnProceedLeaderAlert">
+          <i class="bi bi-send-fill me-1"></i> ផ្ញើសារ (Yes, Send)
+        </button>
+      </div>
+    </div>
+  </div>
+</div>
 
 @endsection
 
@@ -444,29 +500,133 @@ document.getElementById('saveOnlyBtn')?.addEventListener('click', () => {
   document.getElementById('sendToggle').checked = false;
 });
 
-// ── Prevent double-submit: show overlay + disable buttons on submit ──
+// ── Low Stock Alert & Leader Notification Workflow ─────────────
 (function () {
   const form = document.getElementById('stockDailyForm');
   if (!form) return;
-  let submitted = false;
+
+  let allowDirectSubmit = false;
+  let detectedLowStockItems = [];
 
   form.addEventListener('submit', function (e) {
-    // Block any second submit (double-click on either button)
-    if (submitted) {
-      e.preventDefault();
+    if (allowDirectSubmit) {
+      // Show loading overlay
+      if (typeof showLoading === 'function') showLoading(true, 'កំពុងរក្សាទុក និងផ្ញើ...');
       return;
     }
-    submitted = true;
 
-    // Disable both submit buttons so they can't be clicked again
-    form.querySelectorAll('button[type="submit"]').forEach(b => {
-      b.disabled = true;
-      b.style.opacity = '.65';
-      b.style.cursor = 'not-allowed';
+    e.preventDefault();
+
+    // Gather item values from form
+    const items = [];
+    document.querySelectorAll('.qty-input').forEach(inp => {
+      const wrap = inp.closest('div[style*="display:flex"]');
+      const matIdInput = wrap?.querySelector('input[name*="[material_id]"]');
+      if (matIdInput) {
+        items.push({
+          material_id: parseInt(matIdInput.value),
+          current_stock: parseFloat(inp.dataset.value ?? inp.value) || 0,
+        });
+      }
     });
 
-    // Show the global full-screen spinner overlay
-    if (typeof showLoading === 'function') showLoading(true, 'កំពុងរក្សាទុក និងផ្ញើ...');
+    if (items.length === 0) {
+      allowDirectSubmit = true;
+      form.submit();
+      return;
+    }
+
+    // Call check API
+    fetch('{{ route("stock.low-stock.check") }}', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'X-CSRF-TOKEN': '{{ csrf_token() }}'
+      },
+      body: JSON.stringify({ items: items })
+    })
+    .then(res => res.json())
+    .then(data => {
+      if (data.has_low_stock && data.items && data.items.length > 0) {
+        if (typeof showLoading === 'function') showLoading(false);
+        detectedLowStockItems = data.items;
+        renderLowStockModalTable(data.items);
+
+        const alertModal = new bootstrap.Modal(document.getElementById('lowStockAlertModal'));
+        alertModal.show();
+      } else {
+        // No low stock items -> direct submit
+        allowDirectSubmit = true;
+        if (typeof showLoading === 'function') showLoading(true, 'កំពុងរក្សាទុក...');
+        form.submit();
+      }
+    })
+    .catch(err => {
+      console.error('Low stock check failed:', err);
+      allowDirectSubmit = true;
+      form.submit();
+    });
+  });
+
+  function renderLowStockModalTable(items) {
+    const tbody = document.getElementById('lowStockModalItemsTable');
+    if (!tbody) return;
+    tbody.innerHTML = '';
+
+    items.forEach(it => {
+      const tr = document.createElement('tr');
+      const nameStr = it.name_km ? `${it.name} (${it.name_km})` : it.name;
+      const sizeStr = it.size ? ` (${it.size})` : '';
+      const stockStr = `${it.current_stock} ${it.unit}`;
+
+      tr.innerHTML = `
+        <td class="fw-bold">${nameStr}${sizeStr}</td>
+        <td><span class="badge bg-light text-dark border">${it.category_label || it.category}</span></td>
+        <td class="fw-bold text-danger">${stockStr}</td>
+        <td>${it.low_stock_threshold} ${it.unit}</td>
+        <td>${it.status_badge}</td>
+      `;
+      tbody.appendChild(tr);
+    });
+  }
+
+  // Handle "មិនផ្ញើ" (No / Skip)
+  document.getElementById('btnSkipLeaderAlert')?.addEventListener('click', function () {
+    const alertModalEl = document.getElementById('lowStockAlertModal');
+    const alertModal = bootstrap.Modal.getInstance(alertModalEl);
+    if (alertModal) alertModal.hide();
+
+    allowDirectSubmit = true;
+    form.submit();
+  });
+
+  // Handle "ផ្ញើសារ" (Yes / Send Leader Alert & Submit directly)
+  document.getElementById('btnProceedLeaderAlert')?.addEventListener('click', function () {
+    const alertModalEl = document.getElementById('lowStockAlertModal');
+    const alertModal = bootstrap.Modal.getInstance(alertModalEl);
+    if (alertModal) alertModal.hide();
+
+    const updateDate = document.querySelector('[name=update_date]')?.value || '';
+    const performedBy = document.querySelector('[name=performed_by]')?.value || '';
+
+    // Send Telegram alert in background (non-blocking)
+    fetch('{{ route("stock.low-stock.send") }}', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'X-CSRF-TOKEN': '{{ csrf_token() }}'
+      },
+      body: JSON.stringify({
+        items: detectedLowStockItems,
+        report_date: updateDate,
+        performed_by: performedBy,
+        category: category
+      })
+    }).catch(err => console.error('Low stock alert error:', err));
+
+    allowDirectSubmit = true;
+    if (typeof showLoading === 'function') showLoading(true, 'កំពុងរក្សាទុក...');
+    form.submit();
   });
 })();
 
@@ -475,6 +635,26 @@ document.getElementById('sendToggle')?.addEventListener('change', e => {
   const opts = document.getElementById('telegramOptions');
   opts.style.opacity       = e.target.checked ? '1' : '.4';
   opts.style.pointerEvents = e.target.checked ? '' : 'none';
+});
+
+// Sync selected group dropdown with hidden inputs and green destination banner
+document.getElementById('dailyGroupSelect')?.addEventListener('change', function() {
+  const parts = this.value.split('|');
+  const chatId = parts[0] || '';
+  const threadId = parts[1] || '';
+  
+  const chatIdInp = document.getElementById('dailyChatId');
+  const threadIdInp = document.getElementById('dailyThreadId');
+  if (chatIdInp) chatIdInp.value = chatId;
+  if (threadIdInp) threadIdInp.value = threadId;
+
+  const selectedOption = this.options[this.selectedIndex];
+  if (selectedOption) {
+    const rawText = selectedOption.text;
+    const labelText = rawText.replace(/\[.*?\]/g, '').trim();
+    const labelEl = document.getElementById('selectedGroupLabel');
+    if (labelEl) labelEl.textContent = labelText;
+  }
 });
 
 // ── Build Telegram text preview ────────────────────────────

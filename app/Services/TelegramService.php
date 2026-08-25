@@ -19,11 +19,10 @@ class TelegramService
     /**
      * HTTP client with forced DNS — fixes XAMPP/Apache DNS resolution issues.
      */
-    private function http(int $timeout = 30): \Illuminate\Http\Client\PendingRequest
+    private function http(int $timeout = 8): \Illuminate\Http\Client\PendingRequest
     {
-        return Http::timeout($timeout)->withOptions([
-            'curl' => [CURLOPT_RESOLVE => ['api.telegram.org:443:149.154.167.220']],
-        ]);
+        return Http::timeout($timeout)
+            ->connectTimeout(4);
     }
 
     /**
