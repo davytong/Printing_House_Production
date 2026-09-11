@@ -114,6 +114,7 @@ return [
     'paper_report' => 'Paper Report',
     'film_report' => 'Film Report',
     'consumable_report' => 'Consumable Report',
+    'stock_out' => 'Stock Out',
     'materials_list' => 'Materials List',
     
     // Production

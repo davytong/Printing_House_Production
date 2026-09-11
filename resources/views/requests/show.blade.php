@@ -42,9 +42,12 @@
       </button>
     @endif
     @if($request->status === 'approved')
+      <a href="{{ route('schedule.index', ['open_wizard' => 1, 'request_id' => $request->id]) }}" class="btn btn-sm text-white" style="background: linear-gradient(135deg, #6366f1, #4f46e5); box-shadow: 0 4px 12px rgba(79,70,229,0.25);">
+        <i class="bi bi-lightning-charge-fill me-1"></i> រៀបចំកាលវិភាគ (Smart Plan)
+      </a>
       <form action="{{ route('requests.status',$request) }}" method="POST">
         @csrf <input type="hidden" name="status" value="in_production">
-        <button class="btn btn-primary btn-sm">
+        <button class="btn btn-outline-primary btn-sm">
           <i class="bi bi-play-circle"></i> ចាប់ផ្ដើមផលិត
         </button>
       </form>

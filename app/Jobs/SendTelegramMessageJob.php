@@ -17,12 +17,13 @@ class SendTelegramMessageJob implements ShouldQueue
     public function __construct(
         public string $chatId,
         public string $text,
-        public ?int $threadId = null
+        public ?int $threadId = null,
+        public ?string $parseMode = null
     ) {}
 
     public function handle(TelegramService $telegramService): void
     {
-        $telegramService->sendMessage($this->chatId, $this->text, $this->threadId);
+        $telegramService->sendMessage($this->chatId, $this->text, $this->threadId, $this->parseMode);
     }
 
     public function failed(\Throwable $exception): void

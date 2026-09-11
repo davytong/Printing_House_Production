@@ -27,8 +27,14 @@
     </p>
   </div>
   <div class="d-flex gap-2 flex-wrap">
-    <button type="button" class="btn btn-success btn-sm" data-bs-toggle="modal" data-bs-target="#telegramModal">
-      <i class="bi bi-telegram"></i> Send Telegram
+    <button type="button" class="btn btn-success btn-sm fw-bold shadow-sm" onclick="scrollToStudio()">
+      <i class="bi bi-camera-fill me-1"></i> Telegram Studio
+    </button>
+    <button type="button" class="btn btn-outline-success btn-sm fw-bold" data-bs-toggle="modal" data-bs-target="#telegramModal">
+      <i class="bi bi-telegram me-1"></i> Quick Send (អត្ថបទ)
+    </button>
+    <button type="button" class="btn btn-outline-primary btn-sm" data-bs-toggle="modal" data-bs-target="#previewModal">
+      <i class="bi bi-eye me-1"></i> Preview
     </button>
     <a href="{{ route('printing.index') }}" class="btn btn-outline-secondary btn-sm">
       <i class="bi bi-arrow-left"></i> ត្រឡប់ទៅគ្រប់គ្រង
@@ -37,7 +43,7 @@
 </div>
 
 {{-- ════════════════════════════════════════════
-     PREVIEW MODAL (Simplified)
+     PREVIEW MODAL (Full / Summary Preview)
 ════════════════════════════════════════════ --}}
 <div class="modal fade" id="previewModal" tabindex="-1">
   <div class="modal-dialog modal-fullscreen p-sm-4 p-2">
@@ -57,7 +63,7 @@
             <div class="alert alert-info" role="alert" style="font-size:.85rem">
               <i class="bi bi-info-circle-fill"></i> <strong>របៀបប្រើប្រាស់:</strong>
               <ol class="mb-0 mt-2" style="padding-left:1.2rem">
-                <li>ជ្រើស Level (ឬទុកទាំងអស់)</li>
+                <li>ជ្រើស Level និង អ្នកទទួល</li>
                 <li>រង់ចាំ Preview ផ្ទុក</li>
                 <li>ចុច "Copy (Mobile)" ដើម្បី copy</li>
               </ol>
@@ -75,6 +81,28 @@
                     <option value="{{ $g }}">{{ $g }}</option>
                   @endforeach
                 @endisset
+              </select>
+            </div>
+
+            {{-- Audience Filter --}}
+            <div class="mb-3">
+              <label class="form-label" style="font-size:.9rem;font-weight:600">
+                <i class="bi bi-people"></i> អ្នកទទួល (Audience)
+              </label>
+              <select id="previewAudienceFilter" class="form-select" onchange="loadPreviewWithFilter()">
+                <option value="group">1. In Group (ជូនឯកឧត្តមបណ្ឌិត ឯកឧត្តម លោកជំទាវ និងសមាជិក...)</option>
+                <option value="individual">2. Individual to HE (ជូនឯកឧត្តមបណ្ឌិត)</option>
+              </select>
+            </div>
+
+            {{-- Format Filter --}}
+            <div class="mb-3">
+              <label class="form-label" style="font-size:.9rem;font-weight:600">
+                <i class="bi bi-card-text"></i> ទម្រង់ (Format)
+              </label>
+              <select id="previewFormatFilter" class="form-select" onchange="loadPreviewWithFilter()">
+                <option value="full">លម្អិតទាំងអស់ (Full)</option>
+                <option value="compact">បូកសរុបសង្ខេប (Summary)</option>
               </select>
             </div>
             
@@ -127,49 +155,77 @@
 </div>
 
 {{-- ════════════════════════════════════════════
-     TELEGRAM SEND MODAL
+     TELEGRAM SEND MODAL (Quick Text Send)
 ════════════════════════════════════════════ --}}
 <div class="modal fade" id="telegramModal" tabindex="-1">
   <div class="modal-dialog modal-dialog-centered">
     <div class="modal-content" style="border-radius: 20px; border: 1px solid rgba(255,255,255,0.8); box-shadow: 0 25px 50px -12px rgba(16, 185, 129, 0.25); background: linear-gradient(145deg, #ffffff 0%, #f8fafc 100%);">
       <div class="modal-header" style="background: linear-gradient(135deg, #d1fae5 0%, #ecfdf5 100%); border-radius: 20px 20px 0 0; border-bottom: 1px solid #a7f3d0; padding: 1.25rem 1.5rem;">
-        <h5 class="modal-title" style="font-weight: 800; color: #065f46; letter-spacing: -0.01em;"><i class="bi bi-telegram text-success me-2" style="font-size: 1.2rem;"></i> ផ្ញើរបាយការណ៍ទៅ Telegram</h5>
+        <h5 class="modal-title" style="font-weight: 800; color: #065f46; letter-spacing: -0.01em;">
+          <i class="bi bi-telegram text-success me-2" style="font-size: 1.2rem;"></i> ផ្ញើរបាយការណ៍អត្ថបទទៅ Telegram
+        </h5>
         <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
       </div>
       <form id="telegramForm" action="{{ route('printing.send-telegram') }}" method="POST">
         @csrf
-        <div class="modal-body" style="padding: 1.75rem;">
-          <div class="mb-4">
-            <label class="form-label" style="font-weight: 700; color: #334155;">ថ្ងៃរបាយការណ៍</label>
-            <input type="date" name="date" class="form-control" value="{{ today()->toDateString() }}" required style="background: #f8fafc; border-radius: 10px; padding: 0.75rem;">
+        <div class="modal-body" style="padding: 1.5rem 1.75rem;">
+          <div class="mb-3">
+            <label class="form-label" style="font-weight: 700; color: #334155; font-size: 0.88rem;">ថ្ងៃរបាយការណ៍</label>
+            <input type="date" name="date" class="form-control" value="{{ today()->toDateString() }}" required style="background: #f8fafc; border-radius: 10px; padding: 0.65rem;">
           </div>
-          <div class="mb-4">
-            <label class="form-label" style="font-weight: 700; color: #334155;">ទម្រង់</label>
-            <select name="format" class="form-select" style="background: #f8fafc; border-radius: 10px; padding: 0.75rem;">
-              <option value="compact">Compact (សម្រាប់ Telegram)</option>
-              <option value="full">Full (លម្អិត)</option>
+          
+          <div class="mb-3">
+            <label class="form-label" style="font-weight: 700; color: #334155; font-size: 0.88rem;">អ្នកទទួល (Audience)</label>
+            <select name="audience" class="form-select" style="background: #f8fafc; border-radius: 10px; padding: 0.65rem;">
+              <option value="group">1. In Group (ជូនឯកឧត្តមបណ្ឌិត ឯកឧត្តម លោកជំទាវ និងសមាជិក...)</option>
+              <option value="individual">2. Individual to HE (ជូនឯកឧត្តមបណ្ឌិត)</option>
+              <option value="both">3. Both (ផ្ញើទាំងពីរ Group & Individual)</option>
             </select>
           </div>
-          <div class="mb-4">
-            <label class="form-label" style="font-weight: 700; color: #334155;">ជ្រើសរើស Level (កម្រិត)</label>
-            <select name="grade" class="form-select" style="background: #f8fafc; border-radius: 10px; padding: 0.75rem;">
+
+          <div class="mb-3">
+            <label class="form-label" style="font-weight: 700; color: #334155; font-size: 0.88rem;">ទម្រង់ (Format)</label>
+            <select name="format" class="form-select" style="background: #f8fafc; border-radius: 10px; padding: 0.65rem;">
+              <option value="compact">Compact (បូកសរុបសង្ខេប)</option>
+              <option value="full">Full (លម្អិតទាំងអស់)</option>
+            </select>
+          </div>
+
+          <div class="mb-3">
+            <label class="form-label" style="font-weight: 700; color: #334155; font-size: 0.88rem;">ជ្រើសរើស Level (កម្រិត)</label>
+            <select name="grade" class="form-select" style="background: #f8fafc; border-radius: 10px; padding: 0.65rem;">
               <option value="">— គ្រប់ Level (All Levels) —</option>
               @foreach($grades as $g)
                 <option value="{{ $g }}">{{ $g }}</option>
               @endforeach
             </select>
           </div>
-          <div class="mb-4">
-            <label class="form-label" style="font-weight: 700; color: #334155;">ផ្ញើទៅក្រុម</label>
-            <select name="group_id" class="form-select" style="background: #f8fafc; border-radius: 10px; padding: 0.75rem;">
+
+          <div class="mb-3">
+            <label class="form-label" style="font-weight: 700; color: #334155; font-size: 0.88rem;">ផ្ញើទៅក្រុម Telegram</label>
+            <select name="group_id" class="form-select" style="background: #f8fafc; border-radius: 10px; padding: 0.65rem;">
               <option value="">ផ្ញើទៅគ្រប់ក្រុម (Active)</option>
               @foreach($telegramGroups as $group)
                 <option value="{{ $group->id }}">{{ $group->name }}</option>
               @endforeach
             </select>
           </div>
-          <div class="alert alert-info" style="font-size:.85rem">
-            <i class="bi bi-info-circle"></i> របាយការណ៍នឹងត្រូវបានផ្ញើដោយស្វ័យប្រវត្តិទៅ Telegram group ដែលបានជ្រើសរើស
+
+          <div class="form-check form-switch mb-3 p-2 px-4" style="background: #eff6ff; border-radius: 10px; border: 1px solid #bfdbfe;">
+            <input type="hidden" name="is_monospace" value="0">
+            <input class="form-check-input ms-0 me-2" type="checkbox" name="is_monospace" value="1" id="modalMonospace" checked style="cursor: pointer;">
+            <label class="form-check-label fw-bold text-primary mb-0" for="modalMonospace" style="cursor: pointer; font-size: 0.85rem;">
+              ប្រើទម្រង់ Monospace Tap-to-Copy
+            </label>
+          </div>
+
+          <div class="d-flex justify-content-between align-items-center p-2.5" style="background: #f0fdf4; border-radius: 10px; border: 1px dashed #86efac;">
+            <span style="font-size: 0.82rem; color: #166534;">
+              <i class="bi bi-camera-fill me-1"></i> ចង់ផ្ញើរូបភាព Screenshot + Caption?
+            </span>
+            <button type="button" class="btn btn-sm btn-success" onclick="bootstrap.Modal.getInstance(document.getElementById('telegramModal'))?.hide(); scrollToStudio();" style="font-size: 0.78rem; font-weight: 700;">
+              បើក Studio <i class="bi bi-arrow-right"></i>
+            </button>
           </div>
         </div>
         <div class="modal-footer d-flex flex-column flex-sm-row justify-content-end gap-2 p-3">
@@ -335,17 +391,17 @@
 </div>
 
 {{-- ════════════════════════════════════════════
-     TELEGRAM SEND — upgraded with grade filter + caption
+     TELEGRAM SEND — Studio with Audience & Format Toggles
 ════════════════════════════════════════════ --}}
 @php
   $grades = $books->pluck('grade')->filter()->unique()->sort()->values();
 @endphp
 
-<div class="panel mb-4">
+<div class="panel mb-4" id="telegramStudioPanel">
   <div class="panel-header">
     <div class="ph-title">
-      <div class="ph-icon" style="background:#dcfce7;color:#15803d"><i class="bi bi-send-fill"></i></div>
-      <span>ផ្ញើរបាយការណ៍ទៅ Telegram</span>
+      <div class="ph-icon" style="background:#dcfce7;color:#15803d"><i class="bi bi-image-fill"></i></div>
+      <span>ស្ទូឌីយោផ្ញើរូបភាព + Caption (Live Studio)</span>
     </div>
     {{-- Live preview badge --}}
     <span id="previewBadge"
@@ -389,64 +445,104 @@
 
         {{-- Custom caption --}}
         <div>
-          <div class="d-flex justify-content-between align-items-center mb-1">
-            <label class="form-label mb-0">Caption / ចំណងជើង</label>
-            <div class="btn-group btn-group-sm" role="group">
-              <button type="button" class="btn btn-outline-success active" id="btnCaptionSummary" style="font-size:.7rem;padding:.15rem .5rem">📊 Summary</button>
-              <button type="button" class="btn btn-outline-success" id="btnCaptionFull" style="font-size:.7rem;padding:.15rem .5rem">📜 Full Details</button>
+          <div class="caption-header-card mb-2.5">
+            <div class="d-flex justify-content-between align-items-center mb-2">
+              <label class="form-label mb-0 fw-bold" style="font-size:.86rem;color:#0f172a;letter-spacing:-0.01em">
+                <i class="bi bi-chat-left-text-fill text-success me-1"></i> អត្ថបទរបាយការណ៍ (Caption)
+              </label>
+              <button type="button" class="btn btn-sm btn-quick-copy" id="btnQuickCopyCaption" title="ចុចចម្លងអត្ថបទភ្លាមៗ">
+                <i class="bi bi-clipboard-check text-primary me-1"></i> Copy
+              </button>
+            </div>
+
+            {{-- Segmented Controls Toolbar --}}
+            <div class="d-flex gap-2 flex-wrap align-items-center justify-content-between">
+              {{-- Audience Segment --}}
+              <div class="segmented-control audience-seg" role="group" aria-label="Audience Type">
+                <button type="button" class="seg-btn active" id="btnAudienceGroup" title="រាយការណ៍ជូនឯកឧត្តមបណ្ឌិត ឯកឧត្តម លោកជំទាវ និងសមាជិកក្រុមការងារ">
+                  <i class="bi bi-people-fill me-1"></i> 1. In Group
+                </button>
+                <button type="button" class="seg-btn" id="btnAudienceIndividual" title="រាយការណ៍ជូនឯកឧត្តមបណ្ឌិត">
+                  <i class="bi bi-person-fill me-1"></i> 2. Individual to HE
+                </button>
+                <button type="button" class="seg-btn" id="btnAudienceBoth" title="បង្កើត និងផ្ញើទាំងពីរ (In Group & Individual)">
+                  <i class="bi bi-stars me-1"></i> 3. Both
+                </button>
+              </div>
+
+              {{-- Format Segment --}}
+              <div class="segmented-control format-seg" role="group" aria-label="Format Type">
+                <button type="button" class="seg-btn active" id="btnCaptionSummary" title="បង្ហាញតែបូកសរុប (សមស្របសម្រាប់ Caption រូបភាពមិនកាត់អក្សរ)">
+                  <i class="bi bi-bar-chart-fill me-1"></i> Summary (រូបភាព)
+                </button>
+                <button type="button" class="seg-btn" id="btnCaptionFull" title="បង្ហាញលម្អិតទាំងអស់">
+                  <i class="bi bi-file-earmark-text-fill me-1"></i> Full (លម្អិត)
+                </button>
+              </div>
             </div>
           </div>
-          @php
-$months = [
-    1 => 'មករា', 'កុម្ភៈ', 'មីនា', 'មេសា',
-    'ឧសភា', 'មិថុនា', 'កក្កដា', 'សីហា',
-    'កញ្ញា', 'តុលា', 'វិច្ឆិកា', 'ធ្នូ'
-];
 
-$day = now()->format('d');
-$month = $months[(int) now()->format('m')];
-$year = now()->format('Y');
-$time = now()->format('H:i');
-@endphp
-
-<textarea id="telegramCaption" class="form-control" rows="12"
-          maxlength="4096"
-          style="font-size:.84rem;resize:vertical;line-height:1.7">📄 សូមគោរពរាយការណ៍
-សូមគោរពជម្រាបជូន ឯកឧត្តមបណ្ឌិត ឯកឧត្តម លោកជំទាវ និងសមាជិកក្រុមការងារ
-📅 ថ្ងៃទី {{ $day }} ខែ{{ $month }} ឆ្នាំ {{ $year }}
-
-ក្រុមការងារខ្ញុំ សូមគោរពរាយការណ៍អំពីស្ថានភាពការងារបោះពុម្ពសៀវភៅ ដូចខាងក្រោម៖
-
-━━━━━━━━━━━━━━━━━━
- 【បូកសរុបការងារបោះពុម្ព】
-━━━━━━━━━━━━━━━━━━
-សម្រេចបានសរុបទាំងអស់ថ្ងៃនេះ៖ {{ number_format($todayTotal) }} ក្បាល
-សរុបការងារបោះពុម្ពរួច៖ {{ number_format($totalPrinted) }} ក្បាល
-នៅខ្វះសរុប៖ {{ number_format($totalRemaining) }} ក្បាល
-
-សូមគោរពអរគុណ 🙏</textarea>
-          <div class="d-flex justify-content-between align-items-center mt-1">
-            <span style="font-size:.72rem;color:var(--text-muted)">
-              <i class="bi bi-info-circle me-1"></i> ជ្រើសរើសប្រភេទ Caption ខាងលើ
+          <textarea id="telegramCaption" class="form-control telegram-caption-area" rows="12"
+                    maxlength="4096"
+                    placeholder="កំពុងបង្កើតអត្ថបទរបាយការណ៍..."></textarea>
+          
+          <div class="d-flex justify-content-between align-items-center mt-1.5 px-1 flex-wrap gap-1">
+            <span class="caption-hint-text">
+              <i class="bi bi-info-circle-fill text-primary me-1"></i> សារ Telegram អាចប៉ះ (Touch) ដើម្បី Copy ភ្លាមៗ
             </span>
-            <span style="font-size:.72rem;font-weight:600;color:var(--text-muted);font-family:var(--font-latin)" id="captionCount">0 / 4096</span>
+            <span class="caption-counter-badge" id="captionCount">0 / 4096</span>
           </div>
 
-          <div class="form-check mt-2">
-            <input class="form-check-input" type="checkbox" id="sendFullTextAlso" checked>
-            <label class="form-check-label" for="sendFullTextAlso" style="font-size:.75rem;font-weight:600;color:#334155">
-              ⚡ ផ្ញើសារអត្ថបទលម្អិតបន្ថែមជាសារទី ២ (Send Details as 2nd Message)
-            </label>
+          <div class="d-flex flex-column gap-2 mt-2.5">
+            {{-- Setting Card 1: Send 2nd detailed text message (Purple theme) --}}
+            <div style="background:linear-gradient(135deg,#f5f3ff 0%,#faf5ff 100%);border:1.5px solid #ddd6fe;border-radius:12px;padding:10px 14px">
+              <div class="d-flex align-items-center justify-content-between">
+                <div class="d-flex align-items-center gap-2.5">
+                  <span style="background:#7c3aed;color:#fff;width:28px;height:28px;border-radius:8px;display:flex;align-items:center;justify-content:center;font-size:.85rem;flex-shrink:0"><i class="bi bi-chat-left-text"></i></span>
+                  <div>
+                    <label class="form-check-label mb-0 fw-bold" for="sendFullTextAlso" style="font-size:.82rem;color:#4c1d95;cursor:pointer">
+                      ផ្ញើសារអត្ថបទលម្អិតបន្ថែម (Send 2nd Message)
+                    </label>
+                    <div style="font-size:.69rem;color:#6d28d9;line-height:1.2">
+                      ផ្ញើសារទី១ (រូបភាព+បូកសរុប) + សារទី២ (លម្អិតសៀវភៅមួយៗ)
+                    </div>
+                  </div>
+                </div>
+                <div class="form-check form-switch m-0">
+                  <input class="form-check-input" type="checkbox" id="sendFullTextAlso" checked style="cursor:pointer;width:2.2em;height:1.2em">
+                </div>
+              </div>
+            </div>
+
+            {{-- Setting Card 2: Monospace Tap-to-Copy (Blue theme) --}}
+            <div style="background:linear-gradient(135deg,#eff6ff 0%,#f8fafc 100%);border:1.5px solid #bfdbfe;border-radius:12px;padding:10px 14px">
+              <div class="d-flex align-items-center justify-content-between">
+                <div class="d-flex align-items-center gap-2.5">
+                  <span style="background:#2563eb;color:#fff;width:28px;height:28px;border-radius:8px;display:flex;align-items:center;justify-content:center;font-size:.85rem;flex-shrink:0"><i class="bi bi-code-slash"></i></span>
+                  <div>
+                    <label class="form-check-label mb-0 fw-bold" for="useMonospaceCopy" style="font-size:.82rem;color:#1e3a8a;cursor:pointer">
+                      ប្រើទម្រង់ Monospace Tap-to-Copy
+                    </label>
+                    <div style="font-size:.69rem;color:#1d4ed8;line-height:1.2">
+                      ចុចតែម្តងលើ Telegram ដើម្បី Copy (បិទ = ផ្ញើជាអក្សរធម្មតា)
+                    </div>
+                  </div>
+                </div>
+                <div class="form-check form-switch m-0">
+                  <input class="form-check-input" type="checkbox" id="useMonospaceCopy" checked style="cursor:pointer;width:2.2em;height:1.2em">
+                </div>
+              </div>
+            </div>
           </div>
         </div>
 
         {{-- Send buttons --}}
         <div class="d-flex gap-2 mt-auto pt-2">
-          <button id="sendTelegramBtn" class="btn btn-success btn-lg flex-grow-1" style="font-size:.88rem">
-            <i class="bi bi-image me-1"></i> ផ្ញើរូបភាព + Caption
+          <button id="sendTelegramBtn" class="btn btn-send-image btn-lg flex-grow-1">
+            <i class="bi bi-image me-1.5"></i> ផ្ញើរូបភាព + Caption
           </button>
-          <button id="sendTextBtn" class="btn btn-outline-success btn-lg" style="font-size:.88rem" title="ផ្ញើតែអត្ថបទលម្អិត">
-            <i class="bi bi-chat-text-fill me-1"></i> ផ្ញើអត្ថបទ
+          <button id="sendTextBtn" class="btn btn-send-text btn-lg" title="ផ្ញើតែអត្ថបទលម្អិត">
+            <i class="bi bi-chat-text-fill me-1.5"></i> ផ្ញើអត្ថបទ
           </button>
         </div>
 
@@ -656,72 +752,76 @@ $time = now()->format('H:i');
 
 {{-- ── Telegram snapshot — Detail first, Level bars at bottom ── --}}
 <div id="telegramReport" aria-hidden="true" style="
-    position:fixed; left:-9999px; top:0; width:700px;
+    position:fixed; left:-9999px; top:0; width:720px;
     padding:0; background:#ffffff;
-    font-family:'Hanuman','Poppins',sans-serif;
-    border-radius:12px; color:#0f172a; overflow:hidden;
-    border:1px solid #e2e8f0;">
+    font-family:'Kantumruy Pro','Noto Sans Khmer',system-ui,-apple-system,sans-serif;
+    border-radius:14px; color:#0f172a; overflow:hidden;
+    border:1px solid #cbd5e1; box-sizing:border-box;">
 
   {{-- HEADER --}}
-  <div style="background:linear-gradient(135deg,#4f46e5,#6366f1);padding:14px 18px;color:#fff">
+  <div style="background:linear-gradient(135deg,#4338ca 0%,#6366f1 100%);padding:16px 20px;color:#fff">
     <div style="display:flex;justify-content:space-between;align-items:center">
       <div>
-        <div style="font-size:13px;font-weight:700;font-family:'Hanuman',sans-serif">🖨️ របាយការណ៍ការបោះពុម្ព</div>
-        <div style="font-size:9px;opacity:.85;font-family:'Poppins',sans-serif;margin-top:2px">{{ today()->format('d/m/Y H:i') }}</div>
+        <div style="font-size:16px;font-weight:700;font-family:'Kantumruy Pro','Noto Sans Khmer',sans-serif;letter-spacing:0.01em;display:flex;align-items:center;gap:6px">
+          <span>🖨️</span> <span>របាយការណ៍ការបោះពុម្ព</span>
+        </div>
+        <div style="font-size:11px;opacity:.9;font-family:'Outfit',sans-serif;font-weight:500;margin-top:4px">
+          {{ today()->format('d/m/Y') }} • {{ now()->format('H:i') }}
+        </div>
       </div>
       <div style="text-align:right">
-        <div style="font-size:7px;text-transform:uppercase;letter-spacing:.08em;opacity:.8">TODAY</div>
-        <div id="snapTodayTotal" style="font-size:20px;font-weight:800;font-family:'Poppins',sans-serif">0</div>
+        <div style="font-size:9px;text-transform:uppercase;letter-spacing:.08em;opacity:.85;font-family:'Outfit',sans-serif;font-weight:700">TODAY</div>
+        <div id="snapTodayTotal" style="font-size:24px;font-weight:800;font-family:'Outfit',sans-serif;line-height:1.1">0</div>
       </div>
     </div>
   </div>
 
   {{-- KPI STATS --}}
-  <div style="display:grid;grid-template-columns:repeat(4,1fr);border-bottom:1px solid #e2e8f0">
-    <div style="padding:8px;text-align:center;border-right:1px solid #e2e8f0">
-      <div style="font-size:7px;color:#64748b;font-family:'Hanuman',sans-serif">គោលដៅ</div>
-      <div id="snapTarget" style="font-size:15px;font-weight:800;color:#1e293b;font-family:'Poppins',sans-serif">0</div>
+  <div style="display:grid;grid-template-columns:repeat(4,1fr);border-bottom:1px solid #e2e8f0;background:#ffffff">
+    <div style="padding:10px 8px;text-align:center;border-right:1px solid #e2e8f0">
+      <div style="font-size:10px;color:#64748b;font-family:'Kantumruy Pro','Noto Sans Khmer',sans-serif;font-weight:600">គោលដៅ</div>
+      <div id="snapTarget" style="font-size:17px;font-weight:800;color:#1e293b;font-family:'Outfit',sans-serif;margin-top:2px">0</div>
     </div>
-    <div style="padding:8px;text-align:center;border-right:1px solid #e2e8f0">
-      <div style="font-size:7px;color:#64748b;font-family:'Hanuman',sans-serif">បោះពុម្ព</div>
-      <div id="snapPrinted" style="font-size:15px;font-weight:800;color:#059669;font-family:'Poppins',sans-serif">0</div>
+    <div style="padding:10px 8px;text-align:center;border-right:1px solid #e2e8f0">
+      <div style="font-size:10px;color:#64748b;font-family:'Kantumruy Pro','Noto Sans Khmer',sans-serif;font-weight:600">បោះពុម្ព</div>
+      <div id="snapPrinted" style="font-size:17px;font-weight:800;color:#059669;font-family:'Outfit',sans-serif;margin-top:2px">0</div>
     </div>
-    <div style="padding:8px;text-align:center;border-right:1px solid #e2e8f0">
-      <div style="font-size:7px;color:#64748b;font-family:'Hanuman',sans-serif">នៅសល់</div>
-      <div id="snapRemaining" style="font-size:15px;font-weight:800;color:#d97706;font-family:'Poppins',sans-serif">0</div>
+    <div style="padding:10px 8px;text-align:center;border-right:1px solid #e2e8f0">
+      <div style="font-size:10px;color:#64748b;font-family:'Kantumruy Pro','Noto Sans Khmer',sans-serif;font-weight:600">នៅសល់</div>
+      <div id="snapRemaining" style="font-size:17px;font-weight:800;color:#d97706;font-family:'Outfit',sans-serif;margin-top:2px">0</div>
     </div>
-    <div style="padding:8px;text-align:center">
-      <div style="font-size:7px;color:#64748b;font-family:'Hanuman',sans-serif">ដំណើរការ</div>
-      <div id="snapPct" style="font-size:15px;font-weight:800;color:#4f46e5;font-family:'Poppins',sans-serif">0%</div>
+    <div style="padding:10px 8px;text-align:center">
+      <div style="font-size:10px;color:#64748b;font-family:'Kantumruy Pro','Noto Sans Khmer',sans-serif;font-weight:600">ដំណើរការ</div>
+      <div id="snapPct" style="font-size:17px;font-weight:800;color:#4f46e5;font-family:'Outfit',sans-serif;margin-top:2px">0%</div>
     </div>
   </div>
 
   {{-- DETAIL TABLE (FIRST — shows specific book quantities) --}}
   <div style="padding:0">
-    <div id="snapDetailHeader" style="padding:6px 14px;background:#f8fafc;border-bottom:1px solid #e2e8f0;font-size:9px;font-weight:700;color:#475569;font-family:'Hanuman',sans-serif">📋 ព័ត៌មានលម្អិត</div>
-    <table style="width:100%;border-collapse:collapse;font-size:9px">
+    <div id="snapDetailHeader" style="padding:8px 16px;background:#f8fafc;border-bottom:1px solid #e2e8f0;font-size:11px;font-weight:700;color:#334155;font-family:'Kantumruy Pro','Noto Sans Khmer',sans-serif">📋 ព័ត៌មានលម្អិត</div>
+    <table style="width:100%;border-collapse:collapse;font-size:11px">
       <thead>
-        <tr style="background:#f1f5f9">
-          <th style="padding:4px 8px;text-align:left;font-family:'Hanuman',sans-serif;font-size:9px;color:#475569">ឈ្មោះ</th>
-          <th style="padding:4px 6px;text-align:center;font-family:'Poppins',sans-serif;font-size:7px;color:#475569">TARGET</th>
-          <th style="padding:4px 6px;text-align:center;font-family:'Poppins',sans-serif;font-size:7px;color:#475569">PRINTED</th>
-          <th style="padding:4px 6px;text-align:center;font-family:'Poppins',sans-serif;font-size:7px;color:#7c3aed">TODAY</th>
-          <th style="padding:4px 6px;text-align:center;font-family:'Poppins',sans-serif;font-size:7px;color:#475569">LEFT</th>
-          <th style="padding:4px 6px;text-align:center;font-family:'Poppins',sans-serif;font-size:7px;color:#475569">%</th>
+        <tr style="background:#f1f5f9;border-bottom:1px solid #e2e8f0">
+          <th style="padding:6px 12px;text-align:left;font-family:'Kantumruy Pro','Noto Sans Khmer',sans-serif;font-size:10px;font-weight:700;color:#475569">ឈ្មោះ</th>
+          <th style="padding:6px 8px;text-align:center;font-family:'Outfit',sans-serif;font-size:9px;font-weight:700;color:#475569">TARGET</th>
+          <th style="padding:6px 8px;text-align:center;font-family:'Outfit',sans-serif;font-size:9px;font-weight:700;color:#475569">PRINTED</th>
+          <th style="padding:6px 8px;text-align:center;font-family:'Outfit',sans-serif;font-size:9px;font-weight:700;color:#7c3aed">TODAY</th>
+          <th style="padding:6px 8px;text-align:center;font-family:'Outfit',sans-serif;font-size:9px;font-weight:700;color:#475569">LEFT</th>
+          <th style="padding:6px 8px;text-align:center;font-family:'Outfit',sans-serif;font-size:9px;font-weight:700;color:#475569">%</th>
         </tr>
       </thead>
       <tbody id="snapTableBody"></tbody>
     </table>
   </div>
 
-  {{-- LEVEL PROGRESS BARS (BOTTOM — visual only, no qty confusion) --}}
-  <div style="padding:10px 14px;border-top:1px solid #e2e8f0;background:#f8fafc">
-    <div style="font-size:9px;font-weight:700;color:#1d4ed8;margin-bottom:6px;font-family:'Hanuman',sans-serif">📊 ស្ថានភាពតាម Level</div>
+  {{-- LEVEL PROGRESS BARS (BOTTOM) --}}
+  <div style="padding:12px 16px;border-top:1px solid #e2e8f0;background:#f8fafc">
+    <div style="font-size:11px;font-weight:700;color:#1d4ed8;margin-bottom:8px;font-family:'Kantumruy Pro','Noto Sans Khmer',sans-serif">📊 ស្ថានភាពតាម Level</div>
     <div id="snapLevelBars"></div>
   </div>
 
   {{-- FOOTER --}}
-  <div id="snapFooter" style="padding:8px 14px;background:#f0fdf4;border-top:1px solid #e2e8f0;font-size:8px;color:#065f46"></div>
+  <div id="snapFooter" style="padding:10px 16px;background:#f0fdf4;border-top:1px solid #e2e8f0;font-size:10px;color:#065f46;font-family:'Kantumruy Pro','Noto Sans Khmer',sans-serif;font-weight:600"></div>
 </div>
 </div>
 @endsection
@@ -819,11 +919,11 @@ const TODAY_TOTAL = {{ $todayTotal }};
       html += `
         <div style="padding:.5rem .85rem;background:#f1f5f9;border-bottom:1px solid var(--border);
                     display:flex;align-items:center;justify-content:space-between;position:sticky;top:0;z-index:1">
-          <span style="font-size:.78rem;font-weight:700;color:var(--primary)">${grade}</span>
+          <span style="font-size:.82rem;font-weight:700;color:var(--primary);font-family:'Kantumruy Pro','Noto Sans Khmer',sans-serif">${grade}</span>
           <div style="display:flex;align-items:center;gap:.6rem">
-            <span style="font-family:'Poppins',sans-serif;font-size:.7rem;font-weight:700;color:${gPct>=100?'#059669':gPct>=50?'var(--primary)':'#d97706'}">${gPct}%</span>
-            <span style="font-family:'Poppins',sans-serif;font-size:.68rem;color:var(--text-muted)">${gPrinted.toLocaleString()}/${gTarget.toLocaleString()}</span>
-            ${gToday > 0 ? `<span style="font-family:'Poppins',sans-serif;font-size:.68rem;color:#7c3aed;font-weight:600">+${gToday}</span>` : ''}
+            <span style="font-family:'Outfit',sans-serif;font-size:.74rem;font-weight:700;color:${gPct>=100?'#059669':gPct>=50?'var(--primary)':'#d97706'}">${gPct}%</span>
+            <span style="font-family:'Outfit',sans-serif;font-size:.7rem;color:var(--text-muted)">${gPrinted.toLocaleString()}/${gTarget.toLocaleString()}</span>
+            ${gToday > 0 ? `<span style="font-family:'Outfit',sans-serif;font-size:.7rem;color:#7c3aed;font-weight:700">+${gToday.toLocaleString()}</span>` : ''}
           </div>
         </div>`;
 
@@ -832,34 +932,34 @@ const TODAY_TOTAL = {{ $todayTotal }};
         const bPct   = b.target_qty > 0 ? Math.min(Math.floor(b.total_printed / b.target_qty * 100), 100) : 0;
         const bRem   = Math.max(b.target_qty - b.total_printed, 0);
         const bToday = b.today_qty || 0;
-
-        // Skip books completed before today to save space
-        if (bRem <= 0 && bToday <= 0) return;
+        const isDone = bRem <= 0;
 
         const barColor = bPct >= 100 ? '#059669' : bPct >= 50 ? '#4f46e5' : '#d97706';
         const cat    = b.category === 'perfect_binding' ? 'បិត' : 'កិប';
 
         html += `
-          <div style="padding:.4rem .85rem .4rem 1.5rem;border-bottom:1px solid #f8fafc;
-                      display:flex;align-items:center;gap:.5rem">
+          <div style="padding:.45rem .85rem .45rem 1.5rem;border-bottom:1px solid #f8fafc;
+                      display:flex;align-items:center;gap:.5rem;background:${isDone ? '#fcfdfd' : '#ffffff'}">
             <div style="flex:1;min-width:0">
               <div style="display:flex;align-items:center;gap:.4rem">
-                <span style="font-size:.76rem;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${b.title}</span>
-                <span style="font-size:.62rem;color:var(--text-muted);flex-shrink:0">${cat}</span>
+                <span style="font-size:.78rem;font-weight:600;font-family:'Kantumruy Pro','Noto Sans Khmer',sans-serif;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;color:${isDone ? '#334155' : '#0f172a'}">
+                  ${b.title} ${isDone ? '<span style="color:#059669;font-size:.7rem;font-weight:700">✓</span>' : ''}
+                </span>
+                <span style="font-size:.64rem;color:var(--text-muted);flex-shrink:0">${cat}</span>
               </div>
               <div style="display:flex;align-items:center;gap:.5rem;margin-top:.2rem">
-                <div style="flex:1;height:4px;background:#e2e8f0;border-radius:999px;overflow:hidden">
+                <div style="flex:1;height:5px;background:#e2e8f0;border-radius:999px;overflow:hidden">
                   <div style="height:100%;width:${bPct}%;background:${barColor};border-radius:999px"></div>
                 </div>
-                <span style="font-family:'Poppins',sans-serif;font-size:.65rem;font-weight:700;color:${barColor};min-width:28px;text-align:right">${bPct}%</span>
+                <span style="font-family:'Outfit',sans-serif;font-size:.7rem;font-weight:700;color:${barColor};min-width:28px;text-align:right">${bPct}%</span>
               </div>
             </div>
-            <div style="text-align:right;flex-shrink:0;min-width:70px">
-              <div style="font-family:'Poppins',sans-serif;font-size:.7rem;font-weight:600">
+            <div style="text-align:right;flex-shrink:0;min-width:75px">
+              <div style="font-family:'Outfit',sans-serif;font-size:.74rem;font-weight:600">
                 ${b.total_printed.toLocaleString()}/${b.target_qty.toLocaleString()}
               </div>
-              ${bToday > 0 ? `<div style="font-family:'Poppins',sans-serif;font-size:.65rem;color:#7c3aed;font-weight:700">+${bToday} ថ្ងៃនេះ</div>` : ''}
-              ${bRem > 0 ? `<div style="font-family:'Poppins',sans-serif;font-size:.62rem;color:var(--text-muted)">សល់ ${bRem.toLocaleString()}</div>` : ''}
+              ${bToday > 0 ? `<div style="font-family:'Outfit',sans-serif;font-size:.68rem;color:#7c3aed;font-weight:700">+${bToday.toLocaleString()} ថ្ងៃនេះ</div>` : ''}
+              ${bRem > 0 ? `<div style="font-family:'Outfit',sans-serif;font-size:.65rem;color:var(--text-muted)">សល់ ${bRem.toLocaleString()}</div>` : '<div style="font-family:\'Outfit\',sans-serif;font-size:.65rem;color:#059669;font-weight:600">រួចរាល់ ✓</div>'}
             </div>
           </div>`;
       });
@@ -899,12 +999,12 @@ const TODAY_TOTAL = {{ $todayTotal }};
       if (gPct > bestPct) { bestPct = gPct; bestLevel = grade; }
       if (gPct === 0) worstLevels.push(grade);
 
-      levelHtml += `<div style="display:flex;align-items:center;gap:8px;margin-bottom:4px">
-        <span style="font-size:9px;font-weight:700;min-width:50px;color:#1e293b">${grade}</span>
-        <div style="flex:1;height:7px;background:#e2e8f0;border-radius:999px;overflow:hidden">
+      levelHtml += `<div style="display:flex;align-items:center;gap:10px;margin-bottom:6px">
+        <span style="font-size:11px;font-weight:700;min-width:60px;color:#1e293b;font-family:'Kantumruy Pro','Noto Sans Khmer',sans-serif">${grade}</span>
+        <div style="flex:1;height:8px;background:#e2e8f0;border-radius:999px;overflow:hidden">
           <div style="height:100%;width:${gPct}%;background:${barColor};border-radius:999px"></div>
         </div>
-        <span style="font-family:'Poppins',sans-serif;font-size:9px;font-weight:800;color:${barColor};min-width:30px;text-align:right">${gPct}%</span>
+        <span style="font-family:'Outfit',sans-serif;font-size:11px;font-weight:800;color:${barColor};min-width:34px;text-align:right">${gPct}%</span>
       </div>`;
     }
     const snapLevelBars = document.getElementById('snapLevelBars');
@@ -933,10 +1033,10 @@ const TODAY_TOTAL = {{ $todayTotal }};
       const gColor = gPct>=100?'#059669':gPct>=70?'#4f46e5':gPct>=40?'#d97706':'#ef4444';
 
       rowsHtml += `<tr style="background:#eff6ff;border-bottom:1px solid #bfdbfe">
-        <td colspan="5" style="padding:5px 8px;font-family:'Hanuman',sans-serif;font-size:9px;font-weight:700;color:#1d4ed8">
+        <td colspan="5" style="padding:6px 12px;font-family:'Kantumruy Pro','Noto Sans Khmer',sans-serif;font-size:11px;font-weight:700;color:#1d4ed8">
           📘 ${grade}
         </td>
-        <td style="padding:5px 6px;text-align:center;font-family:'Poppins',sans-serif;font-size:9px;font-weight:800;color:${gColor}">${gPct}%</td>
+        <td style="padding:6px 8px;text-align:center;font-family:'Outfit',sans-serif;font-size:11px;font-weight:800;color:${gColor}">${gPct}%</td>
       </tr>`;
 
       // Book rows under this level
@@ -944,18 +1044,18 @@ const TODAY_TOTAL = {{ $todayTotal }};
         const rem = Math.max(b.target_qty - b.total_printed, 0);
         const pct = b.target_qty > 0 ? Math.min(Math.floor(b.total_printed/b.target_qty*100),100) : 0;
         const todayQ = b.today_qty || 0;
-
-        // Skip books completed before today to save space
-        if (rem <= 0 && todayQ <= 0) return;
+        const isDone = rem <= 0;
 
         const pctColor = pct>=100?'#059669':pct>=50?'#4f46e5':'#d97706';
-        rowsHtml += `<tr style="border-bottom:1px solid #f1f5f9">
-          <td style="padding:3px 8px 3px 16px;font-family:'Hanuman',sans-serif;font-size:9px">${b.title}</td>
-          <td style="padding:3px 6px;text-align:center;font-family:'Poppins',sans-serif;font-size:9px">${b.target_qty.toLocaleString()}</td>
-          <td style="padding:3px 6px;text-align:center;font-family:'Poppins',sans-serif;font-size:9px;color:#059669;font-weight:600">${b.total_printed.toLocaleString()}</td>
-          <td style="padding:3px 6px;text-align:center;font-family:'Poppins',sans-serif;font-size:9px;color:${todayQ>0?'#7c3aed':'#94a3b8'};font-weight:${todayQ>0?'700':'400'}">${todayQ>0?'+'+todayQ:'—'}</td>
-          <td style="padding:3px 6px;text-align:center;font-family:'Poppins',sans-serif;font-size:9px">${rem.toLocaleString()}</td>
-          <td style="padding:3px 6px;text-align:center;font-family:'Poppins',sans-serif;font-size:9px;font-weight:700;color:${pctColor}">${pct}%</td>
+        rowsHtml += `<tr style="border-bottom:1px solid #f1f5f9;background:${isDone ? '#fafbfc' : '#ffffff'}">
+          <td style="padding:5px 12px 5px 22px;font-family:'Kantumruy Pro','Noto Sans Khmer',sans-serif;font-size:11px;color:${isDone ? '#334155' : '#0f172a'};font-weight:500">
+            ${b.title} ${isDone ? '<span style="color:#059669;font-size:9.5px;font-weight:700;margin-left:4px">✓</span>' : ''}
+          </td>
+          <td style="padding:5px 8px;text-align:center;font-family:'Outfit',sans-serif;font-size:11px;color:#475569">${b.target_qty.toLocaleString()}</td>
+          <td style="padding:5px 8px;text-align:center;font-family:'Outfit',sans-serif;font-size:11px;color:#059669;font-weight:700">${b.total_printed.toLocaleString()}</td>
+          <td style="padding:5px 8px;text-align:center;font-family:'Outfit',sans-serif;font-size:11px;color:${todayQ>0?'#7c3aed':'#94a3b8'};font-weight:${todayQ>0?'700':'500'}">${todayQ>0?'+'+todayQ.toLocaleString():'—'}</td>
+          <td style="padding:5px 8px;text-align:center;font-family:'Outfit',sans-serif;font-size:11px;color:${isDone ? '#059669' : '#d97706'};font-weight:${isDone?'700':'500'}">${rem.toLocaleString()}</td>
+          <td style="padding:5px 8px;text-align:center;font-family:'Outfit',sans-serif;font-size:11px;font-weight:800;color:${pctColor}">${pct}%</td>
         </tr>`;
       });
     }
@@ -964,17 +1064,17 @@ const TODAY_TOTAL = {{ $todayTotal }};
     // Footer summary
     const snapFooter = document.getElementById('snapFooter');
     if (snapFooter) {
-      snapFooter.innerHTML = `<div style="display:flex;justify-content:space-between;flex-wrap:wrap;gap:4px">
+      snapFooter.innerHTML = `<div style="display:flex;justify-content:space-between;flex-wrap:wrap;gap:6px;font-family:'Kantumruy Pro','Noto Sans Khmer',sans-serif;font-size:10.5px">
         <span>🏆 នាំមុខ: <strong>${bestLevel} (${bestPct}%)</strong></span>
         ${worstLevels.length ? `<span>⚠️ ត្រូវបន្ត: <strong>${worstLevels.join(', ')}</strong></span>` : ''}
       </div>`;
     }
 
-    // Auto-update Telegram Caption text to match selected levels and caption mode
+    // Auto-update Telegram Caption text to match selected levels, audience, and caption mode
     if (captionEl) {
       captionEl.value = currentCaptionMode === 'full' 
-        ? generateCaptionText(books) 
-        : generateSummaryCaptionText(books);
+        ? generateCaptionText(books, currentAudience) 
+        : generateSummaryCaptionText(books, currentAudience);
       if (captionCnt) {
         const len = captionEl.value.length;
         captionCnt.textContent = len + ' / 4096';
@@ -983,8 +1083,20 @@ const TODAY_TOTAL = {{ $todayTotal }};
     }
   }
 
-  function generateSummaryCaptionText(books) {
+  function getAsciiProgressBar(percent, totalBars = 10) {
+    const filled = Math.max(0, Math.min(totalBars, Math.round((percent / 100) * totalBars)));
+    const empty = totalBars - filled;
+    return '[' + '█'.repeat(filled) + '░'.repeat(empty) + ']';
+  }
+
+  function generateSummaryCaptionText(books, audience = currentAudience) {
     if (!books || !books.length) return '';
+
+    if (audience === 'both') {
+      const r1 = generateSummaryCaptionText(books, 'group');
+      const r2 = generateSummaryCaptionText(books, 'individual');
+      return `════════════════════════════════════\n👥 ១. របាយការណ៍ក្នុងក្រុម (IN GROUP)\n════════════════════════════════════\n\n${r1}\n\n════════════════════════════════════\n👤 ២. របាយការណ៍ជូនឯកឧត្តមបណ្ឌិត (INDIVIDUAL TO HE)\n════════════════════════════════════\n\n${r2}`;
+    }
 
     const byGrade = {};
     books.forEach(b => {
@@ -999,7 +1111,9 @@ const TODAY_TOTAL = {{ $todayTotal }};
     const month = monthsKhmer[now.getMonth()];
     const year = now.getFullYear();
 
-    let text = `សូមគោរពរាយការណ៍ជូនឯកឧត្តមបណ្ឌិត ឯកឧត្តម លោកជំទាវ និងសមាជិកក្រុមការងារ\n`;
+    let text = audience === 'individual'
+      ? `សូមគោរពរាយការណ៍ជូនឯកឧត្តមបណ្ឌិត\n`
+      : `សូមគោរពរាយការណ៍ជូនឯកឧត្តមបណ្ឌិត ឯកឧត្តម លោកជំទាវ និងសមាជិកក្រុមការងារ\n`;
     text += `ថ្ងៃទី ${day} ខែ ${month} ឆ្នាំ ${year}\n\n`;
     text += `ក្រុមការងារខ្ញុំ សូមគោរពរាយការណ៍អំពីស្ថានភាពការងារបោះពុម្ពសៀវភៅ ដូចខាងក្រោម៖\n\n`;
 
@@ -1040,7 +1154,7 @@ const TODAY_TOTAL = {{ $todayTotal }};
     if (grandRemaining > 0) {
       text += `នៅខ្វះសរុប៖ ${grandRemaining.toLocaleString()} ក្បាល\n\n`;
     } else {
-      text += `ការងារបានសម្រចរួចរាល់\n\n`;
+      text += `ការងារបានសម្រេចរួចរាល់\n\n`;
     }
     text += `សូមគោរពអរគុណ 🙏`;
 
@@ -1067,8 +1181,14 @@ const TODAY_TOTAL = {{ $todayTotal }};
     return last ? (last.charAt(0).toUpperCase() + last.slice(1)) : 'Other';
   }
 
-  function generateCaptionText(books) {
+  function generateCaptionText(books, audience = currentAudience) {
     if (!books || !books.length) return '';
+
+    if (audience === 'both') {
+      const r1 = generateCaptionText(books, 'group');
+      const r2 = generateCaptionText(books, 'individual');
+      return `════════════════════════════════════\n👥 ១. របាយការណ៍ក្នុងក្រុម (IN GROUP)\n════════════════════════════════════\n\n${r1}\n\n════════════════════════════════════\n👤 ២. របាយការណ៍ជូនឯកឧត្តមបណ្ឌិត (INDIVIDUAL TO HE)\n════════════════════════════════════\n\n${r2}`;
+    }
 
     const byGrade = {};
     books.forEach(b => {
@@ -1083,7 +1203,9 @@ const TODAY_TOTAL = {{ $todayTotal }};
     const month = monthsKhmer[now.getMonth()];
     const year = now.getFullYear();
 
-    let text = `សូមគោរពរាយការណ៍ជូនឯកឧត្តមបណ្ឌិត ឯកឧត្តម លោកជំទាវ និងសមាជិកក្រុមការងារ\n`;
+    let text = audience === 'individual'
+      ? `សូមគោរពរាយការណ៍ជូនឯកឧត្តមបណ្ឌិត\n`
+      : `សូមគោរពរាយការណ៍ជូនឯកឧត្តមបណ្ឌិត ឯកឧត្តម លោកជំទាវ និងសមាជិកក្រុមការងារ\n`;
     text += `ថ្ងៃទី ${day} ខែ ${month} ឆ្នាំ ${year}\n\n`;
     text += `ក្រុមការងារខ្ញុំ សូមគោរពរាយការណ៍អំពីស្ថានភាពការងារបោះពុម្ពសៀវភៅ ដូចខាងក្រោម៖\n\n`;
 
@@ -1167,12 +1289,92 @@ const TODAY_TOTAL = {{ $todayTotal }};
     if (grandRemaining > 0) {
       text += `នៅខ្វះសរុប៖ ${grandRemaining.toLocaleString()} ក្បាល\n\n`;
     } else {
-      text += `ការងារបានសម្រចរួចរាល់\n\n`;
+      text += `ការងារបានសម្រេចរួចរាល់\n\n`;
     }
     text += `សូមគោរពអរគុណ 🙏`;
 
     return text;
   }
+
+  // ── Audience & Caption Mode Toggles ──────────────────
+  let currentAudience = 'group'; // 'group', 'individual', or 'both'
+  let currentCaptionMode = 'summary'; // 'summary' or 'full'
+
+  const btnAudienceGroup      = document.getElementById('btnAudienceGroup');
+  const btnAudienceIndividual = document.getElementById('btnAudienceIndividual');
+  const btnAudienceBoth       = document.getElementById('btnAudienceBoth');
+  const btnCaptionSummary     = document.getElementById('btnCaptionSummary');
+  const btnCaptionFull        = document.getElementById('btnCaptionFull');
+  const btnQuickCopyCaption   = document.getElementById('btnQuickCopyCaption');
+
+  btnAudienceGroup?.addEventListener('click', () => {
+    currentAudience = 'group';
+    btnAudienceGroup.classList.add('active');
+    btnAudienceIndividual?.classList.remove('active');
+    btnAudienceBoth?.classList.remove('active');
+    updatePreview();
+  });
+
+  btnAudienceIndividual?.addEventListener('click', () => {
+    currentAudience = 'individual';
+    btnAudienceIndividual.classList.add('active');
+    btnAudienceGroup?.classList.remove('active');
+    btnAudienceBoth?.classList.remove('active');
+    updatePreview();
+  });
+
+  btnAudienceBoth?.addEventListener('click', () => {
+    currentAudience = 'both';
+    btnAudienceBoth.classList.add('active');
+    btnAudienceGroup?.classList.remove('active');
+    btnAudienceIndividual?.classList.remove('active');
+    updatePreview();
+  });
+
+  btnCaptionSummary?.addEventListener('click', () => {
+    currentCaptionMode = 'summary';
+    btnCaptionSummary.classList.add('active');
+    btnCaptionFull?.classList.remove('active');
+    updatePreview();
+  });
+
+  btnCaptionFull?.addEventListener('click', () => {
+    currentCaptionMode = 'full';
+    btnCaptionFull.classList.add('active');
+    btnCaptionSummary?.classList.remove('active');
+    updatePreview();
+  });
+
+  // Quick Copy button for web UI
+  btnQuickCopyCaption?.addEventListener('click', async () => {
+    const textToCopy = captionEl?.value;
+    if (!textToCopy || !textToCopy.trim()) {
+      showToast('warning', 'គ្មានអត្ថបទសម្រាប់ Copy');
+      return;
+    }
+    try {
+      if (navigator.clipboard && window.isSecureContext) {
+        await navigator.clipboard.writeText(textToCopy);
+      } else {
+        const ta = document.createElement('textarea');
+        ta.value = textToCopy;
+        ta.style.position = 'fixed';
+        ta.style.top = '0';
+        ta.style.left = '0';
+        ta.style.width = '2em';
+        ta.style.height = '2em';
+        ta.style.background = 'transparent';
+        document.body.appendChild(ta);
+        ta.focus();
+        ta.select();
+        document.execCommand('copy');
+        document.body.removeChild(ta);
+      }
+      showToast('success', '📋 បានចម្លងអត្ថបទរួចរាល់ (Copied)!');
+    } catch (e) {
+      showToast('error', 'មិនអាចចម្លងបាន: ' + e.message);
+    }
+  });
 
   // Chip click handlers
   chips.forEach(chip => {
@@ -1223,7 +1425,6 @@ const TODAY_TOTAL = {{ $todayTotal }};
       captionCnt.textContent = len + ' / 4096';
       captionCnt.style.color = len > 3950 ? 'var(--danger)' : 'var(--text-muted)';
     }
-    updatePreview();
   });
 
   // Table filters (existing)
@@ -1246,25 +1447,6 @@ const TODAY_TOTAL = {{ $todayTotal }};
   gradeFilter?.addEventListener('change', applyFilters);
   catFilter?.addEventListener('change', applyFilters);
   statusFilter?.addEventListener('change', applyFilters);
-
-  // ── Caption Mode Toggles ─────────────────────────────
-  let currentCaptionMode = 'summary';
-  const btnCaptionSummary = document.getElementById('btnCaptionSummary');
-  const btnCaptionFull    = document.getElementById('btnCaptionFull');
-
-  btnCaptionSummary?.addEventListener('click', () => {
-    currentCaptionMode = 'summary';
-    btnCaptionSummary.classList.add('active');
-    btnCaptionFull?.classList.remove('active');
-    updatePreview();
-  });
-
-  btnCaptionFull?.addEventListener('click', () => {
-    currentCaptionMode = 'full';
-    btnCaptionFull.classList.add('active');
-    btnCaptionSummary?.classList.remove('active');
-    updatePreview();
-  });
 
   // ── Telegram Send (Image + Caption) ───────────────────
   const sendBtn     = document.getElementById('sendTelegramBtn');
@@ -1290,17 +1472,18 @@ const TODAY_TOTAL = {{ $todayTotal }};
     reportEl.style.position = 'fixed';
     reportEl.style.left = '0';
     reportEl.style.top = '0';
-    reportEl.style.zIndex = '1';
+    reportEl.style.zIndex = '999999999';
+    reportEl.style.background = '#ffffff';
     reportEl.style.pointerEvents = 'none';
 
     try {
-      await new Promise(r => setTimeout(r, 300));
+      await new Promise(r => setTimeout(r, 350));
       const canvas = await html2canvas(reportEl, {
-        scale: 2,
+        scale: 2.5,
         useCORS: true,
         logging: false,
         backgroundColor: '#ffffff',
-        windowWidth: 680,
+        windowWidth: 720,
       });
       
       reportEl.style.left = '-9999px';
@@ -1308,22 +1491,44 @@ const TODAY_TOTAL = {{ $todayTotal }};
       reportEl.style.pointerEvents = '';
 
       const sendFullTextAlso = document.getElementById('sendFullTextAlso')?.checked;
-      const fullTextReport   = generateCaptionText(books);
+      const useMonospace     = document.getElementById('useMonospaceCopy')?.checked !== false;
 
       await new Promise((resolve, reject) => {
         canvas.toBlob(async blob => {
           if (!blob) { reject(new Error('Capture failed')); return; }
 
-          const finalCaption = captionEl.value.trim() || '📄 របាយការណ៍ការបោះពុម្ព';
+          // Photo Caption: For Telegram sendPhoto, ALWAYS use the clean Summary (<= 1024 chars)
+          // so Telegram's strict photo caption limit never truncates the summary!
+          let photoCaption = '';
+          if (currentCaptionMode === 'summary' && captionEl?.value?.trim() && captionEl.value.trim().length <= 1000) {
+            photoCaption = captionEl.value.trim();
+          } else {
+            photoCaption = generateSummaryCaptionText(books, currentAudience === 'both' ? 'group' : currentAudience);
+          }
+
+          if (photoCaption.length > 1000) {
+            photoCaption = photoCaption.substring(0, 995) + '...';
+          }
 
           const fd = new FormData();
           fd.append('chat_id', chatId);
           if (threadId) fd.append('message_thread_id', threadId);
           fd.append('photo', blob, 'report.png');
-          fd.append('caption', finalCaption);
+          fd.append('caption', photoCaption);
+          fd.append('is_monospace', useMonospace ? '1' : '0');
+          
           if (sendFullTextAlso) {
             fd.append('send_full_text', '1');
-            fd.append('full_text', fullTextReport);
+            if (currentAudience === 'both') {
+              const fullTextReport1 = generateCaptionText(books, 'group');
+              const fullTextReport2 = generateCaptionText(books, 'individual');
+              fd.append('full_texts', JSON.stringify([fullTextReport1, fullTextReport2]));
+            } else {
+              const fullTextReport = currentCaptionMode === 'full' && captionEl?.value?.trim()
+                ? captionEl.value.trim()
+                : generateCaptionText(books, currentAudience);
+              fd.append('full_text', fullTextReport);
+            }
           }
           fd.append('_token', document.querySelector('meta[name=csrf-token]').content);
 
@@ -1334,7 +1539,7 @@ const TODAY_TOTAL = {{ $todayTotal }};
       });
 
       showLoading(false);
-      showToast('success', sendFullTextAlso ? 'ផ្ញើរូបភាព + អត្ថបទលម្អិតទី ២ ទៅ Telegram ជោគជ័យ! 🎉' : 'ផ្ញើរូបភាពទៅ Telegram ជោគជ័យ! 🎉');
+      showToast('success', currentAudience === 'both' ? 'ផ្ញើរូបភាព + សារអត្ថបទទាំង ២ ទៅ Telegram ជោគជ័យ! 🎉' : (sendFullTextAlso ? 'ផ្ញើរូបភាព + អត្ថបទលម្អិតទី ២ ទៅ Telegram ជោគជ័យ! 🎉' : 'ផ្ញើរូបភាពទៅ Telegram ជោគជ័យ! 🎉'));
     } catch (err) {
       reportEl.style.left = '-9999px';
       reportEl.style.zIndex = '';
@@ -1357,11 +1562,34 @@ const TODAY_TOTAL = {{ $todayTotal }};
     const books = filteredBooks();
     if (!books.length) { showToast('warning', 'មិនមានសៀវភៅដែលជ្រើស — សូមជ្រើស Level ណាមួយ'); return; }
 
-    const fullTextReport = generateCaptionText(books);
+    const useMonospace = document.getElementById('useMonospaceCopy')?.checked !== false;
 
     showLoading(true, 'កំពុងផ្ញើសារអត្ថបទទៅ Telegram...');
 
     try {
+      let payload = {
+        chat_id: chatId,
+        message_thread_id: threadId,
+        is_monospace: useMonospace
+      };
+
+      if (currentAudience === 'both') {
+        const msg1 = currentCaptionMode === 'full' 
+          ? generateCaptionText(books, 'group') 
+          : generateSummaryCaptionText(books, 'group');
+        const msg2 = currentCaptionMode === 'full' 
+          ? generateCaptionText(books, 'individual') 
+          : generateSummaryCaptionText(books, 'individual');
+        payload.messages = [msg1, msg2];
+      } else {
+        const fullTextReport = captionEl?.value?.trim() || (
+          currentCaptionMode === 'full' 
+            ? generateCaptionText(books, currentAudience) 
+            : generateSummaryCaptionText(books, currentAudience)
+        );
+        payload.message = fullTextReport;
+      }
+
       const res = await fetch('{{ route("telegram.send") }}', {
         method: 'POST',
         headers: {
@@ -1369,18 +1597,14 @@ const TODAY_TOTAL = {{ $todayTotal }};
           'X-CSRF-TOKEN': document.querySelector('meta[name=csrf-token]').content,
           'Accept': 'application/json'
         },
-        body: JSON.stringify({
-          chat_id: chatId,
-          message_thread_id: threadId,
-          message: fullTextReport
-        })
+        body: JSON.stringify(payload)
       });
 
       const data = await res.json();
       showLoading(false);
 
       if (res.ok && data.ok) {
-        showToast('success', 'ផ្ញើសារអត្ថបទទៅ Telegram ជោគជ័យ! 🎉');
+        showToast('success', currentAudience === 'both' ? 'ផ្ញើសារអត្ថបទទាំង ២ (In Group & Individual) ទៅ Telegram ជោគជ័យ! 🎉' : 'ផ្ញើសារអត្ថបទទៅ Telegram ជោគជ័យ! 🎉');
       } else {
         showToast('error', 'មិនអាចផ្ញើបានទេ: ' + (data.message || 'Server error'));
       }
@@ -1395,20 +1619,34 @@ const TODAY_TOTAL = {{ $todayTotal }};
 
 })();
 
-// ─── PREVIEW REPORT (Simplified) ─────────────────────────────────────────────
+// ─── SMOOTH SCROLL TO TELEGRAM STUDIO ─────────────────────────────
+function scrollToStudio() {
+  const panel = document.getElementById('telegramStudioPanel');
+  if (panel) {
+    panel.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    panel.classList.add('studio-highlight');
+    setTimeout(() => {
+      panel.classList.remove('studio-highlight');
+    }, 2200);
+  }
+}
+
+// ─── PREVIEW REPORT (Full & Summary by Audience) ──────────────────
 let currentPreviewReport = '';
 
 async function loadPreview() {
   const previewContent = document.getElementById('previewContent');
   const previewLoading = document.getElementById('previewLoading');
-  const gradeFilter = document.getElementById('previewGradeFilter').value;
+  const gradeFilter = document.getElementById('previewGradeFilter')?.value || '';
+  const audience = document.getElementById('previewAudienceFilter')?.value || 'group';
+  const format = document.getElementById('previewFormatFilter')?.value || 'full';
   
   // Show loading
   previewLoading.style.display = 'block';
   previewContent.style.display = 'none';
   
   try {
-    let url = `/report/daily?date={{ today()->toDateString() }}&format=full`;
+    let url = `/report/daily?date={{ today()->toDateString() }}&format=${encodeURIComponent(format)}&audience=${encodeURIComponent(audience)}`;
     if (gradeFilter) {
       url += `&grade=${encodeURIComponent(gradeFilter)}`;
     }
@@ -1446,7 +1684,7 @@ async function loadPreviewWithFilter() {
 }
 
 // Auto-load preview when modal opens
-document.getElementById('previewModal').addEventListener('shown.bs.modal', function () {
+document.getElementById('previewModal')?.addEventListener('shown.bs.modal', function () {
   loadPreview();
 });
 
@@ -1581,18 +1819,187 @@ function downloadReport() {
 </script>
 
 <style>
+/* ─── Grade Chips ─── */
 .grade-chip .chip-inner {
   transition: background .15s, border-color .15s, color .15s;
 }
 .grade-chip .chip-inner:hover {
   filter: brightness(.96);
 }
+
+/* ─── Telegram Caption Box & Segmented Controls ─── */
+.caption-header-card {
+  background: #f8fafc;
+  border: 1px solid #e2e8f0;
+  border-radius: 12px;
+  padding: 10px 12px;
+}
+
+.segmented-control {
+  display: inline-flex;
+  background: #e2e8f0;
+  padding: 3px;
+  border-radius: 999px;
+  gap: 2px;
+}
+
+.segmented-control .seg-btn {
+  border: none;
+  background: transparent;
+  color: #475569;
+  font-family: 'Kantumruy Pro', 'Noto Sans Khmer', sans-serif;
+  font-size: 0.74rem;
+  font-weight: 600;
+  padding: 5px 12px;
+  border-radius: 999px;
+  transition: all .18s cubic-bezier(0.4, 0, 0.2, 1);
+  display: inline-flex;
+  align-items: center;
+  white-space: nowrap;
+  cursor: pointer;
+  line-height: 1.2;
+}
+
+.segmented-control .seg-btn:hover {
+  color: #0f172a;
+}
+
+.segmented-control.audience-seg .seg-btn.active {
+  background: #059669;
+  color: #ffffff;
+  font-weight: 700;
+  box-shadow: 0 2px 6px rgba(5,150,105,0.3);
+}
+
+.segmented-control.format-seg .seg-btn.active {
+  background: #4f46e5;
+  color: #ffffff;
+  font-weight: 700;
+  box-shadow: 0 2px 6px rgba(79,70,229,0.3);
+}
+
+.btn-quick-copy {
+  background: #ffffff;
+  border: 1.5px solid #cbd5e1;
+  color: #1e293b;
+  font-family: 'Kantumruy Pro', 'Noto Sans Khmer', sans-serif;
+  font-size: 0.75rem;
+  font-weight: 700;
+  border-radius: 8px;
+  padding: 3px 10px;
+  box-shadow: 0 1px 2px rgba(0,0,0,0.04);
+  transition: all .15s ease;
+  display: inline-flex;
+  align-items: center;
+}
+
+.btn-quick-copy:hover {
+  background: #f1f5f9;
+  border-color: #94a3b8;
+  color: #0f172a;
+  transform: translateY(-1px);
+}
+
+.telegram-caption-area {
+  font-family: 'Kantumruy Pro', 'Noto Sans Khmer', 'Hanuman', system-ui, -apple-system, sans-serif !important;
+  font-size: 0.88rem !important;
+  line-height: 1.85 !important;
+  font-weight: 500 !important;
+  color: #0f172a !important;
+  background: #ffffff !important;
+  border: 1.5px solid #cbd5e1 !important;
+  border-radius: 12px !important;
+  padding: 12px 14px !important;
+  letter-spacing: 0.005em !important;
+  box-shadow: inset 0 1px 2px rgba(0,0,0,0.03) !important;
+  transition: border-color .15s, box-shadow .15s, background-color .15s !important;
+}
+
+.telegram-caption-area:focus {
+  background: #ffffff !important;
+  border-color: #10b981 !important;
+  box-shadow: 0 0 0 3.5px rgba(16,185,129,0.15) !important;
+  outline: none !important;
+}
+
+.caption-hint-text {
+  font-size: 0.73rem;
+  color: #64748b;
+  font-family: 'Kantumruy Pro', 'Noto Sans Khmer', sans-serif;
+  font-weight: 500;
+}
+
+.caption-counter-badge {
+  font-family: 'Outfit', 'Poppins', sans-serif;
+  font-size: 0.73rem;
+  font-weight: 700;
+  color: #475569;
+  background: #f1f5f9;
+  padding: 2px 8px;
+  border-radius: 6px;
+  border: 1px solid #e2e8f0;
+}
+
+.send-detail-check-box {
+  background: #f8fafc;
+  border: 1px solid #e2e8f0;
+  border-radius: 10px;
+  padding: 8px 12px;
+}
+
+.btn-send-image {
+  background: linear-gradient(135deg, #059669 0%, #10b981 100%) !important;
+  border: none !important;
+  color: #ffffff !important;
+  font-family: 'Kantumruy Pro', 'Noto Sans Khmer', sans-serif !important;
+  font-weight: 700 !important;
+  font-size: 0.9rem !important;
+  border-radius: 10px !important;
+  box-shadow: 0 4px 12px rgba(16,185,129,0.28) !important;
+  transition: all .2s ease !important;
+}
+
+.btn-send-image:hover {
+  box-shadow: 0 6px 16px rgba(16,185,129,0.38) !important;
+  transform: translateY(-1px);
+  color: #ffffff !important;
+}
+
+.btn-send-text {
+  background: #ffffff !important;
+  border: 1.5px solid #059669 !important;
+  color: #059669 !important;
+  font-family: 'Kantumruy Pro', 'Noto Sans Khmer', sans-serif !important;
+  font-weight: 700 !important;
+  font-size: 0.9rem !important;
+  border-radius: 10px !important;
+  transition: all .2s ease !important;
+}
+
+.btn-send-text:hover {
+  background: #ecfdf5 !important;
+  color: #047857 !important;
+  border-color: #047857 !important;
+}
+
+/* ─── Studio Highlight Animation ─── */
+@keyframes studioPulse {
+  0% {
+    box-shadow: 0 0 0 0 rgba(16, 185, 129, 0.7);
+    border-color: #10b981;
+  }
+  50% {
+    box-shadow: 0 0 0 10px rgba(16, 185, 129, 0.25);
+    border-color: #059669;
+  }
+  100% {
+    box-shadow: 0 0 0 0 rgba(16, 185, 129, 0);
+  }
+}
+
+.studio-highlight {
+  animation: studioPulse 1.8s ease-out;
+  border-color: #10b981 !important;
+}
 </style>
 @endpush
-
-
-
-
-
-
-

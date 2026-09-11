@@ -19,10 +19,12 @@ class StockService
         ?string $performedBy = null,
         ?string $notes = null,
         ?string $date = null,
+        ?string $reason = null,
     ): StockMovement {
         return StockMovement::create([
             'material_id'   => $material->id,
             'type'          => $type,
+            'reason'        => $reason,
             'quantity'      => $quantity,
             'reference'     => $reference,
             'performed_by'  => $performedBy,

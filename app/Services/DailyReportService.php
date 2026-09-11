@@ -12,11 +12,18 @@ class DailyReportService
     /**
      * Generate daily report in formatted text (Khmer style)
      */
-    public function generateDailyReport(?string $date = null, ?int $batchId = null, ?string $grade = null): string
+    public function generateDailyReport(?string $date = null, ?int $batchId = null, ?string $grade = null, string $audience = 'group'): string
     {
         try {
-            $date = $date ? Carbon::parse($date) : today();
-            $dateKhmer = $this->formatKhmerDate($date);
+            $parsedDate = $date ? Carbon::parse($date) : today();
+
+            if ($audience === 'both') {
+                $report1 = $this->generateDailyReport($parsedDate->toDateString(), $batchId, $grade, 'group');
+                $report2 = $this->generateDailyReport($parsedDate->toDateString(), $batchId, $grade, 'individual');
+                return "════════════════════════════════════\n👥 ១. របាយការណ៍ក្នុងក្រុម (IN GROUP)\n════════════════════════════════════\n\n" . $report1 . "\n\n════════════════════════════════════\n👤 ២. របាយការណ៍ជូនឯកឧត្តមបណ្ឌិត (INDIVIDUAL TO HE)\n════════════════════════════════════\n\n" . $report2;
+            }
+
+            $dateKhmer = $this->formatKhmerDate($parsedDate);
             
             // Get current batch if not specified
             $batch = $batchId ? ProductionBatch::find($batchId) : ProductionBatch::current();
@@ -33,7 +40,7 @@ class DailyReportService
             
             // Pre-aggregate today's prints per book
             $todayByBook = DailyPrint::whereIn('book_id', $allBooks->pluck('id'))
-                ->whereDate('date', $date)
+                ->whereDate('date', $parsedDate)
                 ->selectRaw('book_id, SUM(printed_today) as qty')
                 ->groupBy('book_id')
                 ->pluck('qty', 'book_id');
@@ -51,7 +58,7 @@ class DailyReportService
             $books = $booksQuery->ordered()->get();
                 
             // Build report
-            $report = $this->buildReportHeader($dateKhmer);
+            $report = $this->buildReportHeader($dateKhmer, $audience);
             
             if ($books->isEmpty()) {
                 if ($grade) {
@@ -155,7 +162,7 @@ class DailyReportService
             if ($allBooksRemaining > 0) {
                 $report .= "នៅខ្វះសរុប៖ " . number_format($allBooksRemaining) . " ក្បាល\n\n";
             } else {
-                $report .= "ការងារបានសម្រចរួចរាល់\n\n";
+                $report .= "ការងារបានសម្រេចរួចរាល់\n\n";
             }
             
             $report .= $this->buildReportFooter();
@@ -173,49 +180,43 @@ class DailyReportService
     /**
      * Generate compact report for Telegram (shorter format)
      */
-    public function generateCompactReport(?string $date = null, ?int $batchId = null, ?string $grade = null): string
+    public function generateCompactReport(?string $date = null, ?int $batchId = null, ?string $grade = null, string $audience = 'group'): string
     {
         try {
-            $date = $date ? Carbon::parse($date) : today();
+            $parsedDate = $date ? Carbon::parse($date) : today();
+
+            if ($audience === 'both') {
+                $report1 = $this->generateCompactReport($parsedDate->toDateString(), $batchId, $grade, 'group');
+                $report2 = $this->generateCompactReport($parsedDate->toDateString(), $batchId, $grade, 'individual');
+                return "════════════════════════════════════\n👥 ១. របាយការណ៍ក្នុងក្រុម (IN GROUP)\n════════════════════════════════════\n\n" . $report1 . "\n\n════════════════════════════════════\n👤 ២. របាយការណ៍ជូនឯកឧត្តមបណ្ឌិត (INDIVIDUAL TO HE)\n════════════════════════════════════\n\n" . $report2;
+            }
+
+            $dateKhmer = $this->formatKhmerDate($parsedDate);
             $batch = $batchId ? ProductionBatch::find($batchId) : ProductionBatch::current();
             
             if (!$batch) {
                 return "មិនមាន Batch សកម្ម។";
             }
             
-            $report = "📊 Production Report\n";
-            $report .= "Date: " . $date->format('d/m/Y') . "\n";
-            $report .= "Batch: {$batch->name}\n";
-            if ($grade) {
-                $report .= "Filter: {$grade}\n";
-            }
-            $report .= "\n";
-            
-            // Get ALL books for grand total (unfiltered)
+            // Get ALL books for grand total
             $allBooks = Book::where('batch_id', $batch->id)->get();
-            $allBooksTotal = $allBooks->sum('total_printed');
-            $allBooksTarget = $allBooks->sum('target_qty');
-            $allBooksRemaining = max($allBooksTarget - $allBooksTotal, 0);
-            $overallPercent = $allBooksTarget > 0 ? round(($allBooksTotal / $allBooksTarget) * 100, 1) : 0;
-            
-            // Pre-aggregate today's prints per book in one query (avoids N+1)
             $todayByBook = DailyPrint::whereIn('book_id', $allBooks->pluck('id'))
-                ->whereDate('date', $date)
+                ->whereDate('date', $parsedDate)
                 ->selectRaw('book_id, SUM(printed_today) as qty')
                 ->groupBy('book_id')
                 ->pluck('qty', 'book_id');
-            
+                
             $allBooksToday = $todayByBook->sum();
             
             // Get books for display - filtered by grade if specified
             $booksQuery = Book::where('batch_id', $batch->id);
-            
             if ($grade) {
                 $booksQuery->where('grade', $grade);
             }
-            
             $books = $booksQuery->ordered()->get();
                 
+            $report = $this->buildReportHeader($dateKhmer, $audience);
+
             if ($books->isEmpty()) {
                 if ($grade) {
                     $report .= "មិនមានសៀវភៅសម្រាប់ {$grade} ទេ។\n\n";
@@ -224,29 +225,55 @@ class DailyReportService
                 }
             } else {
                 $booksByGrade = $books->groupBy('grade');
+                $report .= "━━━━━【បូកសរុប】━━━━━\n";
                 
+                $grandTotal = 0;
+                $grandTarget = 0;
+                $grandRemaining = 0;
+
                 foreach ($booksByGrade as $gradeKey => $gradeBooks) {
                     $gradeTotal = $gradeBooks->sum('total_printed') ?? 0;
                     $gradeTarget = $gradeBooks->sum('target_qty') ?? 0;
                     $gradeRemaining = max($gradeTarget - $gradeTotal, 0);
-                    $gradePercent = $gradeTarget > 0 ? round(($gradeTotal / $gradeTarget) * 100) : 0;
-                    
-                    $report .= "• {$gradeKey}\n";
-                    $report .= number_format($gradeTotal) . " / " . number_format($gradeTarget) . " ({$gradePercent}%) | Remaining: " . number_format($gradeRemaining) . "\n\n";
+
+                    $report .= "បូកសរុប {$gradeKey}\n";
+                    $report .= "ចំនួន Order សរុប៖ " . number_format($gradeTarget) . " ក្បាល\n";
+                    $report .= "សរុបមុន និងក្រោយ៖ " . number_format($gradeTotal) . " ក្បាល\n";
+                    $report .= "នៅខ្វះសរុប៖ " . number_format($gradeRemaining) . " ក្បាល\n\n";
+
+                    $grandTotal += $gradeTotal;
+                    $grandTarget += $gradeTarget;
+                    $grandRemaining += $gradeRemaining;
+                }
+                
+                // Grand total
+                $report .= "━━【បូកសរុបការងារបោះពុម្ព】━━\n\n";
+                $report .= "សម្រេចបានសរុបទាំងអស់ថ្ងៃនេះ៖ " . number_format($allBooksToday) . " ក្បាល\n";
+                $report .= "សរុបការងារបោះពុម្ពរួច៖ " . number_format($grandTotal) . " ក្បាល\n";
+                if ($grandRemaining > 0) {
+                    $report .= "នៅខ្វះសរុប៖ " . number_format($grandRemaining) . " ក្បាល\n\n";
+                } else {
+                    $report .= "ការងារបានសម្រេចរួចរាល់\n\n";
                 }
             }
-            
-            // Grand total
-            $report .= "────────────────────\n\n";
-            $report .= "Completed : " . number_format($allBooksTotal) . " / " . number_format($allBooksTarget) . " ({$overallPercent}%)\n";
-            $report .= "Remaining : " . number_format($allBooksRemaining) . " Books\n";
-            
+
+            $report .= $this->buildReportFooter();
             return $report;
-            
         } catch (\Exception $e) {
             \Log::error('Error generating compact report: ' . $e->getMessage());
             return "មានបញ្ហាក្នុងការបង្កើតរបាយការណ៍៖ " . $e->getMessage();
         }
+    }
+
+    /**
+     * Generate visual ASCII progress bar
+     */
+    private function getAsciiProgressBar($percent, int $totalBars = 10): string
+    {
+        $filled = (int) round(((float) $percent / 100) * $totalBars);
+        $filled = max(0, min($totalBars, $filled));
+        $empty = $totalBars - $filled;
+        return '[' . str_repeat('█', $filled) . str_repeat('░', $empty) . ']';
     }
 
 
@@ -330,10 +357,13 @@ class DailyReportService
     /**
      * Build report header
      */
-    private function buildReportHeader(string $dateKhmer): string
+    private function buildReportHeader(string $dateKhmer, string $audience = 'group'): string
     {
-        $header = "សូមគោរពរាយការណ៍ជូនឯកឧត្តមបណ្ឌិតឯកឧត្តម លោកជំទាវ និងសមាជិកក្រុមការងារ\n";
-        $header .= "{$dateKhmer}\n\n";
+        $greeting = ($audience === 'individual')
+            ? "សូមគោរពរាយការណ៍ជូនឯកឧត្តមបណ្ឌិត\n"
+            : "សូមគោរពរាយការណ៍ជូនឯកឧត្តមបណ្ឌិត ឯកឧត្តម លោកជំទាវ និងសមាជិកក្រុមការងារ\n";
+            
+        $header = "{$greeting}{$dateKhmer}\n\n";
         $header .= "ក្រុមការងារខ្ញុំ សូមគោរពរាយការណ៍អំពីស្ថានភាពការងារបោះពុម្ពសៀវភៅ ដូចខាងក្រោម៖\n\n";
         return $header;
     }
@@ -359,8 +389,8 @@ class DailyReportService
      */
     private function formatKhmerDate(Carbon $date): string
     {
-        $day = $this->numberToKhmer($date->day);
-        $year = $this->numberToKhmer($date->year);
+        $day = sprintf('%02d', $date->day);
+        $year = $date->year;
         
         $months = [
             1 => 'មករា', 2 => 'កុម្ភៈ', 3 => 'មីនា', 4 => 'មេសា',
@@ -370,7 +400,7 @@ class DailyReportService
         
         $month = $months[$date->month];
         
-        return "ថ្ងៃទី {$day} ខែ{$month} ឆ្នាំ {$year}";
+        return "ថ្ងៃទី {$day} ខែ {$month} ឆ្នាំ {$year}";
     }
 
     /**
@@ -391,10 +421,13 @@ class DailyReportService
     }
 
     /**
-     * Send report to Telegram
+     * Send report to Telegram (with optional one-touch tap-to-copy HTML formatting)
+     * Accepts a single string or an array of message strings (e.g. for sending both options at same time)
      */
-    public function sendToTelegram(string $report, ?int $groupId = null): bool
+    public function sendToTelegram(string|array $report, ?int $groupId = null, bool $isMonospace = true): bool
     {
+        $messages = is_array($report) ? $report : [$report];
+
         // If no group specified, send to all active groups
         if (!$groupId) {
             $groups = \App\Models\TelegramGroup::where('status', 'active')->get();
@@ -402,7 +435,14 @@ class DailyReportService
                 return false;
             }
             foreach ($groups as $group) {
-                \App\Jobs\SendTelegramMessageJob::dispatch($group->chat_id, $report, $group->message_thread_id);
+                foreach ($messages as $msg) {
+                    if (empty(trim($msg))) continue;
+                    $formattedMessage = $isMonospace 
+                        ? "<pre>" . htmlspecialchars($msg, ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8') . "</pre>"
+                        : $msg;
+                    $parseMode = $isMonospace ? 'HTML' : null;
+                    \App\Jobs\SendTelegramMessageJob::dispatch($group->chat_id, $formattedMessage, $group->message_thread_id, $parseMode);
+                }
             }
             return true;
         }
@@ -410,7 +450,14 @@ class DailyReportService
         // Send to specific group
         $group = \App\Models\TelegramGroup::find($groupId);
         if ($group) {
-            \App\Jobs\SendTelegramMessageJob::dispatch($group->chat_id, $report, $group->message_thread_id);
+            foreach ($messages as $msg) {
+                if (empty(trim($msg))) continue;
+                $formattedMessage = $isMonospace 
+                    ? "<pre>" . htmlspecialchars($msg, ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8') . "</pre>"
+                    : $msg;
+                $parseMode = $isMonospace ? 'HTML' : null;
+                \App\Jobs\SendTelegramMessageJob::dispatch($group->chat_id, $formattedMessage, $group->message_thread_id, $parseMode);
+            }
             return true;
         }
         

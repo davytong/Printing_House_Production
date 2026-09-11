@@ -54,6 +54,7 @@ class MovementController extends Controller
         $data = $request->validate([
             'material_id'   => 'required|exists:materials,id',
             'type'          => 'required|in:in,out,adjust',
+            'reason'        => 'nullable|string|max:100',
             'quantity'      => 'required|numeric|min:0.01',
             'reference'     => 'nullable|string|max:255',
             'performed_by'  => 'nullable|string|max:100',
@@ -81,6 +82,7 @@ class MovementController extends Controller
             $data['performed_by'] ?? null,
             $data['notes'] ?? null,
             $data['movement_date'],
+            $data['reason'] ?? null,
         );
 
         // Check low stock alert
@@ -126,15 +128,29 @@ class MovementController extends Controller
         // Accept any valid category string (not just known ones)
         if (!preg_match('/^[a-z0-9\-_]{1,50}$/', $category)) $category = 'paper';
 
+        $updateDate = $request->query('date', now()->toDateString());
+
         $materials = Material::where('status', 'active')
             ->where('category', $category)
             ->orderBy('sub_type')
             ->orderBy('name')
+            ->get();
+
+        $movementsToday = StockMovement::whereIn('material_id', $materials->pluck('id'))
+            ->where(function($q) use ($updateDate) {
+                $q->whereDate('movement_date', $updateDate)
+                  ->orWhereDate('created_at', $updateDate);
+            })
             ->get()
-            ->map(function ($m) {
-                $m->calculated_stock = $m->currentStock();
-                return $m;
-            });
+            ->groupBy('material_id');
+
+        $materials->map(function ($m) use ($movementsToday) {
+            $m->calculated_stock = $m->currentStock();
+            $moves = $movementsToday->get($m->id, collect());
+            $m->today_in  = (float) $moves->where('type', 'in')->sum('quantity');
+            $m->today_out = (float) $moves->where('type', 'out')->sum('quantity');
+            return $m;
+        });
 
         $telegramGroups = \App\Models\TelegramGroup::orderBy('name')->get();
 
@@ -144,7 +160,39 @@ class MovementController extends Controller
         // Get language format setting for this category
         $nameFormat = \App\Models\Setting::get("telegram_item_name_format_{$category}", 'both');
 
-        return view('stock.movements.daily', compact('materials', 'category', 'telegramGroups', 'defaultGroup', 'nameFormat'));
+        return view('stock.movements.daily', compact('materials', 'category', 'telegramGroups', 'defaultGroup', 'nameFormat', 'updateDate'));
+    }
+
+    /**
+     * Get JSON stats (today_in, today_out) for materials in a category for a specific date
+     */
+    public function dailyStats(Request $request): \Illuminate\Http\JsonResponse
+    {
+        $date = $request->query('date', now()->toDateString());
+        $category = $request->query('category', 'paper');
+
+        $materialIds = Material::where('status', 'active')
+            ->where('category', $category)
+            ->pluck('id');
+
+        $movements = StockMovement::whereIn('material_id', $materialIds)
+            ->where(function($q) use ($date) {
+                $q->whereDate('movement_date', $date)
+                  ->orWhereDate('created_at', $date);
+            })
+            ->get()
+            ->groupBy('material_id');
+
+        $stats = [];
+        foreach ($materialIds as $id) {
+            $moves = $movements->get($id, collect());
+            $stats[$id] = [
+                'today_in'  => (float) $moves->where('type', 'in')->sum('quantity'),
+                'today_out' => (float) $moves->where('type', 'out')->sum('quantity'),
+            ];
+        }
+
+        return response()->json(['ok' => true, 'stats' => $stats]);
     }
 
     public function dailyStore(Request $request): RedirectResponse
@@ -315,36 +363,37 @@ class MovementController extends Controller
                     $nameDisplay = preg_replace('/ \((Large|Small|ធំ|តូច|Large Roll|Small Roll)\)/ui', '', $nameDisplay);
                 }
 
+                $targetDate = \Carbon\Carbon::parse($date)->toDateString();
                 $delta = (float)($it['qty']) - (float)($it['old_qty'] ?? $it['qty']);
-                $usageText = '';
                 
-                // Also check actual in/out movements for the day
+                // Check actual in/out movements for the target date
                 $todayMovements = \App\Models\StockMovement::where('material_id', $it['id'])
-                    ->whereDate('movement_date', $date)
+                    ->where(function($q) use ($targetDate) {
+                        $q->whereDate('movement_date', $targetDate)
+                          ->orWhereDate('created_at', $targetDate);
+                    })
                     ->get();
                 
-                $todayIn = (float) $todayMovements->where('type', 'in')->sum('quantity');
-                $todayOut = (float) $todayMovements->where('type', 'out')->sum('quantity');
+                $todayInRecorded  = (float) $todayMovements->where('type', 'in')->sum('quantity');
+                $todayOutRecorded = (float) $todayMovements->where('type', 'out')->sum('quantity');
                 
-                if ($todayIn > 0 || $todayOut > 0) {
+                $totalOut = $todayOutRecorded + ($delta < 0 ? abs($delta) : 0);
+                $totalIn  = $todayInRecorded  + ($delta > 0 ? $delta : 0);
+                
+                $usageText = '';
+                if ($totalOut > 0 || $totalIn > 0) {
                     $parts = [];
-                    if ($todayOut > 0) {
-                        $parts[] = "បានប្រើ " . number_format($todayOut, 0);
+                    if ($totalOut > 0) {
+                        $parts[] = "បានប្រើ " . ($totalOut + 0) . " {$it['unit']}";
                     }
-                    if ($todayIn > 0) {
-                        $parts[] = "ចូលស្តុក " . number_format($todayIn, 0);
+                    if ($totalIn > 0) {
+                        $parts[] = "ចូលស្តុក " . ($totalIn + 0) . " {$it['unit']}";
                     }
                     $usageText = " (" . implode(', ', $parts) . ")";
-                } else {
-                    // Fallback to delta if no specific IN/OUT movements
-                    if ($delta < 0) {
-                        $usageText = " (បានប្រើ " . number_format(abs($delta), 0) . ")";
-                    } elseif ($delta > 0) {
-                        $usageText = " (ចូលស្តុក " . number_format($delta, 0) . ")";
-                    }
                 }
 
-                $itemLines[] = "- {$nameDisplay} : " . number_format($it['qty'], 0) . " {$it['unit']}{$usageText}";
+                $qtyStr = (number_format($it['qty'], 2) + 0);
+                $itemLines[] = "- {$nameDisplay} : {$qtyStr} {$it['unit']}{$usageText}";
             }
         }
         $itemsText = trim(implode("\n", $itemLines));

@@ -101,7 +101,7 @@
           <div style="flex:1;min-width:160px">
             <label class="form-label" style="font-size:.8rem"><i class="bi bi-calendar3"></i> ថ្ងៃខែ</label>
             <input type="date" name="update_date" class="form-control form-control-sm"
-                   value="{{ now()->format('Y-m-d') }}" style="font-family:var(--font-latin)" required>
+                   value="{{ $updateDate ?? now()->format('Y-m-d') }}" style="font-family:var(--font-latin)" required>
           </div>
           <div style="flex:2;min-width:160px">
             <label class="form-label" style="font-size:.8rem"><i class="bi bi-person-fill"></i> ឈ្មោះអ្នករាយការណ៍</label>
@@ -185,6 +185,8 @@
                            value="{{ number_format($stock, 0, '.', '') }}"
                            data-original="{{ number_format($stock, 0, '.', '') }}"
                            data-value="{{ number_format($stock, 0, '.', '') }}"
+                           data-today-in="{{ (float)($m->today_in ?? 0) }}"
+                           data-today-out="{{ (float)($m->today_out ?? 0) }}"
                            inputmode="text"
                            autocomplete="off"
                            spellcheck="false"
@@ -458,16 +460,21 @@ document.querySelectorAll('.qty-input').forEach(inp => {
     if (hidden) hidden.value = val;
     inp.dataset.value = val;
 
-    if (delta < 0) {
+    const todayInRecorded  = parseFloat(inp.dataset.todayIn)  || 0;
+    const todayOutRecorded = parseFloat(inp.dataset.todayOut) || 0;
+    const totalOut = todayOutRecorded + (delta < 0 ? Math.abs(delta) : 0);
+    const totalIn  = todayInRecorded  + (delta > 0 ? delta : 0);
+
+    if (delta < 0 || totalOut > 0) {
       inp.style.background = '#fffbeb'; inp.style.borderColor = '#fbbf24';
       inp.style.setProperty('color', '#b45309', 'important'); // Force dark amber text
       result.style.color = '#b45309';
-      result.innerHTML = `ស្តុកថ្មី <span class="pill">${val.toLocaleString()}</span> · បានប្រើ ${Math.abs(delta).toLocaleString()}`;
-    } else if (delta > 0) {
+      result.innerHTML = `ស្តុកថ្មី <span class="pill">${val.toLocaleString()}</span> · បានប្រើ ${totalOut.toLocaleString()}`;
+    } else if (delta > 0 || totalIn > 0) {
       inp.style.background = '#ecfdf5'; inp.style.borderColor = '#34d399';
       inp.style.setProperty('color', '#047857', 'important'); // Force dark emerald text
       result.style.color = '#15803d';
-      result.innerHTML = `ស្តុកថ្មី <span class="pill">${val.toLocaleString()}</span> · ចូលស្តុក ${delta.toLocaleString()}`;
+      result.innerHTML = `ស្តុកថ្មី <span class="pill">${val.toLocaleString()}</span> · ចូលស្តុក ${totalIn.toLocaleString()}`;
     } else {
       inp.style.background = ''; inp.style.borderColor = '';
       inp.style.removeProperty('color'); // Reset to theme default
@@ -697,14 +704,22 @@ function updatePreview() {
       display = display.replace(/ \((Large|Small|ធំ|តូច|Large Roll|Small Roll)\)/gi, '');
     }
     
-    const original = parseFloat(inp.dataset.original) || 0;
-    const delta = qty - original;
-    let usageText = '';
-    if (delta < 0) {
-      usageText = ` (បានប្រើ ${Math.abs(delta).toLocaleString()})`;
-    } else if (delta > 0) {
-      usageText = ` (ចូលស្តុក ${delta.toLocaleString()})`;
+    const todayInRecorded  = parseFloat(inp.dataset.todayIn)  || 0;
+    const todayOutRecorded = parseFloat(inp.dataset.todayOut) || 0;
+    const original         = parseFloat(inp.dataset.original) || 0;
+    const delta            = qty - original;
+
+    const totalOut = todayOutRecorded + (delta < 0 ? Math.abs(delta) : 0);
+    const totalIn  = todayInRecorded  + (delta > 0 ? delta : 0);
+
+    let parts = [];
+    if (totalOut > 0) {
+      parts.push(`បានប្រើ ${totalOut.toLocaleString()}`);
     }
+    if (totalIn > 0) {
+      parts.push(`ចូលស្តុក ${totalIn.toLocaleString()}`);
+    }
+    let usageText = parts.length > 0 ? ` (${parts.join(', ')})` : '';
     
     const itemStr = `- ${display} : ${qty.toLocaleString()}${unitLabel ? ' ' + unitLabel : ''}${usageText}`;
     
@@ -730,7 +745,31 @@ function updatePreview() {
 
 // init preview
 updatePreview();
-document.querySelector('[name=update_date]')?.addEventListener('change', updatePreview);
+document.querySelector('[name=update_date]')?.addEventListener('change', function() {
+  const newDate = this.value;
+  if (!newDate) return;
+  fetch(`{{ route("stock.movements.daily-stats") }}?category=${category}&date=${newDate}`)
+    .then(res => res.json())
+    .then(data => {
+      if (data.ok && data.stats) {
+        document.querySelectorAll('.qty-input').forEach(inp => {
+          const wrap = inp.closest('div[style*="display:flex"]');
+          const matIdInput = wrap?.querySelector('input[name*="[material_id]"]');
+          if (matIdInput && data.stats[matIdInput.value]) {
+            inp.dataset.todayIn  = data.stats[matIdInput.value].today_in  || 0;
+            inp.dataset.todayOut = data.stats[matIdInput.value].today_out || 0;
+          } else {
+            inp.dataset.todayIn  = 0;
+            inp.dataset.todayOut = 0;
+          }
+          // trigger re-render
+          inp.dispatchEvent(new Event('input'));
+        });
+      }
+    })
+    .catch(err => console.error('Failed to fetch daily stats:', err));
+  updatePreview();
+});
 document.querySelector('[name=performed_by]')?.addEventListener('input', updatePreview);
 
 // ── Multi-image handling ───────────────────────────────────

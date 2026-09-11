@@ -154,4 +154,52 @@ class StockMovementTest extends TestCase
         // Assert new stock is 7
         $this->assertEquals(7, $material1->currentStock());
     }
+
+    /**
+     * Test daily update attaches recorded today_out and today_in movements.
+     */
+    public function test_daily_update_attaches_today_movements(): void
+    {
+        $material = Material::create([
+            'code' => 'C-01',
+            'name' => 'Cleaning Soap',
+            'name_km' => 'សាប៊ូជូតស្អាត',
+            'category' => 'consumable',
+            'unit' => 'bottle',
+            'unit_cost' => 2.0,
+            'min_stock' => 5,
+            'status' => 'active',
+        ]);
+
+        // Record initial stock IN 10
+        StockMovement::create([
+            'material_id' => $material->id,
+            'type' => 'in',
+            'quantity' => 10,
+            'movement_date' => now()->toDateString(),
+        ]);
+
+        // Record Stock OUT 1 bottle today
+        StockMovement::create([
+            'material_id' => $material->id,
+            'type' => 'out',
+            'quantity' => 1,
+            'movement_date' => now()->toDateString(),
+        ]);
+
+        // GET daily update page
+        $response = $this->get('/stock/movements/daily?category=consumable');
+        $response->assertStatus(200);
+        $response->assertSee('data-today-out="1"', false);
+
+        // GET daily stats endpoint
+        $statsResponse = $this->get('/stock/movements/daily-stats?category=consumable&date=' . now()->toDateString());
+        $statsResponse->assertStatus(200);
+        $statsResponse->assertJsonFragment([
+            $material->id => [
+                'today_in' => 10,
+                'today_out' => 1,
+            ]
+        ]);
+    }
 }

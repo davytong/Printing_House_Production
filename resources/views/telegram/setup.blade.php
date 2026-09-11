@@ -621,6 +621,84 @@
 </div>
 
 {{-- ════════════════════════════════════════════
+     STOCK OUT NOTIFICATION TARGET CONFIGURATION
+════════════════════════════════════════════ --}}
+@php
+  $stockOutChatId  = $stockOutConfig['chat_id'];
+  $stockOutThreadId= $stockOutConfig['thread_id'];
+  $stockOutGroup   = $stockOutChatId
+    ? $groupedChats->get($stockOutChatId)?->first()
+    : null;
+@endphp
+<div class="panel mb-4">
+  <div class="panel-header">
+    <div class="ph-title">
+      <div class="ph-icon" style="background:#fce7f3;color:#be185d"><i class="bi bi-box-arrow-up-right"></i></div>
+      <span>Stock Out Alert Target</span>
+      @if($stockOutChatId)
+        <span class="badge badge-done" style="font-size:.65rem">✅ Configured</span>
+      @else
+        <span class="badge badge-pending" style="font-size:.65rem">⚠️ Not configured</span>
+      @endif
+    </div>
+  </div>
+  <div class="panel-body">
+
+    @if($stockOutChatId)
+      <div style="background:#dcfce7;border:1px solid #86efac;border-radius:12px;
+                  padding:.85rem 1.25rem;font-size:.9rem;color:#14532d;margin-bottom:1rem;
+                  display:flex;align-items:center;gap:0.75rem;">
+        <i class="bi bi-check-circle-fill" style="font-size:1.2rem"></i>
+        <div>
+          Stock Out Target ត្រូវបានកំណត់ → ផ្ញើទៅ:
+          <strong>{{ $stockOutGroup?->name ?? $stockOutChatId }}</strong>
+          @if($stockOutThreadId) › Thread #{{ $stockOutThreadId }} @endif
+        </div>
+      </div>
+    @endif
+
+    <div style="font-size:.88rem;color:var(--text-secondary);margin-bottom:1.5rem;line-height:1.6">
+      ជ្រើសរើសក្រុម/Topic គោលដៅ ដើម្បីទទួលសារជូនដំណឹងភ្លាមៗរាល់ពេលដែលមានបុគ្គលិកដក Stock ចេញ (Stock Out) ពី Mini App ឬ Telegram Bot។
+    </div>
+
+    <form action="{{ route('telegram.stock-out-config') }}" method="POST" style="background:var(--surface-2);border-radius:16px;padding:1.5rem;border:1px solid var(--border);">
+      @csrf
+      <div class="row g-3 align-items-end">
+        <div class="col-md-10">
+          <label class="form-label" style="font-family:var(--font-khmer);font-weight:700;color:var(--text-primary)">
+            <i class="bi bi-send-fill me-1" style="color:var(--primary)"></i> ក្រុម/Topic គោលដៅ (Stock Out Target)
+          </label>
+          <select name="stock_out_target" class="form-select" style="font-family:var(--font-khmer);font-size:0.95rem;cursor:pointer;">
+            <option value="">— ប្រើប្រាស់ Target ដូច Daily Stock Usage —</option>
+            @foreach($groupedChats as $cId => $chatGrps)
+              <optgroup label="{{ $chatGrps->first()->name }}">
+                @foreach($chatGrps as $g)
+                  @php 
+                    $val = $g->chat_id . '|' . ($g->message_thread_id ?? '');
+                    $isSelected = ($stockOutChatId == $g->chat_id && $stockOutThreadId == $g->message_thread_id);
+                    $label = $g->name ?? $g->chat_id;
+                    if ($g->message_thread_id) $label .= ' › ' . ($g->topic_name ?: 'Topic #'.$g->message_thread_id);
+                  @endphp
+                  <option value="{{ $val }}" {{ $isSelected ? 'selected' : '' }}>
+                    {{ $label }}
+                  </option>
+                @endforeach
+              </optgroup>
+            @endforeach
+          </select>
+        </div>
+        <div class="col-md-2">
+          <button type="submit" class="btn btn-primary w-100" style="height:42px;display:flex;align-items:center;justify-content:center;gap:0.5rem;">
+            <i class="bi bi-save2"></i> រក្សាទុក
+          </button>
+        </div>
+      </div>
+    </form>
+
+  </div>
+</div>
+
+{{-- ════════════════════════════════════════════
      LOW-STOCK ALERT CAPTION TEMPLATE (editable)
 ════════════════════════════════════════════ --}}
 <div class="panel mb-4">
@@ -693,6 +771,76 @@
           <label class="form-label mt-3" style="font-weight:600;font-size:.82rem">មើលជាមុន (Preview)</label>
           <pre id="alertTplPreview" style="background:#0f172a;color:#e2e8f0;border-radius:8px;
                padding:.85rem;font-size:.78rem;white-space:pre-wrap;word-break:break-word;min-height:120px;margin:0"></pre>
+        </div>
+      </div>
+    </div>
+  </div>
+{{-- ════════════════════════════════════════════
+     STOCK OUT NOTIFICATION TEMPLATE (editable)
+════════════════════════════════════════════ --}}
+<div class="panel mb-4">
+  <div class="panel-header">
+    <div class="ph-title">
+      <div class="ph-icon" style="background:#e0e7ff;color:#4338ca"><i class="bi bi-box-arrow-up-right"></i></div>
+      <span>Template ការជូនដំណឹងពេលដកស្តុក (Stock Out Notification Template)</span>
+    </div>
+    <button class="btn btn-ghost btn-icon" type="button"
+            data-bs-toggle="collapse" data-bs-target="#stockOutTplPanel">
+      <i class="bi bi-chevron-down" id="stockOutTplChevron" style="transition:transform .2s"></i>
+    </button>
+  </div>
+  <div class="collapse show" id="stockOutTplPanel">
+    <div class="panel-body">
+      <p style="font-size:.8rem;color:var(--text-muted);margin-bottom:1rem;line-height:1.7">
+        កែសម្រួលសារ Telegram ដែលផ្ញើដោយស្វ័យប្រវត្តិទៅកាន់ Telegram Group / Bot ពេលមានបុគ្គលិកដកស្តុក (Stock Out)។ ប្រើ placeholder ខាងក្រោម —
+        ពួកវានឹងត្រូវជំនួសដោយទិន្នន័យពិត។
+      </p>
+
+      <div class="row g-3">
+        <div class="col-lg-7">
+          <form action="{{ route('telegram.stock-out-template') }}" method="POST">
+            @csrf
+            <label class="form-label" style="font-weight:600;font-size:.82rem">Template</label>
+            <textarea name="stock_out_template" id="stockOutTemplateInput" class="form-control"
+                      rows="13" style="font-family:var(--font-latin);font-size:.85rem;line-height:1.6"
+                      required>{{ $stockOutTemplate }}</textarea>
+            <div class="d-flex gap-2 mt-3">
+              <button type="submit" class="btn btn-primary btn-sm">
+                <i class="bi bi-save2"></i> រក្សាទុក Template
+              </button>
+              <button type="button" class="btn btn-outline-secondary btn-sm" onclick="previewStockOutTpl()">
+                <i class="bi bi-eye"></i> មើលជាមុន
+              </button>
+            </div>
+          </form>
+          <div class="d-flex flex-wrap gap-2 mt-2">
+            <form action="{{ route('telegram.stock-out-template-reset') }}" method="POST"
+                  onsubmit="return confirm('កំណត់ Template ត្រឡប់ទៅលំនាំដើម?')">
+              @csrf
+              <button type="submit" class="btn btn-outline-danger btn-sm">
+                <i class="bi bi-arrow-counterclockwise"></i> លំនាំដើម (Reset)
+              </button>
+            </form>
+          </div>
+        </div>
+
+        <div class="col-lg-5">
+          <label class="form-label" style="font-weight:600;font-size:.82rem">Placeholders</label>
+          <div style="background:#f8fafc;border:1px solid var(--border);border-radius:8px;padding:.75rem;font-size:.74rem;line-height:1.9">
+            <code>{name}</code> — ឈ្មោះទំនិញ<br>
+            <code>{quantity}</code> — ចំនួនដក (e.g. 2)<br>
+            <code>{unit}</code> — ឯកតា (e.g. ដប)<br>
+            <code>{reason}</code> — គោលបំណង (e.g. ប្រើប្រាស់ក្នុងការផលិត)<br>
+            <code>{performed_by}</code> — អ្នកដក (e.g. Davy Tong)<br>
+            <code>{date}</code> — កាលបរិច្ឆេទ (e.g. 25 សីហា 2026)<br>
+            <code>{time}</code> — ម៉ោង (e.g. 20:18)<br>
+            <code>{stock_before}</code> — ស្តុកមុនដក<br>
+            <code>{stock_remaining}</code> — ស្តុកនៅសល់<br>
+            <code>{ref_code}</code> — លេខប្រតិបត្តិការ (SO-20260825-0018)
+          </div>
+          <label class="form-label mt-3" style="font-weight:600;font-size:.82rem">មើលជាមុន (Preview)</label>
+          <div id="stockOutTplPreview" style="background:#0f172a;color:#e2e8f0;border-radius:8px;
+               padding:.85rem;font-size:.78rem;white-space:pre-wrap;word-break:break-word;min-height:150px;margin:0"></div>
         </div>
       </div>
     </div>
@@ -1025,10 +1173,34 @@ function previewAlertTpl() {
   document.getElementById('alertTplPreview').textContent = out;
 }
 
+function previewStockOutTpl() {
+  const tplEl = document.getElementById('stockOutTemplateInput');
+  if (!tplEl) return;
+  const tpl = tplEl.value;
+  const sample = {
+    '{name}': 'ទឹកថ្នាំ Cyan',
+    '{quantity}': '2',
+    '{unit}': 'ដប',
+    '{reason}': 'ប្រើប្រាស់ក្នុងការផលិត',
+    '{performed_by}': 'Davy Tong',
+    '{date}': '25 សីហា 2026',
+    '{time}': '20:18',
+    '{stock_before}': '12',
+    '{stock_remaining}': '10',
+    '{ref_code}': 'SO-20260825-0018',
+  };
+  let out = tpl;
+  for (const [k,v] of Object.entries(sample)) out = out.split(k).join(v);
+  document.getElementById('stockOutTplPreview').innerHTML = out;
+}
+
 // Auto-preview on load + as you type
 document.addEventListener('DOMContentLoaded', () => {
   const inp = document.getElementById('alertTemplateInput');
   if (inp) { previewAlertTpl(); inp.addEventListener('input', previewAlertTpl); }
+
+  const inpStk = document.getElementById('stockOutTemplateInput');
+  if (inpStk) { previewStockOutTpl(); inpStk.addEventListener('input', previewStockOutTpl); }
 });
 </script>
 @endpush

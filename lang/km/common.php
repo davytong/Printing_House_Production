@@ -113,7 +113,8 @@ return [
     'reports' => 'របាយការណ៍',
     'paper_report' => 'រាយការណ៍ ក្រដាស',
     'film_report' => 'រាយការណ៍ Film',
-    'consumable_report' => 'រាយការណ៍ Consumable',
+    'consumable_report' => 'របាយការណ៍ Consumables',
+    'stock_out' => 'ដកស្តុក',
     'materials_list' => 'បញ្ជី Materials',
     
     // Production

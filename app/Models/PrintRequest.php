@@ -38,6 +38,11 @@ class PrintRequest extends Model
         return $this->hasMany(PrintRequestItem::class);
     }
 
+    public function productionJobs(): HasMany
+    {
+        return $this->hasMany(ProductionJob::class);
+    }
+
     public function isOverdue(): bool
     {
         return $this->required_by

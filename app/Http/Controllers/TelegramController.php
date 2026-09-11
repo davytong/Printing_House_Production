@@ -54,6 +54,13 @@ class TelegramController extends Controller
 
         $update = $request->all();
 
+        // ── Process Bot Commands & Callback Queries via TelegramBotService ──
+        try {
+            app(\App\Services\TelegramBotService::class)->handleUpdate($update);
+        } catch (\Throwable $e) {
+            Log::error('TelegramBotService handleUpdate failed: ' . $e->getMessage());
+        }
+
         // ── Extract message (could be message, channel_post, etc.) ────
         $message = $update['message']
                 ?? $update['edited_message']
@@ -61,7 +68,7 @@ class TelegramController extends Controller
                 ?? null;
 
         if (! $message) {
-            return response()->json(['ok' => true]); // my_chat_member, callback_query, etc.
+            return response()->json(['ok' => true]);
         }
 
         $chat = $message['chat'] ?? null;
@@ -147,7 +154,6 @@ class TelegramController extends Controller
             'full_text'         => 'nullable|string',
         ]);
 
-        $caption   = mb_substr($request->input('caption', '📄 របាយការណ៍ការបោះពុម្ព'), 0, 1024);
         $rawChatId = $request->input('chat_id');
         // Safety: parse "chatId|threadId" if JS didn't strip it
         if (str_contains($rawChatId, '|')) {
@@ -158,9 +164,12 @@ class TelegramController extends Controller
             $threadId = $request->integer('message_thread_id') ?: null;
         }
 
+        $caption   = $request->input('caption', '🖨️ របាយការណ៍ការបោះពុម្ព');
+        // Prevent Telegram 1024-character caption cutoff on sendPhoto
+        $photoCaption = mb_substr($caption, 0, 1000);
         $photoPath = $request->file('photo')->getRealPath();
 
-        $params = ['chat_id' => $chatId, 'caption' => $caption];
+        $params = ['chat_id' => $chatId, 'caption' => $photoCaption];
         if ($threadId) $params['message_thread_id'] = $threadId;
 
         try {
@@ -169,14 +178,36 @@ class TelegramController extends Controller
                 ->post("{$this->apiBase}/sendPhoto", $params);
 
             if ($response->successful() && $response->json('ok') === true) {
-                // Send full text report as a separate message if enabled
-                if ($request->boolean('send_full_text') && $request->filled('full_text')) {
-                    $textParams = [
-                        'chat_id' => $chatId,
-                        'text'    => mb_substr($request->input('full_text'), 0, 4096),
-                    ];
-                    if ($threadId) $textParams['message_thread_id'] = $threadId;
-                    $this->http(15)->post("{$this->apiBase}/sendMessage", $textParams);
+                // Send full text report(s) as separate message(s) if enabled (one-touch tap-to-copy or normal text)
+                if ($request->boolean('send_full_text')) {
+                    $isMonospace = $request->boolean('is_monospace', true);
+                    $fullTexts = [];
+                    if ($request->filled('full_texts')) {
+                        $raw = $request->input('full_texts');
+                        $fullTexts = is_array($raw) ? $raw : (json_decode($raw, true) ?: [$raw]);
+                    } elseif ($request->filled('full_text')) {
+                        $fullTexts = [$request->input('full_text')];
+                    }
+
+                    foreach ($fullTexts as $txt) {
+                        if (!is_string($txt) || empty(trim($txt))) continue;
+
+                        $chunks = mb_strlen($txt) > 4000 ? str_split($txt, 3900) : [$txt];
+                        foreach ($chunks as $chunk) {
+                            $textParams = ['chat_id' => $chatId];
+                            if ($threadId) $textParams['message_thread_id'] = $threadId;
+
+                            if ($isMonospace) {
+                                $escaped = htmlspecialchars($chunk, ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8');
+                                $textParams['text'] = "<pre>{$escaped}</pre>";
+                                $textParams['parse_mode'] = 'HTML';
+                            } else {
+                                $textParams['text'] = $chunk;
+                            }
+
+                            $this->http(15)->post("{$this->apiBase}/sendMessage", $textParams);
+                        }
+                    }
                 }
 
                 return response()->json(['ok' => true, 'message' => 'Image sent']);
@@ -197,13 +228,15 @@ class TelegramController extends Controller
     }
 
     // ─────────────────────────────────────────────────────────────────
-    // SEND REPORT  — plain-text message, supports topics
+    // SEND REPORT  — plain-text message(s) with tap-to-copy HTML or plain text
     // ─────────────────────────────────────────────────────────────────
     public function sendReport(Request $request): JsonResponse
     {
         $request->validate([
             'chat_id'           => 'required',
-            'message'           => 'required|string|max:4096',
+            'message'           => 'nullable|string',
+            'messages'          => 'nullable',
+            'is_monospace'      => 'nullable|boolean',
             'message_thread_id' => 'nullable|integer',
         ]);
 
@@ -216,31 +249,53 @@ class TelegramController extends Controller
             $threadId = $request->integer('message_thread_id') ?: null;
         }
 
-        $params = [
-            'chat_id'    => $chatId,
-            'text'       => $request->input('message'),
-            'parse_mode' => 'HTML',
-        ];
-        if ($threadId) $params['message_thread_id'] = $threadId;
+        $isMonospace = $request->boolean('is_monospace', true);
 
-        try {
-            $response = $this->http(15)->post("{$this->apiBase}/sendMessage", $params);
-        } catch (\Throwable $e) {
-            Log::error('Telegram sendMessage: connection failed', ['error' => $e->getMessage()]);
-            return response()->json(['ok' => false, 'message' => 'Cannot connect to Telegram: ' . $e->getMessage()], 502);
+        $rawMessages = [];
+        if ($request->filled('messages')) {
+            $raw = $request->input('messages');
+            $rawMessages = is_array($raw) ? $raw : (json_decode($raw, true) ?: [$raw]);
+        } elseif ($request->filled('message')) {
+            $rawMessages = [$request->input('message')];
         }
 
-        if ($response->successful() && $response->json('ok') === true) {
-            return response()->json(['ok' => true, 'message' => 'Report sent']);
+        if (empty($rawMessages)) {
+            return response()->json(['ok' => false, 'message' => 'No message provided'], 422);
         }
 
-        Log::error('Telegram sendMessage failed', [
-            'chat_id'   => $chatId,
-            'thread_id' => $threadId,
-            'status'    => $response->status(),
-            'body'      => $response->body(),
-        ]);
+        $allOk = true;
+        foreach ($rawMessages as $rawText) {
+            if (!is_string($rawText) || empty(trim($rawText))) continue;
 
-        return response()->json(['ok' => false, 'message' => $response->json('description') ?? 'Failed'], 502);
+            $chunks = mb_strlen($rawText) > 4000 ? str_split($rawText, 3900) : [$rawText];
+            foreach ($chunks as $chunk) {
+                $params = ['chat_id' => $chatId];
+                if ($threadId) $params['message_thread_id'] = $threadId;
+
+                if ($isMonospace) {
+                    $escaped = htmlspecialchars($chunk, ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8');
+                    $params['text'] = "<pre>{$escaped}</pre>";
+                    $params['parse_mode'] = 'HTML';
+                } else {
+                    $params['text'] = $chunk;
+                }
+
+                try {
+                    $response = $this->http(15)->post("{$this->apiBase}/sendMessage", $params);
+                    if (!$response->successful() || $response->json('ok') !== true) {
+                        $allOk = false;
+                    }
+                } catch (\Throwable $e) {
+                    Log::error('Telegram sendMessage: connection failed', ['error' => $e->getMessage()]);
+                    return response()->json(['ok' => false, 'message' => 'Cannot connect to Telegram: ' . $e->getMessage()], 502);
+                }
+            }
+        }
+
+        if ($allOk) {
+            return response()->json(['ok' => true, 'message' => count($rawMessages) > 1 ? 'Both messages sent' : 'Report sent']);
+        }
+
+        return response()->json(['ok' => false, 'message' => 'Failed to send one or more messages'], 502);
     }
 }

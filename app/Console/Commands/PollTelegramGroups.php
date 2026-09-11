@@ -54,7 +54,7 @@ class PollTelegramGroups extends Command
                 'offset'          => $offset,
                 'timeout'         => 10,
                 'limit'           => 100,
-                'allowed_updates' => json_encode(['message', 'my_chat_member']),
+                'allowed_updates' => json_encode(['message', 'callback_query', 'my_chat_member']),
             ]);
         } catch (\Throwable $e) {
             $this->warn('Connection failed: ' . $e->getMessage());
@@ -69,9 +69,15 @@ class PollTelegramGroups extends Command
         $results = $response->json('result') ?? [];
 
         foreach ($results as $update) {
-            $offset  = $update['update_id'] + 1;
-            $message = $update['message'] ?? $update['edited_message'] ?? null;
+            $offset = $update['update_id'] + 1;
 
+            try {
+                app(\App\Services\TelegramBotService::class)->handleUpdate($update);
+            } catch (\Throwable $e) {
+                Log::error('PollTelegramGroups handleUpdate error: ' . $e->getMessage());
+            }
+
+            $message = $update['message'] ?? $update['edited_message'] ?? null;
             if (! $message) continue;
 
             $chat     = $message['chat'] ?? null;

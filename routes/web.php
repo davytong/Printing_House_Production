@@ -146,9 +146,17 @@ Route::prefix('schedule')->name('schedule.')->group(function () {
     Route::get('/delay-report',   [ScheduleController::class, 'delayReport'])->name('delay-report');
     Route::get('/delay-json',     [ScheduleController::class, 'delayReportJson'])->name('delay-json');
     Route::delete('/delay-log/{id}', [ScheduleController::class, 'destroyDelayLog'])->name('delay-log.delete');
-    Route::post('/status',        [ScheduleController::class, 'updateStatus'])->name('status');
-    Route::get('/progress',       [ScheduleController::class, 'showProgress'])->name('progress.show');
-    Route::post('/progress',      [ScheduleController::class, 'updateProgress'])->name('progress.update');
+    // Smart Planning & Tracking Routes
+    Route::post('/plan/preview',           [ScheduleController::class, 'previewPlan'])->name('plan.preview');
+    Route::post('/plan/confirm',           [ScheduleController::class, 'confirmPlan'])->name('plan.confirm');
+    Route::post('/plan/simulate',          [ScheduleController::class, 'simulatePlan'])->name('plan.simulate');
+    Route::get('/plan/resources',          [ScheduleController::class, 'getPlanResources'])->name('plan.resources');
+    Route::post('/actual/record',          [ScheduleController::class, 'recordActualOutput'])->name('actual.record');
+    Route::post('/plan/reschedule-suggest',[ScheduleController::class, 'rescheduleSuggestion'])->name('plan.reschedule-suggest');
+    Route::post('/plan/reschedule-apply',  [ScheduleController::class, 'applyReschedule'])->name('plan.reschedule-apply');
+    Route::post('/cell/lock',              [ScheduleController::class, 'toggleLock'])->name('cell.lock');
+    Route::post('/bulk-import',            [ScheduleController::class, 'bulkImport'])->name('bulk-import');
+    Route::post('/templates',              [ScheduleController::class, 'saveTemplate'])->name('templates.save');
 });
 
 // ── Analytics ─────────────────────────────────────────────
@@ -176,6 +184,7 @@ Route::prefix('stock')->name('stock.')->group(function () {
     Route::get('/materials-export',       [MaterialController::class, 'exportExcel'])->name('materials.export');
     // Daily Update (simple current-qty form)
     Route::get('/movements/daily',        [MovementController::class, 'dailyUpdate'])->name('movements.daily');
+    Route::get('/movements/daily-stats',  [MovementController::class, 'dailyStats'])->name('movements.daily-stats');
     Route::post('/movements/daily',       [MovementController::class, 'dailyStore'])->name('movements.daily-store');
     // Stock Movements
     Route::get('/movements',              [MovementController::class, 'index'])->name('movements.index');
@@ -203,10 +212,14 @@ Route::prefix('notifications')->name('notifications.')->group(function () {
     Route::delete('/{notification}',         [NotificationController::class, 'destroy'])->name('destroy');
 });
 
+// ── Telegram Mini App ─────────────────────────────────────
+Route::get('/telegram/app', [App\Http\Controllers\TelegramMiniAppController::class, 'index'])->name('telegram.mini-app');
+
 // ── Telegram ─────────────────────────────────────────────
 Route::prefix('telegram')->name('telegram.')->middleware('admin')->group(function () {
     Route::get('/',                          [TelegramSetupController::class, 'index'])->name('setup');
     Route::post('/set-webhook',              [TelegramSetupController::class, 'setWebhook'])->name('set-webhook');
+    Route::post('/set-menu-button',          [TelegramSetupController::class, 'setMenuButton'])->name('set-menu-button');
     Route::post('/delete-webhook',           [TelegramSetupController::class, 'deleteWebhook'])->name('delete-webhook');
     Route::post('/poll',                     [TelegramSetupController::class, 'pollNow'])->name('poll');
     Route::post('/add-group',                [TelegramSetupController::class, 'addGroup'])->name('add-group');
@@ -218,8 +231,11 @@ Route::prefix('telegram')->name('telegram.')->middleware('admin')->group(functio
     Route::post('/alert-test',                [TelegramSetupController::class, 'sendTestAlert'])->name('alert-test');
     Route::post('/alert-config',              [TelegramSetupController::class, 'saveAlertConfig'])->name('alert-config');
     Route::post('/daily-usage-config',        [TelegramSetupController::class, 'saveDailyUsageConfig'])->name('daily-usage-config');
+    Route::post('/stock-out-config',          [TelegramSetupController::class, 'saveStockOutConfig'])->name('stock-out-config');
     Route::post('/daily-report-template',     [TelegramSetupController::class, 'saveDailyReportTemplate'])->name('daily-report-template');
     Route::post('/daily-report-template/reset', [TelegramSetupController::class, 'resetDailyReportTemplate'])->name('daily-report-template-reset');
+    Route::post('/stock-out-template',        [TelegramSetupController::class, 'saveStockOutTemplate'])->name('stock-out-template');
+    Route::post('/stock-out-template/reset',  [TelegramSetupController::class, 'resetStockOutTemplate'])->name('stock-out-template-reset');
     Route::post('/category-labels',           [TelegramSetupController::class, 'saveCategoryLabels'])->name('category-labels');
     Route::post('/category-labels/reset',     [TelegramSetupController::class, 'resetCategoryLabels'])->name('category-labels-reset');
     Route::post('/item-name-format',          [TelegramSetupController::class, 'saveItemNameFormat'])->name('item-name-format');

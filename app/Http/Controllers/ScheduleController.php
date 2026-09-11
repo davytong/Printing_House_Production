@@ -2,15 +2,33 @@
 
 namespace App\Http\Controllers;
 
+use App\Models\Book;
+use App\Models\Machine;
+use App\Models\PrintRequest;
+use App\Models\ProductionActual;
+use App\Models\ProductionJob;
+use App\Models\ProductionProcess;
 use App\Models\ProductionSchedule;
+use App\Models\ProductionTask;
 use App\Models\ProductionTaskProgress;
+use App\Models\ProductionTemplate;
+use App\Models\ProductionTemplateProcess;
+use App\Models\ScheduleAudit;
 use App\Models\ScheduleDelayLog;
+use App\Services\ProductionPlanningService;
 use App\Services\TelegramService;
 use Carbon\Carbon;
+use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Schema;
 
 class ScheduleController extends Controller
 {
+    public function __construct(
+        protected ProductionPlanningService $planningService,
+        protected ?TelegramService $telegramService = null
+    ) {}
+
     /**
      * Default processes in order.
      */
@@ -63,17 +81,78 @@ class ScheduleController extends Controller
         $filledCells = ProductionSchedule::where('year', $year)->where('month', $month)->count();
         $progress = $totalCells > 0 ? round(($filledCells / $totalCells) * 100, 1) : 0;
 
+        // Smart Planning Resources
+        $templates = ProductionTemplate::with('processes')->where('is_active', true)->get();
+        $machines = Machine::where('status', '!=', 'retired')->get();
+        $batches = \App\Models\ProductionBatch::with(['books' => function($q) { $q->ordered(); }])->orderBy('id', 'desc')->get();
+        $currentBatch = \App\Models\ProductionBatch::current();
+        $books = Book::with('batch')->ordered()->get();
+        $approvedRequests = PrintRequest::where('status', 'approved')->with('items.book')->latest()->get();
+        $activeJobs = ProductionJob::with(['schedules', 'template'])
+            ->whereNotIn('status', ['completed', 'cancelled'])
+            ->latest()
+            ->get();
+
+        $batchesData = $batches->map(function($b) {
+            return [
+                'id'          => $b->id,
+                'name'        => $b->name,
+                'status'      => $b->status,
+                'books_count' => $b->books->count(),
+                'books'       => $b->books->map(function($bk) {
+                    return [
+                        'id'              => $bk->id,
+                        'batch_id'        => $bk->batch_id,
+                        'title'           => $bk->title,
+                        'grade'           => $bk->grade,
+                        'category'        => $bk->category,
+                        'printing_method' => $bk->printing_method,
+                        'target_qty'      => (int)$bk->target_qty,
+                        'total_printed'   => (int)$bk->total_printed,
+                        'remaining'       => max(0, (int)$bk->target_qty - (int)$bk->total_printed),
+                        'is_completed'    => (int)$bk->target_qty > 0 && (int)$bk->total_printed >= (int)$bk->target_qty,
+                    ];
+                })->values()->all(),
+            ];
+        })->values()->all();
+        $batchesJson = json_encode($batchesData);
+
+        // Delay Detection Alerts
+        $delayAlerts = collect();
+        if (Schema::hasColumn('production_schedules', 'planned_qty')) {
+            $delayAlerts = ProductionSchedule::with(['job', 'machine'])
+                ->where('year', $year)
+                ->where('month', $month)
+                ->whereNotNull('planned_qty')
+                ->where('planned_qty', '>', 0)
+                ->where('day', '<', now()->day)
+                ->whereColumn('actual_qty', '<', 'planned_qty')
+                ->get();
+        }
+
+        $processesList = ProductionProcess::where('is_active', true)->orderBy('sequence')->get();
+
         return view('schedule.index', [
-            'year'          => $year,
-            'month'         => $month,
-            'daysInMonth'   => $daysInMonth,
-            'schedules'     => $schedules,
-            'processes'     => $this->processes,
-            'todayTasks'    => $todayTasks,
-            'tomorrowTasks' => $tomorrowTasks,
-            'progress'      => $progress,
-            'filledCells'   => $filledCells,
-            'totalCells'    => $totalCells,
+            'year'             => $year,
+            'month'            => $month,
+            'daysInMonth'      => $daysInMonth,
+            'schedules'        => $schedules,
+            'processes'        => $this->processes,
+            'processesList'    => $processesList,
+            'todayTasks'       => $todayTasks,
+            'tomorrowTasks'    => $tomorrowTasks,
+            'progress'         => $progress,
+            'filledCells'      => $filledCells,
+            'totalCells'       => $totalCells,
+            'templates'        => $templates,
+            'machines'         => $machines,
+            'batches'          => $batches,
+            'batchesJson'      => $batchesJson,
+            'currentBatch'     => $currentBatch,
+            'books'            => $books,
+            'approvedRequests' => $approvedRequests,
+            'activeJobs'       => $activeJobs,
+            'delayAlerts'      => $delayAlerts,
         ]);
     }
 
@@ -1716,6 +1795,357 @@ class ScheduleController extends Controller
             'rest' => $rest,
             'textFormat' => $textFormat,
         ];
+    }
+
+    // ═══════════════════════════════════════════════════════════
+    // SMART PRODUCTION PLANNING & TRACKING ENDPOINTS
+    // ═══════════════════════════════════════════════════════════
+
+    /**
+     * POST /schedule/plan/preview — Calculate and preview proposed schedule.
+     */
+    public function previewPlan(Request $request): JsonResponse
+    {
+        $validated = $request->validate([
+            'name'             => 'required|string|max:255',
+            'quantity'         => 'required|integer|min:1',
+            'start_date'       => 'required|date',
+            'due_date'         => 'nullable|date',
+            'priority'         => 'required|in:low,normal,high,urgent',
+            'template_id'      => 'nullable|exists:production_templates,id',
+            'book_id'          => 'nullable|exists:books,id',
+            'print_request_id' => 'nullable|exists:print_requests,id',
+            'include_sundays'  => 'nullable|boolean',
+            'stage_machines'   => 'nullable|array',
+        ]);
+
+        $plan = $this->planningService->generatePlan($validated);
+
+        return response()->json([
+            'ok'   => true,
+            'plan' => $plan,
+        ]);
+    }
+
+    /**
+     * POST /schedule/plan/confirm — Commit generated plan to calendar.
+     */
+    public function confirmPlan(Request $request)
+    {
+        $validated = $request->validate([
+            'plan' => 'required|array',
+            'plan.job' => 'required|array',
+            'plan.stages' => 'required|array',
+        ]);
+
+        $userName = session('user_name') ?? (auth()->check() ? auth()->user()->name : 'User');
+        $job = $this->planningService->confirmPlan($validated['plan'], $userName);
+
+        if ($request->wantsJson() || $request->ajax()) {
+            return response()->json([
+                'ok'         => true,
+                'message'    => "Production Plan #{$job->job_number} ({$job->name}) has been scheduled successfully!",
+                'job_id'     => $job->id,
+                'job_number' => $job->job_number,
+            ]);
+        }
+
+        $startDate = Carbon::parse($job->start_date);
+        return redirect()->route('schedule.index', ['year' => $startDate->year, 'month' => $startDate->month])
+            ->with('success', "Production Plan #{$job->job_number} created successfully!");
+    }
+
+    /**
+     * POST /schedule/plan/simulate — Run what-if analysis.
+     */
+    public function simulatePlan(Request $request): JsonResponse
+    {
+        $validated = $request->validate([
+            'name'             => 'required|string|max:255',
+            'quantity'         => 'required|integer|min:1',
+            'start_date'       => 'required|date',
+            'due_date'         => 'nullable|date',
+            'priority'         => 'required|in:low,normal,high,urgent',
+            'template_id'      => 'nullable|exists:production_templates,id',
+            'include_sundays'  => 'nullable|boolean',
+        ]);
+
+        $simulation = $this->planningService->simulatePlan($validated);
+
+        return response()->json([
+            'ok'         => true,
+            'simulation' => $simulation,
+        ]);
+    }
+
+    /**
+     * GET /schedule/plan/resources — Load templates, machines, processes, requests for wizard.
+     */
+    public function getPlanResources(): JsonResponse
+    {
+        $templates = ProductionTemplate::with('processes')->where('is_active', true)->get();
+        $processes = ProductionProcess::where('is_active', true)->orderBy('sequence')->get();
+        $machines  = Machine::where('status', '!=', 'retired')->get();
+        $books     = Book::ordered()->get(['id', 'title', 'grade', 'category']);
+        $requests  = PrintRequest::where('status', 'approved')->with('items')->latest()->get();
+
+        return response()->json([
+            'templates' => $templates,
+            'processes' => $processes,
+            'machines'  => $machines,
+            'books'     => $books,
+            'requests'  => $requests,
+        ]);
+    }
+
+    /**
+     * POST /schedule/actual/record — Record daily actual output.
+     */
+    public function recordActualOutput(Request $request): JsonResponse
+    {
+        $validated = $request->validate([
+            'schedule_id' => 'required|exists:production_schedules,id',
+            'actual_qty'  => 'required|integer|min:0',
+            'notes'       => 'nullable|string|max:500',
+        ]);
+
+        $userName = session('user_name') ?? (auth()->check() ? auth()->user()->name : 'Operator');
+        $actual = $this->planningService->recordActual(
+            (int)$validated['schedule_id'],
+            (int)$validated['actual_qty'],
+            $validated['notes'] ?? null,
+            $userName
+        );
+
+        $schedule = ProductionSchedule::with(['job', 'machine'])->find($validated['schedule_id']);
+
+        return response()->json([
+            'ok'        => true,
+            'message'   => 'Actual output recorded successfully!',
+            'schedule'  => [
+                'id'          => $schedule->id,
+                'planned_qty' => $schedule->planned_qty,
+                'actual_qty'  => $schedule->actual_qty,
+                'remaining'   => $schedule->remainingQty(),
+                'status'      => $schedule->status,
+                'progress'    => $schedule->progressPercent(),
+                'variance'    => $actual->variance,
+            ],
+        ]);
+    }
+
+    /**
+     * POST /schedule/plan/reschedule-suggest — Generate auto-reschedule suggestion for delayed tasks.
+     */
+    public function rescheduleSuggestion(Request $request): JsonResponse
+    {
+        $validated = $request->validate([
+            'schedule_id' => 'required|exists:production_schedules,id',
+            'delay_days'  => 'required|integer|min:1|max:30',
+        ]);
+
+        $suggestion = $this->planningService->generateRescheduleSuggestion(
+            (int)$validated['schedule_id'],
+            (int)$validated['delay_days']
+        );
+
+        return response()->json([
+            'ok'         => true,
+            'suggestion' => $suggestion,
+        ]);
+    }
+
+    /**
+     * POST /schedule/plan/reschedule-apply — Apply approved reschedule shifts.
+     */
+    public function applyReschedule(Request $request): JsonResponse
+    {
+        $validated = $request->validate([
+            'shifts' => 'required|array',
+            'reason' => 'nullable|string|max:255',
+        ]);
+
+        $applied = $this->planningService->applyReschedule(
+            $validated,
+            $validated['reason'] ?? 'Auto-reschedule'
+        );
+
+        return response()->json([
+            'ok'      => true,
+            'message' => "Successfully rescheduled {$applied} tasks across working days.",
+            'applied' => $applied,
+        ]);
+    }
+
+    /**
+     * POST /schedule/cell/lock — Toggle locked state for a cell.
+     */
+    public function toggleLock(Request $request): JsonResponse
+    {
+        $validated = $request->validate([
+            'schedule_id' => 'required|exists:production_schedules,id',
+        ]);
+
+        $schedule = ProductionSchedule::findOrFail($validated['schedule_id']);
+        $schedule->is_locked = !$schedule->is_locked;
+        if ($schedule->is_locked) {
+            $schedule->status = 'locked';
+        } elseif ($schedule->status === 'locked') {
+            $schedule->status = 'planned';
+        }
+        $schedule->save();
+
+        ScheduleAudit::log(
+            $schedule->is_locked ? 'cell_locked' : 'cell_unlocked',
+            $schedule->production_job_id,
+            $schedule->id,
+            null,
+            ['is_locked' => $schedule->is_locked]
+        );
+
+        return response()->json([
+            'ok'        => true,
+            'is_locked' => $schedule->is_locked,
+            'status'    => $schedule->status,
+            'message'   => $schedule->is_locked ? 'Cell has been locked.' : 'Cell has been unlocked.',
+        ]);
+    }
+
+    /**
+     * POST /schedule/bulk-import — Excel / CSV / Text bulk import parser.
+     */
+    public function bulkImport(Request $request)
+    {
+        $rawText = $request->input('import_data', '');
+        $year    = (int)$request->input('year', now()->year);
+        $month   = (int)$request->input('month', now()->month);
+
+        if (empty(trim($rawText))) {
+            return back()->with('error', 'Please paste data to import.');
+        }
+
+        $lines = preg_split('/\r\n|\r|\n/', trim($rawText));
+        $imported = 0;
+        $errors = [];
+
+        $allProcesses = ProductionProcess::pluck('name')->toArray();
+        if (empty($allProcesses)) {
+            $allProcesses = $this->processes;
+        }
+
+        foreach ($lines as $lineNum => $line) {
+            $line = trim($line);
+            if (empty($line) || str_starts_with($line, '#')) continue;
+
+            // Check if header row
+            if (preg_match('/^(job|process|date|day|task)/i', $line)) continue;
+
+            // Format A: CSV / TSV — "Job Name, Quantity, Process, Day/Date, Machine"
+            // Format B: Colon syntax — "02/09/2026: Press - Math 10 (8000)"
+            $process = null;
+            $day = null;
+            $task = null;
+            $plannedQty = null;
+
+            if (str_contains($line, "\t") || str_contains($line, ',')) {
+                $delimiter = str_contains($line, "\t") ? "\t" : ',';
+                $parts = array_map('trim', explode($delimiter, $line));
+
+                // Flexible column mapping:
+                // If 1st is Process: [Process, Day, Task, Qty]
+                // If 1st is Job: [Job, Qty, Process, Day]
+                if (in_array(ucfirst($parts[0] ?? ''), $allProcesses)) {
+                    $process = ucfirst($parts[0]);
+                    $day = isset($parts[1]) ? (int)$parts[1] : 1;
+                    $task = $parts[2] ?? 'Imported Task';
+                    $plannedQty = isset($parts[3]) ? (int)$parts[3] : null;
+                } else {
+                    $task = $parts[0] ?? 'Imported Task';
+                    $plannedQty = isset($parts[1]) ? (int)$parts[1] : null;
+                    $process = isset($parts[2]) ? ucfirst($parts[2]) : 'Press';
+                    $day = isset($parts[3]) ? (int)$parts[3] : 1;
+                }
+            } elseif (preg_match('/^(\d{1,2})[\/\-\.](\d{1,2})(?:[\/\-\.](\d{2,4}))?\s*:\s*([^\-]+)\s*-\s*(.+)$/i', $line, $m)) {
+                $day = (int)$m[1];
+                $process = ucfirst(trim($m[4]));
+                $task = trim($m[5]);
+            } else {
+                $errors[] = "Line " . ($lineNum + 1) . ": Unrecognized format '{$line}'";
+                continue;
+            }
+
+            if ($day < 1 || $day > 31) {
+                $errors[] = "Line " . ($lineNum + 1) . ": Invalid day '{$day}'";
+                continue;
+            }
+
+            if (!in_array($process, $allProcesses)) {
+                $process = 'Other';
+            }
+
+            ProductionSchedule::updateOrCreate(
+                [
+                    'year'    => $year,
+                    'month'   => $month,
+                    'process' => $process,
+                    'day'     => $day,
+                ],
+                [
+                    'task'        => $task,
+                    'planned_qty' => $plannedQty,
+                    'status'      => 'planned',
+                ]
+            );
+            $imported++;
+        }
+
+        $msg = "Successfully imported {$imported} schedule entries!";
+        if (!empty($errors)) {
+            $msg .= " (" . count($errors) . " lines skipped due to invalid format)";
+        }
+
+        return redirect()->route('schedule.index', ['year' => $year, 'month' => $month])
+            ->with('success', $msg);
+    }
+
+    /**
+     * POST /schedule/templates — Save or create a production template.
+     */
+    public function saveTemplate(Request $request): JsonResponse
+    {
+        $validated = $request->validate([
+            'id'          => 'nullable|exists:production_templates,id',
+            'name'        => 'required|string|max:255',
+            'description' => 'nullable|string',
+            'stages'      => 'required|array|min:1',
+            'stages.*.process_name' => 'required|string',
+            'stages.*.capacity'     => 'nullable|integer',
+        ]);
+
+        $template = ProductionTemplate::updateOrCreate(
+            ['id' => $validated['id'] ?? null],
+            [
+                'name'        => $validated['name'],
+                'description' => $validated['description'] ?? null,
+                'is_active'   => true,
+            ]
+        );
+
+        ProductionTemplateProcess::where('template_id', $template->id)->delete();
+        foreach ($validated['stages'] as $index => $stage) {
+            ProductionTemplateProcess::create([
+                'template_id'  => $template->id,
+                'process_name' => $stage['process_name'],
+                'sequence'     => $index + 1,
+                'capacity'     => !empty($stage['capacity']) ? (int)$stage['capacity'] : null,
+            ]);
+        }
+
+        return response()->json([
+            'ok'       => true,
+            'message'  => 'Production template saved successfully!',
+            'template' => $template->load('processes'),
+        ]);
     }
 }
 

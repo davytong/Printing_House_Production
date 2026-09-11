@@ -8,15 +8,31 @@ use Illuminate\Database\Eloquent\Relations\HasMany;
 class Machine extends Model
 {
     protected $fillable = [
-        'code', 'name', 'model', 'manufacturer', 'serial_number',
-        'type', 'status', 'purchased_date', 'last_maintenance',
-        'next_maintenance', 'maintenance_interval_days', 'notes',
+        'code',
+        'name',
+        'model',
+        'manufacturer',
+        'serial_number',
+        'type',
+        'process_name',
+        'daily_capacity',
+        'working_hours',
+        'working_days',
+        'status',
+        'purchased_date',
+        'last_maintenance',
+        'next_maintenance',
+        'maintenance_interval_days',
+        'notes',
     ];
 
     protected $casts = [
         'purchased_date'   => 'date',
         'last_maintenance' => 'date',
         'next_maintenance' => 'date',
+        'daily_capacity'   => 'integer',
+        'working_hours'    => 'integer',
+        'working_days'     => 'array',
     ];
 
     protected static function booted(): void
@@ -31,6 +47,11 @@ class Machine extends Model
     public function maintenanceSchedules(): HasMany
     {
         return $this->hasMany(MaintenanceSchedule::class);
+    }
+
+    public function schedules(): HasMany
+    {
+        return $this->hasMany(ProductionSchedule::class);
     }
 
     public function isMaintenanceDue(): bool

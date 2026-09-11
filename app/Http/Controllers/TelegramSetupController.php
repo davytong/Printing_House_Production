@@ -81,6 +81,7 @@ class TelegramSetupController extends Controller
 
         $alertTemplate = \App\Models\Setting::get('stock_alert_template', \App\Services\AlertService::DEFAULT_TEMPLATE);
         $dailyReportTemplate = \App\Models\Setting::get('daily_report_template', $this->getDefaultDailyReportTemplate());
+        $stockOutTemplate = \App\Models\Setting::get('stock_out_template', $this->getDefaultStockOutTemplate());
 
         // Low-stock alert destination + cooldown (DB-driven, falls back to .env)
         $alertConfig = [
@@ -93,6 +94,12 @@ class TelegramSetupController extends Controller
         $dailyUsageConfig = [
             'chat_id'   => \App\Models\Setting::get('daily_usage_chat_id', ''),
             'thread_id' => \App\Models\Setting::get('daily_usage_thread_id', ''),
+        ];
+
+        // Stock Out Notification destination (DB-driven, falls back to daily_usage)
+        $stockOutConfig = [
+            'chat_id'   => \App\Models\Setting::get('stock_out_chat_id', \App\Models\Setting::get('daily_usage_chat_id', '')),
+            'thread_id' => \App\Models\Setting::get('stock_out_thread_id', \App\Models\Setting::get('daily_usage_thread_id', '')),
         ];
         
         // Category labels
@@ -111,8 +118,63 @@ class TelegramSetupController extends Controller
 
         return view('telegram.setup', compact(
             'token', 'botInfo', 'webhookInfo', 'botError',
-            'groups', 'groupedChats', 'appUrl', 'alertTemplate', 'dailyReportTemplate', 'categoryLabels', 'itemNameFormats', 'alertConfig', 'dailyUsageConfig'
+            'groups', 'groupedChats', 'appUrl', 'alertTemplate', 'dailyReportTemplate', 'stockOutTemplate', 'categoryLabels', 'itemNameFormats', 'alertConfig', 'dailyUsageConfig', 'stockOutConfig'
         ));
+    }
+
+    public function saveStockOutConfig(Request $request): RedirectResponse
+    {
+        $target = $request->input('stock_out_target');
+
+        if ($target && str_contains($target, '|')) {
+            [$chatId, $threadIdStr] = explode('|', $target, 2);
+            $threadId = $threadIdStr !== '' ? (int)$threadIdStr : null;
+        } else {
+            $chatId   = $target;
+            $threadId = null;
+        }
+
+        \App\Models\Setting::set('stock_out_chat_id', $chatId ?: '');
+        \App\Models\Setting::set('stock_out_thread_id', $threadId !== null ? (string)$threadId : '');
+
+        return redirect()->route('telegram.setup')
+            ->with('success', 'បានរក្សាទុកក្រុម/Topic គោលដៅដកស្តុក (Stock Out Notification Target)!');
+    }
+
+    public function getDefaultStockOutTemplate(): string
+    {
+        return "<b>របាយការណ៍ដកស្តុកប្រើប្រាស់</b>\n" .
+               "━━━━━━━━━━━━━━\n\n" .
+               "<b>មុខទំនិញ:</b> {name}\n" .
+               "<b>ចំនួនដក:</b> {quantity} {unit}\n" .
+               "<b>គោលបំណង:</b> {reason}\n\n" .
+               "<b>អ្នកដក:</b> {performed_by}\n" .
+               "<b>កាលបរិច្ឆេទ:</b> {date}\n" .
+               "<b>ម៉ោង:</b> {time}\n\n" .
+               "<b>ស្តុកមុនដក:</b> {stock_before} {unit}\n" .
+               "<b>ស្តុកនៅសល់:</b> {stock_remaining} {unit}\n\n" .
+               "<b>លេខប្រតិបត្តិការ:</b> {ref_code}\n" .
+               "━━━━━━━━━━━━━━\n" .
+               "🤖 <b>ប្រព័ន្ធបានកត់ត្រាដោយស្វ័យប្រវត្តិ</b>";
+    }
+
+    public function saveStockOutTemplate(Request $request): RedirectResponse
+    {
+        $data = $request->validate([
+            'stock_out_template' => 'required|string|max:2000',
+        ]);
+
+        \App\Models\Setting::set('stock_out_template', $data['stock_out_template']);
+
+        return redirect()->route('telegram.setup')
+            ->with('success', 'បានរក្សាទុក Template ការជូនដំណឹងដកស្តុក!');
+    }
+
+    public function resetStockOutTemplate(): RedirectResponse
+    {
+        \App\Models\Setting::set('stock_out_template', $this->getDefaultStockOutTemplate());
+        return redirect()->route('telegram.setup')
+            ->with('success', 'បានកំណត់ Template ត្រឡប់ទៅលំនាំដើម!');
     }
 
     // ─────────────────────────────────────────────
@@ -345,6 +407,31 @@ class TelegramSetupController extends Controller
         }
 
         return back()->with('error', 'Failed: ' . ($response?->json('description') ?? 'Connection error'));
+    }
+
+    // ─────────────────────────────────────────────
+    // Set Telegram Bot Menu Button (Web App Link)
+    // ─────────────────────────────────────────────
+    public function setMenuButton(Request $request): RedirectResponse
+    {
+        $appUrl = $request->input('app_url') ?: config('app.url') . '/telegram/app';
+
+        $response = $this->apiPost('/setChatMenuButton', [
+            'menu_button' => [
+                'type'    => 'web_app',
+                'text'    => '📦 ដកស្តុក (Stock Out)',
+                'web_app' => [
+                    'url' => $appUrl,
+                ],
+            ],
+        ]);
+
+        if ($response && $response->successful() && $response->json('ok')) {
+            return back()->with('success', 'Telegram Bot Menu Button set successfully! Users can now tap 📦 ដកស្តុក directly in Telegram.');
+        }
+
+        $err = $response ? ($response->json('description') ?? 'Failed to set Menu Button') : 'Connection error';
+        return back()->with('error', 'Failed: ' . $err);
     }
 
     // ─────────────────────────────────────────────

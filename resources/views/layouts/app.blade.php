@@ -22,6 +22,7 @@
 <link rel="apple-touch-icon" href="{{ asset('images/logo.jpg') }}">
 <link rel="manifest" href="{{ asset('manifest.json') }}">
 <meta name="csrf-token" content="{{ csrf_token() }}">
+<script src="https://telegram.org/js/telegram-web-app.js"></script>
 <title>@yield('title', 'ប្រព័ន្ធគ្រប់គ្រងការបោះពុម្ព')</title>
 
 <!-- Google Fonts: Kantumruy Pro (Khmer) + Noto Sans Khmer + Outfit (Latin) -->
@@ -1605,6 +1606,15 @@ tr[class*="row-"]:hover, tbody tr:hover {
            class="{{ request()->routeIs('stock.movements.daily') && request('category')==='consumable' ? 'active' : '' }}">
           <i class="bi bi-pencil-square nav-icon"></i>
           <span>{{ t('consumable_report') }}</span>
+        </a>
+      </li>
+      <li>
+        <a href="{{ route('telegram.mini-app') }}"
+           class="{{ request()->routeIs('telegram.mini-app') ? 'active' : '' }}"
+           style="white-space: nowrap;">
+          <i class="bi bi-box-arrow-up-right nav-icon text-warning"></i>
+          <span style="font-weight: 700; font-size: 0.85rem;">{{ t('stock_out') }}</span>
+          <span class="sb-badge sb-badge-warning ms-auto" style="background:#f59e0b;color:#000;font-weight:800;font-size:0.65rem;padding:0.15rem 0.4rem;border-radius:6px;">QUICK</span>
         </a>
       </li>
       @endif

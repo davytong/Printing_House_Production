@@ -599,11 +599,12 @@ class PrintingController extends Controller
         $batchId = $request->input('batch_id');
         $grade = $request->input('grade'); // Grade filter
         $format = $request->input('format', 'full'); // full or compact
+        $audience = $request->input('audience', 'group'); // group or individual
         
         if ($format === 'compact') {
-            $report = $reportService->generateCompactReport($date, $batchId, $grade);
+            $report = $reportService->generateCompactReport($date, $batchId, $grade, $audience);
         } else {
-            $report = $reportService->generateDailyReport($date, $batchId, $grade);
+            $report = $reportService->generateDailyReport($date, $batchId, $grade, $audience);
         }
         
         return response()->json([
@@ -611,6 +612,7 @@ class PrintingController extends Controller
             'report' => $report,
             'date' => $date,
             'grade' => $grade,
+            'audience' => $audience,
         ]);
     }
 
@@ -628,9 +630,11 @@ class PrintingController extends Controller
         $groupId = $request->input('group_id'); // null = send to all active groups
         $format = $request->input('format', 'compact'); // compact for Telegram
         $grade = $request->input('grade'); // grade/level filter
+        $audience = $request->input('audience', 'group'); // group or individual
+        $isMonospace = $request->boolean('is_monospace', true);
         
-        // Prevent double-send: lock on date+group+format+grade for 15s.
-        $lockKey = 'tg-report:' . md5($date . '|' . ($groupId ?? 'all') . '|' . $format . '|' . ($grade ?? 'all'));
+        // Prevent double-send: lock on date+group+format+grade+audience for 15s.
+        $lockKey = 'tg-report:' . md5($date . '|' . ($groupId ?? 'all') . '|' . $format . '|' . ($grade ?? 'all') . '|' . $audience);
         $lock = \Illuminate\Support\Facades\Cache::lock($lockKey, 15);
 
         if (!$lock->get()) {
@@ -642,14 +646,26 @@ class PrintingController extends Controller
 
         try {
             // Generate report with grade filter if provided
-            if ($format === 'compact') {
-                $report = $reportService->generateCompactReport($date, $batchId, $grade);
+            if ($audience === 'both') {
+                $report1 = $format === 'compact'
+                    ? $reportService->generateCompactReport($date, $batchId, $grade, 'group')
+                    : $reportService->generateDailyReport($date, $batchId, $grade, 'group');
+                $report2 = $format === 'compact'
+                    ? $reportService->generateCompactReport($date, $batchId, $grade, 'individual')
+                    : $reportService->generateDailyReport($date, $batchId, $grade, 'individual');
+                
+                // Send both messages to Telegram
+                $success = $reportService->sendToTelegram([$report1, $report2], $groupId, $isMonospace);
             } else {
-                $report = $reportService->generateDailyReport($date, $batchId, $grade);
+                if ($format === 'compact') {
+                    $report = $reportService->generateCompactReport($date, $batchId, $grade, $audience);
+                } else {
+                    $report = $reportService->generateDailyReport($date, $batchId, $grade, $audience);
+                }
+                
+                // Send to Telegram
+                $success = $reportService->sendToTelegram($report, $groupId, $isMonospace);
             }
-            
-            // Send to Telegram
-            $success = $reportService->sendToTelegram($report, $groupId);
             
             $okMsg  = 'របាយការណ៍ត្រូវបានផ្ញើទៅ Telegram ជោគជ័យ! / Report sent successfully!';
             $errMsg = 'មិនអាចផ្ញើរបាយការណ៍បានទេ។ សូមពិនិត្យ Telegram Bot ឬ Group។';
