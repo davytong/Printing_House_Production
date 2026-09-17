@@ -75,15 +75,16 @@ class DailyReportSubmission extends Model
     }
 
     /**
-     * Khmer display status.
+     * Localized display status.
      */
     public function getKhmerStatusAttribute(): string
     {
+        $isKm = app()->getLocale() === 'km';
         return match ($this->status) {
-            'submitted' => 'បានផ្ញើទាន់ពេល',
-            'late'      => 'បានផ្ញើយឺត (' . $this->late_minutes . ' នាទី)',
-            'missed'    => 'មិនបានផ្ញើ',
-            default     => 'កំពុងរង់ចាំ',
+            'submitted' => $isKm ? 'បានផ្ញើទាន់ពេល' : 'Submitted on time',
+            'late'      => $isKm ? ('បានផ្ញើយឺត (' . $this->late_minutes . ' នាទី)') : ('Late (' . $this->late_minutes . 'm)'),
+            'missed'    => $isKm ? 'មិនបានផ្ញើ' : 'Missed',
+            default     => $isKm ? 'កំពុងរង់ចាំ' : 'Pending',
         };
     }
 
@@ -92,11 +93,12 @@ class DailyReportSubmission extends Model
      */
     public function getStatusBadgeAttribute(): string
     {
+        $isKm = app()->getLocale() === 'km';
         return match ($this->status) {
-            'submitted' => '<span class="badge bg-success-subtle text-success border border-success-subtle px-2 py-1"><i class="bi bi-check-circle me-1"></i>On time</span>',
-            'late'      => '<span class="badge bg-warning-subtle text-warning-emphasis border border-warning-subtle px-2 py-1"><i class="bi bi-clock-history me-1"></i>Late (' . $this->late_minutes . 'm)</span>',
-            'missed'    => '<span class="badge bg-danger-subtle text-danger border border-danger-subtle px-2 py-1"><i class="bi bi-x-circle me-1"></i>Missed</span>',
-            default     => '<span class="badge bg-secondary-subtle text-secondary border border-secondary-subtle px-2 py-1"><i class="bi bi-hourglass-split me-1"></i>Pending</span>',
+            'submitted' => '<span class="badge bg-success-subtle text-success border border-success-subtle px-2 py-1"><i class="bi bi-check-circle me-1"></i>' . ($isKm ? 'ទាន់ពេល' : 'On Time') . '</span>',
+            'late'      => '<span class="badge bg-warning-subtle text-warning-emphasis border border-warning-subtle px-2 py-1"><i class="bi bi-clock-history me-1"></i>' . ($isKm ? 'យឺត (' . $this->late_minutes . ' នាទី)' : 'Late (' . $this->late_minutes . 'm)') . '</span>',
+            'missed'    => '<span class="badge bg-danger-subtle text-danger border border-danger-subtle px-2 py-1"><i class="bi bi-x-circle me-1"></i>' . ($isKm ? 'មិនបានផ្ញើ' : 'Missed') . '</span>',
+            default     => '<span class="badge bg-secondary-subtle text-secondary border border-secondary-subtle px-2 py-1"><i class="bi bi-hourglass-split me-1"></i>' . ($isKm ? 'កំពុងរង់ចាំ' : 'Pending') . '</span>',
         };
     }
 

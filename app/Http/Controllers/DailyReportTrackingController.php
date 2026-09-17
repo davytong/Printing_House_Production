@@ -153,13 +153,13 @@ class DailyReportTrackingController extends Controller
             $users = \App\Models\TelegramUser::orderBy('display_name')->get();
             return response()->json([
                 'success' => true,
-                'message' => "បានទាញយក និងធ្វើបច្ចុប្បន្នភាពគណនី Telegram ចំនួន {$count} នាក់",
+                'message' => __('reports.msg_users_fetched', ['count' => $count]),
                 'count'   => $count,
                 'users'   => $users,
             ]);
         }
 
-        return back()->with('success', "បានទាញយក និងធ្វើបច្ចុប្បន្នភាពគណនី Telegram ចំនួន {$count} នាក់ដោយជោគជ័យ (Fetched/Updated {$count} users from Telegram groups).");
+        return back()->with('success', __('reports.msg_users_fetched', ['count' => $count]));
     }
 
     /**
@@ -195,7 +195,7 @@ class DailyReportTrackingController extends Controller
 
         ReportRequirement::create($validated);
 
-        return redirect()->route('reports.requirements.index')->with('success', 'បានបង្កើតកាលវិភាគរបាយការណ៍ដោយជោគជ័យ (Report requirement created successfully).');
+        return redirect()->route('reports.requirements.index')->with('success', __('reports.msg_created'));
     }
 
     /**
@@ -230,7 +230,7 @@ class DailyReportTrackingController extends Controller
 
         $requirement->update($validated);
 
-        return redirect()->route('reports.requirements.index')->with('success', 'បានកែប្រែកាលវិភាគរបាយការណ៍ដោយជោគជ័យ (Report requirement updated).');
+        return redirect()->route('reports.requirements.index')->with('success', __('reports.msg_updated'));
     }
 
     /**
@@ -239,8 +239,8 @@ class DailyReportTrackingController extends Controller
     public function toggleRequirement(ReportRequirement $requirement): RedirectResponse
     {
         $requirement->update(['active' => !$requirement->active]);
-        $statusStr = $requirement->active ? 'បើកដំណើរការ (Activated)' : 'ផ្អាក (Deactivated)';
-        return back()->with('success', "ស្ថានភាព: {$statusStr}");
+        $statusStr = $requirement->active ? __('reports.msg_status_active') : __('reports.msg_status_inactive');
+        return back()->with('success', __('reports.msg_status', ['status' => $statusStr]));
     }
 
     /**
@@ -249,7 +249,7 @@ class DailyReportTrackingController extends Controller
     public function destroyRequirement(ReportRequirement $requirement): RedirectResponse
     {
         $requirement->delete();
-        return redirect()->route('reports.requirements.index')->with('success', 'បានលុបកាលវិភាគរបាយការណ៍ជោគជ័យ (Requirement deleted).');
+        return redirect()->route('reports.requirements.index')->with('success', __('reports.msg_deleted'));
     }
 
     /**
@@ -261,10 +261,10 @@ class DailyReportTrackingController extends Controller
         $count = count($alerts);
 
         if ($count > 0) {
-            return back()->with('success', "បានពិនិត្យ និងផ្ញើសេចក្តីជូនដំណឹងចំនួន {$count} ក្រុមជោគជ័យ (Dispatched {$count} alert(s)).");
+            return back()->with('success', __('reports.msg_alerts_sent', ['count' => $count]));
         }
 
-        return back()->with('info', 'បានពិនិត្យរួចរាល់ — មិនមានរបាយការណ៍យឺតថ្មីដែលត្រូវជូនដំណឹងឡើយ (All checked, no new alerts needed).');
+        return back()->with('info', __('reports.msg_no_alerts'));
     }
 
     /**
@@ -276,10 +276,10 @@ class DailyReportTrackingController extends Controller
         $success = $service->sendDailySummary($date);
 
         if ($success) {
-            return back()->with('success', 'បានផ្ញើសេចក្តីសង្ខេបប្រចាំថ្ងៃទៅ Telegram រួចរាល់ (Daily summary sent).');
+            return back()->with('success', __('reports.msg_summary_sent'));
         }
 
-        return back()->with('error', 'មិនអាចផ្ញើសេចក្តីសង្ខេបបានទេ សូមពិនិត្យការកំណត់ Telegram Alert Chat ID។');
+        return back()->with('error', __('reports.msg_summary_failed'));
     }
 
     /**
@@ -288,7 +288,7 @@ class DailyReportTrackingController extends Controller
     public function syncToday(DailyReportTrackerService $service): RedirectResponse
     {
         $created = $service->initializeDayRecords();
-        return back()->with('success', "បានធ្វើសមកាលកម្មទិន្នន័យ {$created} កំណត់ត្រាសម្រាប់ថ្ងៃនេះ (Synced {$created} records for today).");
+        return back()->with('success', __('reports.msg_synced_today', ['count' => $created]));
     }
 
     /**
@@ -305,7 +305,7 @@ class DailyReportTrackingController extends Controller
                 'status'        => 'pending',
             ]);
 
-        return back()->with('success', "បានកំណត់សេចក្តីជូនដំណឹងឡើងវិញចំនួន {$updated} កំណត់ត្រា (Reset alerts for {$updated} records. You can now re-test alerts).");
+        return back()->with('success', __('reports.msg_alerts_reset', ['count' => $updated]));
     }
 
     /**

@@ -1,6 +1,6 @@
 @extends('layouts.app')
 
-@section('title', 'កំណត់កាលវិភាគរបាយការណ៍ — Report Requirements')
+@section('title', __('reports.requirements_title'))
 
 @section('content')
 <div class="container-fluid py-3 px-3 px-md-4">
@@ -9,25 +9,24 @@
         <div>
             <h1 class="h3 fw-bold mb-1 d-flex align-items-center gap-2">
                 <i class="bi bi-gear-wide-connected text-primary"></i>
-                <span>ការកំណត់កាលវិភាគបុគ្គលិក</span>
-                <span class="fs-6 text-muted fw-normal">(Report Requirements)</span>
+                <span>{{ __('reports.requirements_title') }}</span>
             </h1>
             <p class="text-muted mb-0 small">
-                គ្រប់គ្រងឈ្មោះបុគ្គលិក, Telegram User ID, Tag សម្គាល់, ម៉ោងកំណត់, និងគោលដៅ Alert
+                {{ __('reports.requirements_subtitle') }}
             </p>
         </div>
 
         <div class="d-flex align-items-center gap-2 flex-wrap">
             <a href="{{ route('reports.tracking.index') }}" class="btn btn-outline-secondary btn-sm">
-                <i class="bi bi-arrow-left me-1"></i>ត្រឡប់ទៅផ្ទាំងតាមដាន (Tracking Dashboard)
+                <i class="bi bi-arrow-left me-1"></i>{{ __('reports.back_to_dashboard') }}
             </a>
-            <button type="button" class="btn btn-outline-primary btn-sm d-flex align-items-center gap-1" id="btnScanUsersHeader" onclick="triggerFetchUsers(this)" title="ស្កេន និងទាញយកគណនីបុគ្គលិកពី Telegram Groups ស្វ័យប្រវត្តិ">
+            <button type="button" class="btn btn-outline-primary btn-sm d-flex align-items-center gap-1" id="btnScanUsersHeader" onclick="triggerFetchUsers(this)">
                 <i class="bi bi-cloud-arrow-down-fill"></i>
-                <span>ទាញយកគណនី Telegram ស្វ័យប្រវត្តិ</span>
+                <span>{{ __('reports.fetch_telegram_auto') }}</span>
                 <span class="badge bg-primary text-white ms-1" id="scannedUsersCountBadge">{{ isset($telegramUsers) ? $telegramUsers->count() : 0 }}</span>
             </button>
             <button type="button" class="btn btn-primary btn-sm" data-bs-dismiss="modal" data-bs-toggle="modal" data-bs-target="#createRequirementModal">
-                <i class="bi bi-plus-circle me-1"></i>បន្ថែមបុគ្គលិកថ្មី (Add Requirement)
+                <i class="bi bi-plus-circle me-1"></i>{{ __('reports.add_requirement') }}
             </button>
         </div>
     </div>
@@ -48,30 +47,30 @@
                     <div class="p-3 rounded-3 border bg-light h-100">
                         <div class="d-flex align-items-center gap-2 mb-1">
                             <span class="badge bg-primary">Report 1</span>
-                            <span class="fw-bold">ពេលព្រឹក (Morning)</span>
+                            <span class="fw-bold">{{ __('reports.morning') }}</span>
                         </div>
                         <div class="fs-4 fw-bold text-primary font-monospace">07:00 AM</div>
-                        <div class="small text-muted mt-1">Default Tag: <code>[Morning Production Report]</code></div>
+                        <div class="small text-muted mt-1">{{ __('reports.default_tag_prefix') }}: <code>[Morning Production Report]</code></div>
                     </div>
                 </div>
                 <div class="col-md-4">
                     <div class="p-3 rounded-3 border bg-light h-100">
                         <div class="d-flex align-items-center gap-2 mb-1">
                             <span class="badge bg-info">Report 2</span>
-                            <span class="fw-bold">ពេលរសៀល (Morning/Second)</span>
+                            <span class="fw-bold">{{ __('reports.afternoon') }}</span>
                         </div>
                         <div class="fs-4 fw-bold text-info font-monospace">03:10 PM (15:10)</div>
-                        <div class="small text-muted mt-1">Default Tag: <code>[Second Production Report]</code></div>
+                        <div class="small text-muted mt-1">{{ __('reports.default_tag_prefix') }}: <code>[Second Production Report]</code></div>
                     </div>
                 </div>
                 <div class="col-md-4">
                     <div class="p-3 rounded-3 border bg-light h-100">
                         <div class="d-flex align-items-center gap-2 mb-1">
                             <span class="badge bg-dark">Report 3</span>
-                            <span class="fw-bold">ពេលយប់ (Evening)</span>
+                            <span class="fw-bold">{{ __('reports.evening') }}</span>
                         </div>
                         <div class="fs-4 fw-bold text-dark font-monospace">11:50 PM (23:50)</div>
-                        <div class="small text-muted mt-1">Default Tag: <code>[Evening Production Report]</code></div>
+                        <div class="small text-muted mt-1">{{ __('reports.default_tag_prefix') }}: <code>[Evening Production Report]</code></div>
                     </div>
                 </div>
             </div>
@@ -83,13 +82,13 @@
         <div class="card-header bg-body py-3 d-flex justify-content-between align-items-center">
             <div class="fw-bold d-flex align-items-center gap-2">
                 <i class="bi bi-people-fill text-primary"></i>
-                <span>បញ្ជីកាលវិភាគកំណត់របាយការណ៍បុគ្គលិក</span>
-                <span class="badge bg-secondary-subtle text-secondary">{{ $requirements->count() }} Configured</span>
+                <span>{{ __('reports.configured_requirements') }}</span>
+                <span class="badge bg-secondary-subtle text-secondary">{{ __('reports.configured_count', ['count' => $requirements->count()]) }}</span>
             </div>
             @if(isset($telegramUsers) && $telegramUsers->count() > 0)
                 <div class="small text-muted d-none d-md-flex align-items-center gap-1">
                     <i class="bi bi-telegram text-primary"></i>
-                    <span>ស្គាល់គណនី Telegram: <strong>{{ $telegramUsers->count() }} នាក់</strong></span>
+                    <span>{{ __('reports.recognized_telegram_users', ['count' => $telegramUsers->count()]) }}</span>
                 </div>
             @endif
         </div>
@@ -97,21 +96,20 @@
             <table class="table table-hover align-middle mb-0">
                 <thead class="table-light">
                     <tr>
-                        <th>បុគ្គលិក (Staff Name)</th>
+                        <th>{{ __('reports.staff_name') }}</th>
                         <th>Telegram User ID</th>
-                        <th>របាយការណ៍ (Report)</th>
-                        <th>Tag សម្គាល់ (Identifier Tag)</th>
-                        <th class="text-center">ម៉ោងកំណត់ (Deadline)</th>
-                        <th>ថ្ងៃកំណត់ (Days)</th>
-                        <th>គោលដៅ Alert</th>
-                        <th class="text-center">ស្ថានភាព (Status)</th>
-                        <th class="text-end">សកម្មភាព (Actions)</th>
+                        <th>{{ __('reports.report') }}</th>
+                        <th>{{ __('reports.identifier_tag') }}</th>
+                        <th class="text-center">{{ __('reports.deadline') }}</th>
+                        <th>{{ __('reports.days') }}</th>
+                        <th>{{ __('reports.alert_target') }}</th>
+                        <th class="text-center">{{ __('reports.status') }}</th>
+                        <th class="text-end">{{ __('reports.actions') }}</th>
                     </tr>
                 </thead>
                 <tbody>
                     @forelse($requirements as $req)
                         @php
-                            $daysMap = ['mon' => 'Chn', 'tue' => 'Ang', 'wed' => 'Puth', 'thu' => 'Prh', 'fri' => 'Sok', 'sat' => 'Sau', 'sun' => 'Aty'];
                             $activeDays = $req->required_days ?: ['mon','tue','wed','thu','fri','sat'];
                             $isVerified = isset($telegramUsers) && $telegramUsers->firstWhere('telegram_user_id', $req->telegram_user_id);
                         @endphp
@@ -126,8 +124,8 @@
                                 <div class="d-flex align-items-center gap-1">
                                     <code class="fw-semibold">{{ $req->telegram_user_id }}</code>
                                     @if($isVerified)
-                                        <span class="badge bg-success-subtle text-success border border-success-subtle py-0 px-1" title="ស្គាល់គណនី Telegram នេះ (Auto-Matched)" style="font-size: 0.65rem;">
-                                            <i class="bi bi-check-circle-fill"></i> Matched
+                                        <span class="badge bg-success-subtle text-success border border-success-subtle py-0 px-1" title="{{ __('reports.matched') }}" style="font-size: 0.65rem;">
+                                            <i class="bi bi-check-circle-fill"></i> {{ __('reports.matched') }}
                                         </span>
                                     @endif
                                 </div>
@@ -165,7 +163,7 @@
                                     </span>
                                 @else
                                     <span class="badge bg-info-subtle text-info border border-info-subtle">
-                                        Default Group
+                                        {{ __('reports.default_group') }}
                                     </span>
                                 @endif
                             </td>
@@ -174,18 +172,18 @@
                                     @csrf
                                     @method('PATCH')
                                     <button type="submit" class="btn btn-sm {{ $req->active ? 'btn-success' : 'btn-outline-secondary' }} px-2 py-0" style="font-size: 0.75rem;">
-                                        {{ $req->active ? 'Active' : 'Inactive' }}
+                                        {{ $req->active ? __('reports.active') : __('reports.inactive') }}
                                     </button>
                                 </form>
                             </td>
                             <td class="text-end">
                                 <div class="btn-group btn-group-sm">
                                     <button type="button" class="btn btn-outline-primary"
-                                            onclick='editRequirement(@json($req))'>
+                                            onclick='editRequirement(@json($req))' title="{{ __('reports.edit_requirement') }}">
                                         <i class="bi bi-pencil"></i>
                                     </button>
                                     <form action="{{ route('reports.requirements.destroy', $req->id) }}" method="POST"
-                                          onsubmit="return confirm('តើអ្នកពិតជាចង់លុបកាលវិភាគនេះមែនទេ?');">
+                                          onsubmit="return confirm('{{ __('reports.confirm_delete') }}');">
                                         @csrf
                                         @method('DELETE')
                                         <button type="submit" class="btn btn-outline-danger">
@@ -198,7 +196,7 @@
                     @empty
                         <tr>
                             <td colspan="9" class="text-center py-4 text-muted">
-                                មិនទាន់មានកាលវិភាគបុគ្គលិកនៅឡើយទេ (No report requirements configured).
+                                {{ __('reports.no_requirements_configured') }}
                             </td>
                         </tr>
                     @endforelse
@@ -215,7 +213,7 @@
             @csrf
             <div class="modal-header bg-body border-bottom">
                 <h5 class="modal-title fw-bold" id="createModalLabel">
-                    <i class="bi bi-plus-circle text-primary me-2"></i>បន្ថែមបុគ្គលិក និងកាលវិភាគថ្មី
+                    <i class="bi bi-plus-circle text-primary me-2"></i>{{ __('reports.add_requirement') }}
                 </h5>
                 <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
             </div>
@@ -227,14 +225,14 @@
                             <div class="d-flex justify-content-between align-items-center mb-2">
                                 <label class="form-label fw-bold mb-0 text-primary d-flex align-items-center gap-2">
                                     <i class="bi bi-person-check-fill fs-5"></i>
-                                    <span>ជ្រើសរើសគណនី Telegram ស្វ័យប្រវត្តិ (Auto-Pick Telegram User)</span>
+                                    <span>{{ __('reports.auto_pick_telegram_user') }}</span>
                                 </label>
                                 <button type="button" class="btn btn-xs btn-outline-primary py-0 px-2 rounded-pill bg-white" style="font-size: 0.75rem;" onclick="triggerFetchUsers(this)">
-                                    <i class="bi bi-arrow-repeat me-1"></i>ស្កេនពី Telegram ម្តងទៀត
+                                    <i class="bi bi-arrow-repeat me-1"></i>{{ __('reports.rescan_telegram') }}
                                 </button>
                             </div>
                             <select id="create_auto_user_select" class="form-select user-picker-select font-monospace" onchange="onAutoUserSelect(this, 'create')">
-                                <option value="">-- ចុចទីនេះដើម្បីជ្រើសរើសបុគ្គលិកពី Telegram (Select Scanned Staff) --</option>
+                                <option value="">-- {{ __('reports.select_scanned_staff') }} --</option>
                                 @if(isset($telegramUsers))
                                     @foreach($telegramUsers as $u)
                                         <option value="{{ $u->telegram_user_id }}"
@@ -246,51 +244,51 @@
                                 @endif
                             </select>
                             <div class="form-text text-muted small mt-1">
-                                <i class="bi bi-magic text-primary me-1"></i>ពេលជ្រើសរើស ប្រព័ន្ធនឹងបំពេញឈ្មោះបុគ្គលិក, Telegram User ID, និង Username ដោយស្វ័យប្រវត្តិ។
+                                <i class="bi bi-magic text-primary me-1"></i>{{ __('reports.auto_fill_hint') }}
                             </div>
                         </div>
                     </div>
 
                     <div class="col-md-6">
-                        <label class="form-label fw-semibold">ឈ្មោះបុគ្គលិក (Staff Name) <span class="text-danger">*</span></label>
-                        <input type="text" name="staff_name" id="create_staff_name" class="form-control" required placeholder="e.g. Staff A (សុខា)">
+                        <label class="form-label fw-semibold">{{ __('reports.staff_name') }} <span class="text-danger">*</span></label>
+                        <input type="text" name="staff_name" id="create_staff_name" class="form-control" required placeholder="e.g. Staff A">
                     </div>
 
                     <div class="col-md-6">
                         <label class="form-label fw-semibold">Telegram User ID <span class="text-danger">*</span></label>
                         <input type="text" name="telegram_user_id" id="create_telegram_user_id" class="form-control font-monospace" required placeholder="e.g. 1234567890">
-                        <div class="form-text">Telegram 64-bit Numeric User ID (អាចជ្រើសរើសពីប្រអប់ខាងលើ)</div>
+                        <div class="form-text">{{ __('reports.user_id_hint') }}</div>
                     </div>
 
                     <div class="col-md-6">
                         <label class="form-label fw-semibold">Telegram Username</label>
-                        <input type="text" name="telegram_username" id="create_telegram_username" class="form-control" placeholder="e.g. sokha_press (Optional)">
+                        <input type="text" name="telegram_username" id="create_telegram_username" class="form-control" placeholder="e.g. username ({{ __('reports.optional') }})">
                     </div>
 
                     <div class="col-md-6">
-                        <label class="form-label fw-semibold">ឈ្មោះរបាយការណ៍ (Report Title) <span class="text-danger">*</span></label>
+                        <label class="form-label fw-semibold">{{ __('reports.report_title') }} <span class="text-danger">*</span></label>
                         <input type="text" name="report_title" id="create_report_title" class="form-control" required value="Morning Production Report">
                     </div>
 
                     <div class="col-md-6">
-                        <label class="form-label fw-semibold">Identifier Tag <span class="text-danger">*</span></label>
+                        <label class="form-label fw-semibold">{{ __('reports.identifier_tag') }} <span class="text-danger">*</span></label>
                         <input type="text" name="identifier_tag" id="create_identifier_tag" class="form-control font-monospace" required value="[Morning Production Report]">
-                        <div class="form-text">Tag ថេរដែលបុគ្គលិកត្រូវដាក់នៅដើមរបាយការណ៍ (Case-insensitive)</div>
+                        <div class="form-text">{{ __('reports.tag_hint') }}</div>
                     </div>
 
                     <div class="col-md-6">
-                        <label class="form-label fw-semibold">ប្រភេទកូដ (Report Type Key) <span class="text-danger">*</span></label>
+                        <label class="form-label fw-semibold">{{ __('reports.report_type_key') }} <span class="text-danger">*</span></label>
                         <select name="report_type" id="create_report_type" class="form-select">
-                            <option value="morning_1">morning_1 (ពេលព្រឹក 07:00 AM)</option>
-                            <option value="morning_2">morning_2 (ពេលរសៀល 03:10 PM)</option>
-                            <option value="evening_3">evening_3 (ពេលយប់ 11:50 PM)</option>
-                            <option value="custom">custom (កាលវិភាគផ្សេងទៀត)</option>
+                            <option value="morning_1">morning_1 ({{ __('reports.morning') }} 07:00 AM)</option>
+                            <option value="morning_2">morning_2 ({{ __('reports.afternoon') }} 03:10 PM)</option>
+                            <option value="evening_3">evening_3 ({{ __('reports.evening') }} 11:50 PM)</option>
+                            <option value="custom">custom</option>
                         </select>
                     </div>
 
                     <div class="col-12">
                         <label class="form-label fw-semibold d-flex justify-content-between align-items-center">
-                            <span>ម៉ោងកំណត់ Deadline (HH:MM) <span class="text-danger">*</span></span>
+                            <span>{{ __('reports.deadline') }} (HH:MM) <span class="text-danger">*</span></span>
                             <div class="btn-group btn-group-sm">
                                 <button type="button" class="btn btn-outline-primary" onclick="setPresetTime('create', '07:00', 'morning_1', 'Morning Production Report', '[Morning Production Report]')">07:00 AM</button>
                                 <button type="button" class="btn btn-outline-info" onclick="setPresetTime('create', '15:10', 'morning_2', 'Second Production Report', '[Second Production Report]')">03:10 PM</button>
@@ -301,9 +299,9 @@
                     </div>
 
                     <div class="col-12">
-                        <label class="form-label fw-semibold">ថ្ងៃដែលត្រូវផ្ញើ (Required Working Days)</label>
+                        <label class="form-label fw-semibold">{{ __('reports.required_working_days') }}</label>
                         <div class="d-flex flex-wrap gap-3">
-                            @foreach(['mon' => 'ច័ន្ទ (Mon)', 'tue' => 'អង្គារ (Tue)', 'wed' => 'ពុធ (Wed)', 'thu' => 'ព្រហ (Thu)', 'fri' => 'សុក្រ (Fri)', 'sat' => 'សៅរ៍ (Sat)', 'sun' => 'អាទិត្យ (Sun)'] as $dayKey => $dayLabel)
+                            @foreach(['mon' => __('reports.days_mon'), 'tue' => __('reports.days_tue'), 'wed' => __('reports.days_wed'), 'thu' => __('reports.days_thu'), 'fri' => __('reports.days_fri'), 'sat' => __('reports.days_sat'), 'sun' => __('reports.days_sun')] as $dayKey => $dayLabel)
                                 <div class="form-check">
                                     <input class="form-check-input" type="checkbox" name="required_days[]" value="{{ $dayKey }}" id="create_day_{{ $dayKey }}"
                                            {{ $dayKey !== 'sun' ? 'checked' : '' }}>
@@ -315,10 +313,10 @@
 
                     <div class="col-12">
                         <label class="form-label fw-semibold">
-                            <i class="bi bi-telegram text-primary me-1"></i>ជ្រើសរើសក្រុម/Topic ទទួល Alert (Choose Telegram Group/Topic)
+                            <i class="bi bi-telegram text-primary me-1"></i>{{ __('reports.choose_alert_target') }}
                         </label>
                         <select id="create_alert_target_select" class="form-select" onchange="onReqTargetChange(this, 'create')">
-                            <option value="">-- ប្រើប្រាស់ Default Alert Group ក្នុង .env / Settings --</option>
+                            <option value="">-- {{ __('reports.default_alert_group') }} --</option>
                             @if(isset($groupedChats))
                                 @foreach($groupedChats as $cId => $chatGrps)
                                     <optgroup label="📢 {{ $chatGrps->first()->name ?? 'Group '.$cId }} (ID: {{ $cId }})">
@@ -342,18 +340,18 @@
                     <div class="col-12">
                         <div class="form-check form-switch mb-1">
                             <input class="form-check-input" type="checkbox" name="active" value="1" id="create_active" checked>
-                            <label class="form-check-label fw-semibold" for="create_active">បើកដំណើរការតាមដាន (Active)</label>
+                            <label class="form-check-label fw-semibold" for="create_active">{{ __('reports.active_tracking') }}</label>
                         </div>
                         <div class="form-check form-switch">
                             <input class="form-check-input" type="checkbox" name="send_ack" value="1" id="create_send_ack" checked>
-                            <label class="form-check-label fw-semibold" for="create_send_ack">ផ្ញើវិក្កយបត្រទទួលពេលផ្ញើយឺត (Send Late Receipt on Telegram)</label>
+                            <label class="form-check-label fw-semibold" for="create_send_ack">{{ __('reports.send_receipt') }}</label>
                         </div>
                     </div>
                 </div>
             </div>
             <div class="modal-footer bg-body border-top">
-                <button type="button" class="btn btn-secondary btn-sm" data-bs-dismiss="modal">បោះបង់</button>
-                <button type="submit" class="btn btn-primary btn-sm">រក្សាទុកកាលវិភាគ (Save Requirement)</button>
+                <button type="button" class="btn btn-secondary btn-sm" data-bs-dismiss="modal">{{ __('reports.cancel') }}</button>
+                <button type="submit" class="btn btn-primary btn-sm">{{ __('reports.save_requirement') }}</button>
             </div>
         </form>
     </div>
@@ -367,7 +365,7 @@
             @method('PUT')
             <div class="modal-header bg-body border-bottom">
                 <h5 class="modal-title fw-bold" id="editModalLabel">
-                    <i class="bi bi-pencil-square text-primary me-2"></i>កែប្រែកាលវិភាគបុគ្គលិក
+                    <i class="bi bi-pencil-square text-primary me-2"></i>{{ __('reports.edit_requirement') }}
                 </h5>
                 <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
             </div>
@@ -379,14 +377,14 @@
                             <div class="d-flex justify-content-between align-items-center mb-2">
                                 <label class="form-label fw-bold mb-0 text-primary d-flex align-items-center gap-2">
                                     <i class="bi bi-person-check-fill fs-5"></i>
-                                    <span>ជ្រើសរើសគណនី Telegram ឡើងវិញ (Switch Telegram User)</span>
+                                    <span>{{ __('reports.switch_telegram_user') }}</span>
                                 </label>
                                 <button type="button" class="btn btn-xs btn-outline-primary py-0 px-2 rounded-pill bg-white" style="font-size: 0.75rem;" onclick="triggerFetchUsers(this)">
-                                    <i class="bi bi-arrow-repeat me-1"></i>ស្កេនពី Telegram
+                                    <i class="bi bi-arrow-repeat me-1"></i>{{ __('reports.rescan_telegram') }}
                                 </button>
                             </div>
                             <select id="edit_auto_user_select" class="form-select user-picker-select font-monospace" onchange="onAutoUserSelect(this, 'edit')">
-                                <option value="">-- ជ្រើសរើសគណនីបុគ្គលិកពី Telegram (Select User) --</option>
+                                <option value="">-- {{ __('reports.select_scanned_staff') }} --</option>
                                 @if(isset($telegramUsers))
                                     @foreach($telegramUsers as $u)
                                         <option value="{{ $u->telegram_user_id }}"
@@ -401,7 +399,7 @@
                     </div>
 
                     <div class="col-md-6">
-                        <label class="form-label fw-semibold">ឈ្មោះបុគ្គលិក (Staff Name) <span class="text-danger">*</span></label>
+                        <label class="form-label fw-semibold">{{ __('reports.staff_name') }} <span class="text-danger">*</span></label>
                         <input type="text" name="staff_name" id="edit_staff_name" class="form-control" required>
                     </div>
 
@@ -416,23 +414,23 @@
                     </div>
 
                     <div class="col-md-6">
-                        <label class="form-label fw-semibold">ឈ្មោះរបាយការណ៍ (Report Title) <span class="text-danger">*</span></label>
+                        <label class="form-label fw-semibold">{{ __('reports.report_title') }} <span class="text-danger">*</span></label>
                         <input type="text" name="report_title" id="edit_report_title" class="form-control" required>
                     </div>
 
                     <div class="col-md-6">
-                        <label class="form-label fw-semibold">Identifier Tag <span class="text-danger">*</span></label>
+                        <label class="form-label fw-semibold">{{ __('reports.identifier_tag') }} <span class="text-danger">*</span></label>
                         <input type="text" name="identifier_tag" id="edit_identifier_tag" class="form-control font-monospace" required>
                     </div>
 
                     <div class="col-md-6">
-                        <label class="form-label fw-semibold">ប្រភេទកូដ (Report Type Key) <span class="text-danger">*</span></label>
+                        <label class="form-label fw-semibold">{{ __('reports.report_type_key') }} <span class="text-danger">*</span></label>
                         <input type="text" name="report_type" id="edit_report_type" class="form-control" required>
                     </div>
 
                     <div class="col-12">
                         <label class="form-label fw-semibold d-flex justify-content-between align-items-center">
-                            <span>ម៉ោងកំណត់ Deadline (HH:MM) <span class="text-danger">*</span></span>
+                            <span>{{ __('reports.deadline') }} (HH:MM) <span class="text-danger">*</span></span>
                             <div class="btn-group btn-group-sm">
                                 <button type="button" class="btn btn-outline-primary" onclick="setPresetTime('edit', '07:00')">07:00 AM</button>
                                 <button type="button" class="btn btn-outline-info" onclick="setPresetTime('edit', '15:10')">03:10 PM</button>
@@ -443,9 +441,9 @@
                     </div>
 
                     <div class="col-12">
-                        <label class="form-label fw-semibold">ថ្ងៃដែលត្រូវផ្ញើ (Required Working Days)</label>
+                        <label class="form-label fw-semibold">{{ __('reports.required_working_days') }}</label>
                         <div class="d-flex flex-wrap gap-3">
-                            @foreach(['mon' => 'ច័ន្ទ (Mon)', 'tue' => 'អង្គារ (Tue)', 'wed' => 'ពុធ (Wed)', 'thu' => 'ព្រហ (Thu)', 'fri' => 'សុក្រ (Fri)', 'sat' => 'សៅរ៍ (Sat)', 'sun' => 'អាទិត្យ (Sun)'] as $dayKey => $dayLabel)
+                            @foreach(['mon' => __('reports.days_mon'), 'tue' => __('reports.days_tue'), 'wed' => __('reports.days_wed'), 'thu' => __('reports.days_thu'), 'fri' => __('reports.days_fri'), 'sat' => __('reports.days_sat'), 'sun' => __('reports.days_sun')] as $dayKey => $dayLabel)
                                 <div class="form-check">
                                     <input class="form-check-input edit-day-checkbox" type="checkbox" name="required_days[]" value="{{ $dayKey }}" id="edit_day_{{ $dayKey }}">
                                     <label class="form-check-label small" for="edit_day_{{ $dayKey }}">{{ $dayLabel }}</label>
@@ -456,10 +454,10 @@
 
                     <div class="col-12">
                         <label class="form-label fw-semibold">
-                            <i class="bi bi-telegram text-primary me-1"></i>ជ្រើសរើសក្រុម/Topic ទទួល Alert (Choose Telegram Group/Topic)
+                            <i class="bi bi-telegram text-primary me-1"></i>{{ __('reports.choose_alert_target') }}
                         </label>
                         <select id="edit_alert_target_select" class="form-select" onchange="onReqTargetChange(this, 'edit')">
-                            <option value="">-- ប្រើប្រាស់ Default Alert Group ក្នុង .env / Settings --</option>
+                            <option value="">-- {{ __('reports.default_alert_group') }} --</option>
                             @if(isset($groupedChats))
                                 @foreach($groupedChats as $cId => $chatGrps)
                                     <optgroup label="📢 {{ $chatGrps->first()->name ?? 'Group '.$cId }} (ID: {{ $cId }})">
@@ -483,18 +481,18 @@
                     <div class="col-12">
                         <div class="form-check form-switch mb-1">
                             <input class="form-check-input" type="checkbox" name="active" value="1" id="edit_active">
-                            <label class="form-check-label fw-semibold" for="edit_active">បើកដំណើរការតាមដាន (Active)</label>
+                            <label class="form-check-label fw-semibold" for="edit_active">{{ __('reports.active_tracking') }}</label>
                         </div>
                         <div class="form-check form-switch">
                             <input class="form-check-input" type="checkbox" name="send_ack" value="1" id="edit_send_ack">
-                            <label class="form-check-label fw-semibold" for="edit_send_ack">ផ្ញើវិក្កយបត្រទទួលពេលផ្ញើយឺត</label>
+                            <label class="form-check-label fw-semibold" for="edit_send_ack">{{ __('reports.send_receipt') }}</label>
                         </div>
                     </div>
                 </div>
             </div>
             <div class="modal-footer bg-body border-top">
-                <button type="button" class="btn btn-secondary btn-sm" data-bs-dismiss="modal">បោះបង់</button>
-                <button type="submit" class="btn btn-primary btn-sm">កែប្រែកាលវិភាគ (Update)</button>
+                <button type="button" class="btn btn-secondary btn-sm" data-bs-dismiss="modal">{{ __('reports.cancel') }}</button>
+                <button type="submit" class="btn btn-primary btn-sm">{{ __('reports.save_requirement') }}</button>
             </div>
         </form>
     </div>
@@ -542,7 +540,7 @@ function onAutoUserSelect(select, prefix) {
 function triggerFetchUsers(btn) {
     const originalHtml = btn.innerHTML;
     btn.disabled = true;
-    btn.innerHTML = '<span class="spinner-border spinner-border-sm me-1"></span>Scanning...';
+    btn.innerHTML = '<span class="spinner-border spinner-border-sm me-1"></span>...';
 
     fetch('{{ route("reports.requirements.fetch-users") }}', {
         method: 'POST',
@@ -561,16 +559,16 @@ function triggerFetchUsers(btn) {
             updateUserDropdowns(data.users);
             const countBadge = document.getElementById('scannedUsersCountBadge');
             if (countBadge) countBadge.textContent = data.users.length;
-            showToast(data.message || `បានរកឃើញគណនី Telegram ចំនួន ${data.users.length} នាក់!`, 'success');
+            showToast(data.message || `Found ${data.users.length} users`, 'success');
         } else {
-            showToast(data.message || 'មិនអាចទាញយកបានទេ', 'danger');
+            showToast(data.message || 'Failed', 'danger');
         }
     })
     .catch(err => {
         console.error(err);
         btn.disabled = false;
         btn.innerHTML = originalHtml;
-        showToast('មានបញ្ហាក្នុងការទាក់ទង Telegram API សូមពិនិត្យមើល Bot Token ឬ Network', 'danger');
+        showToast('Connection error', 'danger');
     });
 }
 
@@ -578,7 +576,7 @@ function updateUserDropdowns(users) {
     const selects = document.querySelectorAll('.user-picker-select');
     selects.forEach(select => {
         const currentVal = select.value;
-        let html = '<option value="">-- ចុចទីនេះដើម្បីជ្រើសរើសបុគ្គលិកពី Telegram --</option>';
+        let html = '<option value="">-- {{ __('reports.select_scanned_staff') }} --</option>';
         users.forEach(u => {
             const uname = u.username ? ` [@${u.username}]` : '';
             html += `<option value="${u.telegram_user_id}" data-name="${u.display_name}" data-username="${u.username || ''}">👤 ${u.display_name} (ID: ${u.telegram_user_id})${uname}</option>`;
