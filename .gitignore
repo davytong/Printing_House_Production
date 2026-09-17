@@ -30,3 +30,6 @@ test2.php
 .kiro/
 _archive/
 
+
+database/*.sql
+

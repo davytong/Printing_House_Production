@@ -15,7 +15,7 @@ echo  so you can access PrintTracker by name instead of IP.
 echo.
 
 REM ?? Detect current server IP ??
-set SERVER_IP=172.16.18.177
+set SERVER_IP=172.16.18.160
 set SERVER_NAME=printing
 
 REM ?? Check if already exists ??

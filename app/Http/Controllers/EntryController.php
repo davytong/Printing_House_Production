@@ -23,8 +23,9 @@ class EntryController extends Controller
     public function login(Request $request): RedirectResponse
     {
         $data = $request->validate([
-            'full_name' => 'required|string|max:255',
-            'position'  => 'required|in:paper_report,press_report,finishing_report,procurement,store,admin',
+            'full_name'  => 'required|string|max:255',
+            'position'   => 'required|in:paper_report,press_report,finishing_report,procurement,store,admin',
+            'admin_pin'  => 'nullable|string',
         ]);
 
         // Sanitize name to prevent XSS
@@ -33,11 +34,32 @@ class EntryController extends Controller
             return back()->withErrors(['full_name' => 'Invalid name format. / ឈ្មោះមិនត្រឹមត្រូវ។'])->withInput();
         }
 
+        // Secure Admin verification
+        if ($data['position'] === 'admin') {
+            $expectedPin = (string) (\App\Models\Setting::get('admin_pin') ?: env('ADMIN_PIN', '1234'));
+            $enteredPin  = (string) $request->input('admin_pin', '');
+
+            if ($enteredPin !== $expectedPin) {
+                // Log unauthorized attempt to audit logs
+                ActivityLog::record(
+                    'Failed Admin Login',
+                    "Unauthorized admin login attempt by '{$fullName}' (IP: {$request->ip()})",
+                    'auth'
+                );
+
+                return back()
+                    ->withErrors(['admin_pin' => 'លេខកូដសម្ងាត់ Admin មិនត្រឹមត្រូវទេ។ / Incorrect Admin PIN.'])
+                    ->withInput();
+            }
+        }
+
         // Get role for position
         $role = \App\Services\RoleService::getRoleForPosition($data['position']);
 
         // Prevent Session Fixation by regenerating the session identifier
-        $request->session()->regenerate();
+        if ($request->hasSession()) {
+            $request->session()->regenerate();
+        }
 
         // Store in session
         session([
@@ -47,8 +69,12 @@ class EntryController extends Controller
             'logged_in_at'  => now()->toDateTimeString(),
         ]);
 
-        // Log activity
-        ActivityLog::record('Login', "Entered system as " . self::positionLabel($data['position']) . " (Role: {$role})");
+        // Log successful activity
+        ActivityLog::record(
+            'Login',
+            "Entered system as " . self::positionLabel($data['position']) . " (Role: {$role})",
+            'auth'
+        );
 
         // Redirect by position
         return redirect(self::dashboardRoute($data['position']));
@@ -59,9 +85,13 @@ class EntryController extends Controller
      */
     public function logout(Request $request): RedirectResponse
     {
-        ActivityLog::record('Logout', 'Left the system');
-        $request->session()->invalidate();
-        $request->session()->regenerateToken();
+        ActivityLog::record('Logout', 'Left the system', 'auth');
+        session()->forget(['user_name', 'user_position', 'user_role']);
+        if ($request->hasSession()) {
+            $request->session()->flush();
+            $request->session()->invalidate();
+            $request->session()->regenerateToken();
+        }
         return redirect()->route('entry');
     }
 

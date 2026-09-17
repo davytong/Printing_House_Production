@@ -131,7 +131,7 @@ class DailyReportService
                     
                     // Only output level header if there are active items to show in details
                     if (!empty($gradeItemsText)) {
-                        $detailsText .= "***សៀវភៅ {$gradeKey}\n";
+                        $detailsText .= "សៀវភៅ {$gradeKey}\n";
                         if (!empty($targets)) {
                             $detailsText .= implode(' / ', $targets) . "\n\n";
                         } else {
@@ -469,21 +469,35 @@ class DailyReportService
      */
     private function getBookCategoryLabel(string $title, ?string $category = null): string
     {
-        $titleLower = strtolower($title);
+        $titleLower = strtolower(trim($title));
         if (str_contains($titleLower, 'textbook')) return 'Textbook';
         if (str_contains($titleLower, 'workbook')) return 'Workbook';
+        if (str_contains($titleLower, 'slidebook') || str_contains($titleLower, 'slide book')) return 'Slidebook';
+        if (str_contains($titleLower, 'storybook') || str_contains($titleLower, 'story book')) return 'Storybook';
+        if (str_contains($titleLower, 'guidebook') || str_contains($titleLower, 'guide book')) return 'Guidebook';
         if (str_contains($titleLower, 'song')) return 'Song';
         if (str_contains($titleLower, 'forktale') || str_contains($titleLower, 'folktale')) return 'Folktale';
         if (str_contains($titleLower, 'eloquence')) return 'Eloquence';
         if (str_contains($titleLower, 'flashcard')) return 'Flashcard';
-        if (str_contains($titleLower, 'guidebook')) return 'Guidebook';
+        if (str_contains($titleLower, 'artcraft')) return 'Artcraft';
+        if (str_contains($titleLower, 'alphabet') || str_contains($titleLower, 'alpahabet')) return 'Alphabets';
 
-        if (!empty($category)) {
+        // Extract last word from title (e.g. "Principle Economic Slidebook" -> "Slidebook", "English Alphabets" -> "Alphabets")
+        $cleanTitle = preg_replace('/[^\p{L}\p{N}\s]/u', ' ', $title);
+        $words = array_values(array_filter(explode(' ', trim((string) $cleanTitle))));
+        if (!empty($words)) {
+            $last = end($words);
+            if (!is_numeric($last) && mb_strlen($last) >= 2) {
+                return ucfirst(strtolower($last));
+            }
+        }
+
+        // Only fall back to $category if it is NOT a binding method (perfect_binding, staple, saddle_stitch)
+        $bindingMethods = ['perfect_binding', 'staple', 'saddle_stitch'];
+        if (!empty($category) && !in_array(strtolower(trim($category)), $bindingMethods, true)) {
             return ucfirst(trim($category));
         }
 
-        $parts = explode(' ', trim($title));
-        $last = end($parts);
-        return !empty($last) ? ucfirst($last) : 'Other';
+        return 'Other';
     }
 }

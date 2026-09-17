@@ -49,6 +49,8 @@ class RoleService
                 'manage_telegram' => true,
                 'manage_users' => true,
                 'view_all_reports' => true,
+                'view_audit_logs' => true,
+                'manage_audit_logs' => true,
             ],
             'reporter' => [
                 'view_dashboard' => false,
@@ -67,6 +69,8 @@ class RoleService
                 'daily_reports' => true,
                 'view_analytics' => true,
                 'view_all_reports' => true,
+                'view_audit_logs' => true,
+                'manage_audit_logs' => false,
             ],
             default => ['daily_reports' => true],
         };

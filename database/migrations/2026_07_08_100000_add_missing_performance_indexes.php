@@ -83,8 +83,12 @@ return new class extends Migration
     public function down(): void
     {
         Schema::table('books', function (Blueprint $table) {
-            $table->dropIndex('books_batch_id_idx');
-            $table->dropIndex('books_batch_category_idx');
+            try {
+                $table->dropIndex('books_batch_category_idx');
+            } catch (\Throwable) {}
+            try {
+                $table->dropIndex('books_batch_id_idx');
+            } catch (\Throwable) {}
         });
         Schema::table('print_requests', function (Blueprint $table) {
             $table->dropIndex('pr_status_priority_idx');

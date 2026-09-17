@@ -1533,6 +1533,12 @@ tr[class*="row-"]:hover, tbody tr:hover {
         </a>
       </li>
       <li>
+        <a href="{{ route('reports.tracking.index') }}" class="{{ request()->routeIs('reports.tracking.*', 'reports.requirements.*') ? 'active' : '' }}">
+          <i class="bi bi-clipboard-check-fill nav-icon"></i>
+          <span>តាមដានរបាយការណ៍ (Tracking)</span>
+        </a>
+      </li>
+      <li>
         <a href="{{ route('requests.index') }}" class="{{ request()->routeIs('requests.*') ? 'active' : '' }}">
           <i class="bi bi-file-earmark-plus-fill nav-icon"></i>
           <span>{{ t('print_requests') }}</span>
@@ -1641,6 +1647,12 @@ tr[class*="row-"]:hover, tbody tr:hover {
         </a>
       </li>
       <li>
+        <a href="{{ route('stock.person-report') }}" class="{{ request()->routeIs('stock.person-report') ? 'active' : '' }}">
+          <i class="bi bi-person-lines-fill nav-icon"></i>
+          <span>Person Stock Report</span>
+        </a>
+      </li>
+      <li>
         <a href="{{ route('stock.reports.index') }}" class="{{ request()->routeIs('stock.reports.*') ? 'active' : '' }}">
           <i class="bi bi-graph-up nav-icon"></i>
           <span>{{ t('stock_reports') }}</span>
@@ -1682,6 +1694,14 @@ tr[class*="row-"]:hover, tbody tr:hover {
           @endif
         </a>
       </li>
+      @if(\App\Services\RoleService::can('view_audit_logs'))
+      <li>
+        <a href="{{ route('audit.index') }}" class="{{ request()->routeIs('audit.*') ? 'active' : '' }}">
+          <i class="bi bi-shield-check nav-icon"></i>
+          <span>{{ app()->getLocale() == 'km' ? 'កំណត់ហេតុសវនកម្ម' : 'Audit Trail' }}</span>
+        </a>
+      </li>
+      @endif
       <li>
         <a href="{{ route('settings.index') }}" class="{{ request()->routeIs('settings.*') ? 'active' : '' }}">
           <i class="bi bi-gear-fill nav-icon"></i>

@@ -101,6 +101,13 @@ class PrintingController extends Controller
         ProductionBatch::clearCache(); // invalidate per-request cache
         CacheService::invalidateBatch(); // Clear all batch & dashboard caches
         CacheService::warmUp(); // Pre-warm dashboard cache
+
+        \App\Models\ActivityLog::record(
+            'Started New Batch',
+            "Created {$newBatch->name} with mode '{$mode}' (previous: {$current->name})",
+            'production'
+        );
+
         return redirect()->route('printing.index')->with('success', $msg);
     }
 
@@ -439,6 +446,12 @@ class PrintingController extends Controller
 
         $book->increment('total_printed', $amount);
 
+        \App\Models\ActivityLog::record(
+            $amount > 0 ? 'Recorded Daily Print' : 'Reduced Daily Print',
+            ($amount > 0 ? "+{$amount}" : "{$amount}") . " units on '{$book->title}' (Grade: {$book->grade})",
+            'production'
+        );
+
         $msg = $amount > 0 ? "បានកត់ {$amount} ក្បាល សម្រាប់" : "បានដក " . abs($amount) . " ក្បាល ពី";
         return back()->with('success', "{$msg} '{$book->title}'");
     }
@@ -464,6 +477,12 @@ class PrintingController extends Controller
         }
 
         $print->delete();
+
+        \App\Models\ActivityLog::record(
+            'Undid Daily Print',
+            "Reversed {$amount} units for '{$title}'",
+            'production'
+        );
 
         return back()->with('success', "បានលុបកំណត់ត្រា {$amount} ក្បាល របស់ '{$title}' រួចរាល់");
     }

@@ -16,6 +16,7 @@ use App\Http\Controllers\Stock\MaterialController;
 use App\Http\Controllers\Stock\MovementController;
 use App\Http\Controllers\Stock\StockReportController;
 use App\Http\Controllers\SettingsController;
+use App\Http\Controllers\DailyReportTrackingController;
 use App\Http\Controllers\SearchController;
 
 // ── Entry Screen (name + position) ────────────────────────
@@ -191,6 +192,7 @@ Route::prefix('stock')->name('stock.')->group(function () {
     Route::get('/movements/create',       [MovementController::class, 'create'])->name('movements.create');
     Route::post('/movements',             [MovementController::class, 'store'])->name('movements.store');
     Route::get('/movements/export',       [MovementController::class, 'exportExcel'])->name('movements.export');
+    Route::get('/movements/person-report', [MovementController::class, 'personReport'])->name('person-report');
     Route::get('/movements/bulk',         [MovementController::class, 'bulkCreate'])->name('movements.bulk');
     Route::post('/movements/bulk',        [MovementController::class, 'bulkStore'])->name('movements.bulk-store');
     // Stock Reports
@@ -243,5 +245,34 @@ Route::prefix('telegram')->name('telegram.')->middleware('admin')->group(functio
 
 // ── Settings & Profile ────────────────────────────────────
 Route::get('/settings', [SettingsController::class, 'index'])->name('settings.index');
+Route::post('/settings/report-tracking', [SettingsController::class, 'saveReportSettings'])->name('settings.report-tracking.save');
+Route::post('/settings/report-tracking/check', [DailyReportTrackingController::class, 'checkNow'])->name('settings.report-tracking.check');
+Route::post('/settings/report-tracking/sync', [DailyReportTrackingController::class, 'syncToday'])->name('settings.report-tracking.sync');
+Route::post('/settings/report-tracking/reset-alerts', [DailyReportTrackingController::class, 'resetTodayAlerts'])->name('settings.report-tracking.reset-alerts');
+Route::post('/settings/report-tracking/fetch-users', [DailyReportTrackingController::class, 'fetchTelegramUsers'])->name('settings.report-tracking.fetch-users');
+
+// ── Enterprise Audit Trail ────────────────────────────────
+Route::get('/audit-logs',        [App\Http\Controllers\AuditLogController::class, 'index'])->name('audit.index');
+Route::get('/audit-logs/export', [App\Http\Controllers\AuditLogController::class, 'exportCsv'])->name('audit.export');
+Route::post('/audit-logs/clean', [App\Http\Controllers\AuditLogController::class, 'cleanOld'])->name('audit.clean');
 
 
+
+// ── Daily Production Report Tracking ─────────────────────
+
+
+Route::prefix('reports/tracking')->name('reports.tracking.')->group(function () {
+    Route::get('/',                          [DailyReportTrackingController::class, 'index'])->name('index');
+    Route::post('/check-now',                [DailyReportTrackingController::class, 'checkNow'])->name('check-now');
+    Route::post('/send-summary',             [DailyReportTrackingController::class, 'sendSummaryNow'])->name('send-summary');
+    Route::get('/submission/{submission}',  [DailyReportTrackingController::class, 'getSubmission'])->name('submission');
+});
+
+Route::prefix('reports/requirements')->name('reports.requirements.')->group(function () {
+    Route::get('/',                          [DailyReportTrackingController::class, 'requirements'])->name('index');
+    Route::post('/fetch-users',              [DailyReportTrackingController::class, 'fetchTelegramUsers'])->name('fetch-users');
+    Route::post('/',                         [DailyReportTrackingController::class, 'storeRequirement'])->name('store');
+    Route::put('/{requirement}',             [DailyReportTrackingController::class, 'updateRequirement'])->name('update');
+    Route::patch('/{requirement}/toggle',    [DailyReportTrackingController::class, 'toggleRequirement'])->name('toggle');
+    Route::delete('/{requirement}',          [DailyReportTrackingController::class, 'destroyRequirement'])->name('destroy');
+});

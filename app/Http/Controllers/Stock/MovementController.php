@@ -114,6 +114,12 @@ class MovementController extends Controller
             'adjust' => 'Adjustment',
         };
 
+        \App\Models\ActivityLog::record(
+            $label,
+            "{$data['quantity']} {$material->unit} of '{$material->name}' (By: " . ($data['performed_by'] ?? session('user_name', 'Unknown')) . ")",
+            'inventory'
+        );
+
         return redirect()->route('stock.movements.index')
             ->with('success', "{$label}: {$data['quantity']} {$material->unit} — {$material->name}");
     }
@@ -136,19 +142,38 @@ class MovementController extends Controller
             ->orderBy('name')
             ->get();
 
-        $movementsToday = StockMovement::whereIn('material_id', $materials->pluck('id'))
-            ->where(function($q) use ($updateDate) {
-                $q->whereDate('movement_date', $updateDate)
-                  ->orWhereDate('created_at', $updateDate);
-            })
+        $allMovements = StockMovement::whereIn('material_id', $materials->pluck('id'))
+            ->orderBy('movement_date', 'asc')
+            ->orderBy('created_at', 'asc')
             ->get()
             ->groupBy('material_id');
 
-        $materials->map(function ($m) use ($movementsToday) {
-            $m->calculated_stock = $m->currentStock();
-            $moves = $movementsToday->get($m->id, collect());
-            $m->today_in  = (float) $moves->where('type', 'in')->sum('quantity');
-            $m->today_out = (float) $moves->where('type', 'out')->sum('quantity');
+        $materials->map(function ($m) use ($allMovements, $updateDate) {
+            $moves = $allMovements->get($m->id, collect());
+            $m->calculated_stock = Material::currentStockFromMovements($moves);
+
+            // Find latest adjust on or before updateDate
+            $lastAdjust = $moves->where('type', 'adjust')
+                ->filter(fn($mv) => \Carbon\Carbon::parse($mv->movement_date)->toDateString() <= $updateDate)
+                ->last();
+
+            // Movements on updateDate that occurred after the last adjustment
+            $activeMoves = $moves->filter(function ($mv) use ($updateDate, $lastAdjust) {
+                $mvDate = \Carbon\Carbon::parse($mv->movement_date)->toDateString();
+                $crDate = $mv->created_at ? $mv->created_at->toDateString() : $mvDate;
+                $isDateMatch = ($mvDate === $updateDate || $crDate === $updateDate);
+                if (!$isDateMatch) return false;
+                if ($lastAdjust && $mv->created_at && $lastAdjust->created_at) {
+                    if ($mv->created_at != $lastAdjust->created_at) {
+                        return $mv->created_at > $lastAdjust->created_at;
+                    }
+                    return $mv->id > $lastAdjust->id;
+                }
+                return true;
+            });
+
+            $m->today_in  = (float) $activeMoves->where('type', 'in')->sum('quantity');
+            $m->today_out = (float) $activeMoves->where('type', 'out')->sum('quantity');
             return $m;
         });
 
@@ -171,24 +196,40 @@ class MovementController extends Controller
         $date = $request->query('date', now()->toDateString());
         $category = $request->query('category', 'paper');
 
-        $materialIds = Material::where('status', 'active')
+        $materials = Material::where('status', 'active')
             ->where('category', $category)
-            ->pluck('id');
+            ->get();
 
-        $movements = StockMovement::whereIn('material_id', $materialIds)
-            ->where(function($q) use ($date) {
-                $q->whereDate('movement_date', $date)
-                  ->orWhereDate('created_at', $date);
-            })
+        $allMovements = StockMovement::whereIn('material_id', $materials->pluck('id'))
+            ->orderBy('movement_date', 'asc')
+            ->orderBy('created_at', 'asc')
             ->get()
             ->groupBy('material_id');
 
         $stats = [];
-        foreach ($materialIds as $id) {
-            $moves = $movements->get($id, collect());
-            $stats[$id] = [
-                'today_in'  => (float) $moves->where('type', 'in')->sum('quantity'),
-                'today_out' => (float) $moves->where('type', 'out')->sum('quantity'),
+        foreach ($materials as $m) {
+            $moves = $allMovements->get($m->id, collect());
+            $lastAdjust = $moves->where('type', 'adjust')
+                ->filter(fn($mv) => \Carbon\Carbon::parse($mv->movement_date)->toDateString() <= $date)
+                ->last();
+
+            $activeMoves = $moves->filter(function ($mv) use ($date, $lastAdjust) {
+                $mvDate = \Carbon\Carbon::parse($mv->movement_date)->toDateString();
+                $crDate = $mv->created_at ? $mv->created_at->toDateString() : $mvDate;
+                $isDateMatch = ($mvDate === $date || $crDate === $date);
+                if (!$isDateMatch) return false;
+                if ($lastAdjust && $mv->created_at && $lastAdjust->created_at) {
+                    if ($mv->created_at != $lastAdjust->created_at) {
+                        return $mv->created_at > $lastAdjust->created_at;
+                    }
+                    return $mv->id > $lastAdjust->id;
+                }
+                return true;
+            });
+
+            $stats[$m->id] = [
+                'today_in'  => (float) $activeMoves->where('type', 'in')->sum('quantity'),
+                'today_out' => (float) $activeMoves->where('type', 'out')->sum('quantity'),
             ];
         }
 
@@ -228,30 +269,68 @@ class MovementController extends Controller
         try {
             $count = \DB::transaction(function() use ($data, $request, &$updated, &$imagePaths) {
                 $count = 0;
+                $materialIds = collect($data['items'])->pluck('material_id');
+                $allMovements = StockMovement::whereIn('material_id', $materialIds)
+                    ->orderBy('movement_date', 'asc')
+                    ->orderBy('created_at', 'asc')
+                    ->get()
+                    ->groupBy('material_id');
+
                 foreach ($data['items'] as $item) {
                     $material = Material::find($item['material_id']);
                     if (! $material) continue;
 
+                    $moves = $allMovements->get($material->id, collect());
+                    $oldQty = Material::currentStockFromMovements($moves);
                     $newQty = (float) $item['current_stock'];
-                    $oldQty = $material->currentStock();
 
-                    if (abs($newQty - $oldQty) >= 0.01) {
+                    // Calculate active movements for this item today prior to saving
+                    $lastAdjust = $moves->where('type', 'adjust')
+                        ->filter(fn($mv) => \Carbon\Carbon::parse($mv->movement_date)->toDateString() <= $data['update_date'])
+                        ->last();
+
+                    $activeMoves = $moves->filter(function ($mv) use ($data, $lastAdjust) {
+                        $mvDate = \Carbon\Carbon::parse($mv->movement_date)->toDateString();
+                        $crDate = $mv->created_at ? $mv->created_at->toDateString() : $mvDate;
+                        $isDateMatch = ($mvDate === $data['update_date'] || $crDate === $data['update_date']);
+                        if (!$isDateMatch) return false;
+                        if ($lastAdjust && $mv->created_at && $lastAdjust->created_at) {
+                            if ($mv->created_at != $lastAdjust->created_at) {
+                                return $mv->created_at > $lastAdjust->created_at;
+                            }
+                            return $mv->id > $lastAdjust->id;
+                        }
+                        return true;
+                    });
+
+                    $todayIn  = (float) $activeMoves->where('type', 'in')->sum('quantity');
+                    $todayOut = (float) $activeMoves->where('type', 'out')->sum('quantity');
+
+                    $hasQtyChange = (abs($newQty - $oldQty) >= 0.01);
+                    $hasMovements = ($todayIn > 0 || $todayOut > 0);
+
+                    // Record adjustment if quantity changed or if item had active movements today to finalize and reset
+                    if ($hasQtyChange || $hasMovements) {
                         $this->stockService->recordMovement(
                             $material, 'adjust', $newQty,
                             'Daily update', $data['performed_by'] ?? null,
                             null, $data['update_date'],
                         );
-                        $count++;
+                        if ($hasQtyChange) {
+                            $count++;
+                        }
                     }
 
                     $updated[] = [
-                        'id'      => $material->id,
-                        'name'    => $material->name,
-                        'name_km' => $material->name_km,
-                        'size'    => $material->size,
-                        'unit'    => $material->unit,
-                        'qty'     => $newQty,
-                        'old_qty' => $oldQty,
+                        'id'        => $material->id,
+                        'name'      => $material->name,
+                        'name_km'   => $material->name_km,
+                        'size'      => $material->size,
+                        'unit'      => $material->unit,
+                        'qty'       => $newQty,
+                        'old_qty'   => $oldQty,
+                        'today_out' => $todayOut,
+                        'today_in'  => $todayIn,
                     ];
                 }
 
@@ -297,6 +376,12 @@ class MovementController extends Controller
             'consumable' => \App\Models\Setting::get('category_label_consumable', 'Consumable (សម្ភារៈប្រើប្រាស់)'),
             default      => ucfirst($data['category']),
         };
+
+        \App\Models\ActivityLog::record(
+            'Daily Stock Update',
+            "Adjusted {$count} items in category '{$data['category']}' on {$data['update_date']}",
+            'inventory'
+        );
 
         return redirect()->route('stock.movements.daily', ['category' => $data['category']])
             ->with('success', "✅ ធ្វើបច្ចុប្បន្នភាព {$catLabel} — {$count} items changed" .
@@ -363,19 +448,22 @@ class MovementController extends Controller
                     $nameDisplay = preg_replace('/ \((Large|Small|ធំ|តូច|Large Roll|Small Roll)\)/ui', '', $nameDisplay);
                 }
 
-                $targetDate = \Carbon\Carbon::parse($date)->toDateString();
                 $delta = (float)($it['qty']) - (float)($it['old_qty'] ?? $it['qty']);
                 
-                // Check actual in/out movements for the target date
-                $todayMovements = \App\Models\StockMovement::where('material_id', $it['id'])
-                    ->where(function($q) use ($targetDate) {
-                        $q->whereDate('movement_date', $targetDate)
-                          ->orWhereDate('created_at', $targetDate);
-                    })
-                    ->get();
-                
-                $todayInRecorded  = (float) $todayMovements->where('type', 'in')->sum('quantity');
-                $todayOutRecorded = (float) $todayMovements->where('type', 'out')->sum('quantity');
+                if (isset($it['today_out']) || isset($it['today_in'])) {
+                    $todayInRecorded  = (float)($it['today_in'] ?? 0);
+                    $todayOutRecorded = (float)($it['today_out'] ?? 0);
+                } else {
+                    $targetDate = \Carbon\Carbon::parse($date)->toDateString();
+                    $todayMovements = \App\Models\StockMovement::where('material_id', $it['id'])
+                        ->where(function($q) use ($targetDate) {
+                            $q->whereDate('movement_date', $targetDate)
+                              ->orWhereDate('created_at', $targetDate);
+                        })
+                        ->get();
+                    $todayInRecorded  = (float) $todayMovements->where('type', 'in')->sum('quantity');
+                    $todayOutRecorded = (float) $todayMovements->where('type', 'out')->sum('quantity');
+                }
                 
                 $totalOut = $todayOutRecorded + ($delta < 0 ? abs($delta) : 0);
                 $totalIn  = $todayInRecorded  + ($delta > 0 ? $delta : 0);
@@ -519,6 +607,148 @@ class MovementController extends Controller
         $label = $data['type'] === 'in' ? 'Stock In' : 'Stock Out';
         return redirect()->route('stock.movements.index')
             ->with('success', "{$label}: {$count} items recorded");
+    }
+
+    /**
+     * Person Report — who took what items in a given period.
+     */
+    public function personReport(Request $request): View
+    {
+        // ── Date range resolution ──────────────────────────────
+        $period   = $request->query('period', 'this_week');
+        $category = $request->query('category', '');
+        $type     = $request->query('type', '');
+
+        $today = now()->toDateString();
+
+        switch ($period) {
+            case 'last_week':
+                $startDate = now()->subWeek()->startOfWeek(\Carbon\Carbon::MONDAY)->toDateString();
+                $endDate   = now()->subWeek()->endOfWeek(\Carbon\Carbon::SUNDAY)->toDateString();
+                break;
+            case 'this_month':
+                $startDate = now()->startOfMonth()->toDateString();
+                $endDate   = $today;
+                break;
+            case 'last_month':
+                $startDate = now()->subMonth()->startOfMonth()->toDateString();
+                $endDate   = now()->subMonth()->endOfMonth()->toDateString();
+                break;
+            case 'custom':
+                $startDate = $request->query('start_date', now()->startOfWeek(\Carbon\Carbon::MONDAY)->toDateString());
+                $endDate   = $request->query('end_date', $today);
+                break;
+            default: // this_week
+                $period    = 'this_week';
+                $startDate = now()->startOfWeek(\Carbon\Carbon::MONDAY)->toDateString();
+                $endDate   = $today;
+                break;
+        }
+
+        // ── Query movements ────────────────────────────────────
+        $query = StockMovement::with('material')
+            ->whereBetween('movement_date', [$startDate, $endDate])
+            ->whereNotNull('performed_by')
+            ->where('performed_by', '!=', '');
+
+        if ($category) {
+            $query->whereHas('material', fn($q) => $q->where('category', $category));
+        }
+        if ($type) {
+            $query->where('type', $type);
+        }
+
+        $movements = $query->orderBy('movement_date')->get();
+
+        $totalMovements = $movements->count();
+        $totalOut       = $movements->where('type', 'out')->count();
+        $totalIn        = $movements->where('type', 'in')->count();
+
+        // ── Normalize names for Khmer Unicode support ──────────
+        // Problem: same Khmer name typed differently can produce different byte
+        // sequences (extra spaces, invisible chars like zero-width space).
+        // Solution: strip invisible chars + trim, then use that as the group key.
+        $normalizedMovements = $movements->groupBy(function ($m) {
+            $name = $m->performed_by;
+            // Remove invisible/zero-width Unicode characters
+            $name = preg_replace('/[\x{00AD}\x{200B}\x{200C}\x{200D}\x{200E}\x{200F}\x{FEFF}\x{2028}\x{2029}]/u', '', $name);
+            // Collapse multiple whitespace (including non-breaking spaces) to single space
+            $name = preg_replace('/[\s\x{00A0}\x{3000}]+/u', ' ', $name);
+            // Trim and lowercase (only affects Latin chars, safe for Khmer)
+            return mb_strtolower(trim($name), 'UTF-8');
+        });
+
+        // ── Group by person, then by material ─────────────────
+        $personData = [];
+
+        foreach ($normalizedMovements as $nameKey => $personMoves) {
+            // Pick the most-used version of the name as the display name
+            $displayName = $personMoves
+                ->groupBy(fn($m) => trim($m->performed_by))
+                ->map->count()
+                ->sortDesc()
+                ->keys()
+                ->first() ?? $nameKey;
+
+            $itemMap = [];
+
+            foreach ($personMoves as $mv) {
+                $mat = $mv->material;
+                if (!$mat) continue;
+
+                $key = $mat->id;
+                if (!isset($itemMap[$key])) {
+                    $itemMap[$key] = [
+                        'name'      => $mat->name,
+                        'name_km'   => $mat->name_km ?? '',
+                        'category'  => $mat->category ?? 'other',
+                        'unit'      => $mat->unit ?? '',
+                        'out_qty'   => 0,
+                        'in_qty'    => 0,
+                        'adj_qty'   => 0,
+                        'last_date' => null,
+                        'reference' => null,
+                    ];
+                }
+
+                match ($mv->type) {
+                    'out'    => $itemMap[$key]['out_qty'] += (float) $mv->quantity,
+                    'in'     => $itemMap[$key]['in_qty']  += (float) $mv->quantity,
+                    'adjust' => $itemMap[$key]['adj_qty'] += (float) $mv->quantity,
+                    default  => null,
+                };
+
+                // Track latest movement date + reference
+                if (is_null($itemMap[$key]['last_date']) || $mv->movement_date > $itemMap[$key]['last_date']) {
+                    $itemMap[$key]['last_date'] = $mv->movement_date;
+                    $itemMap[$key]['reference'] = $mv->reference;
+                }
+            }
+
+            // Sort items: most taken (out) first, then by name
+            usort($itemMap, fn($a, $b) => $b['out_qty'] <=> $a['out_qty'] ?: strcmp($a['name'], $b['name']));
+
+            $personData[] = [
+                'name'           => $displayName,
+                'movement_count' => $personMoves->count(),
+                'item_count'     => count($itemMap),
+                'days_active'    => $personMoves->groupBy(fn($m) => $m->movement_date->toDateString())->count(),
+                'total_out'      => $personMoves->where('type', 'out')->count(),
+                'total_in'       => $personMoves->where('type', 'in')->count(),
+                'total_out_qty'  => $personMoves->where('type', 'out')->sum('quantity'),
+                'total_in_qty'   => $personMoves->where('type', 'in')->sum('quantity'),
+                'items'          => array_values($itemMap),
+            ];
+        }
+
+        // Sort persons: most active first
+        usort($personData, fn($a, $b) => $b['movement_count'] <=> $a['movement_count']);
+
+        return view('stock.person-report', compact(
+            'personData', 'period', 'category', 'type',
+            'startDate', 'endDate',
+            'totalMovements', 'totalOut', 'totalIn'
+        ));
     }
 
     /**

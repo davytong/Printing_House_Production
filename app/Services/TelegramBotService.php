@@ -12,14 +12,29 @@ class TelegramBotService
     public function __construct(
         private TelegramService $telegramService,
         private StockService $stockService,
-        private AlertService $alertService
-    ) {}
+        private AlertService $alertService,
+        private ?DailyReportTrackerService $reportTracker = null
+    ) {
+        $this->reportTracker = $reportTracker ?? app(DailyReportTrackerService::class);
+    }
 
     /**
      * Process an incoming Telegram update (Message or Callback Query).
      */
     public function handleUpdate(array $update): void
     {
+        // Auto-capture Telegram sender
+        try {
+            $msgPayload = $update['message'] ?? $update['callback_query']['message'] ?? null;
+            $from = $update['message']['from'] ?? $update['callback_query']['from'] ?? null;
+            $chatTitle = $msgPayload['chat']['title'] ?? null;
+            if ($from) {
+                \App\Models\TelegramUser::capture($from, $chatTitle, 'chat_interaction');
+            }
+        } catch (\Throwable $e) {
+            // Non-blocking
+        }
+
         // 1. Handle Callback Queries (Inline Button Taps)
         if (isset($update['callback_query'])) {
             $this->handleCallbackQuery($update['callback_query']);
@@ -100,11 +115,20 @@ class TelegramBotService
     private function handleMessage(array $message): void
     {
         $chatId = (string) ($message['chat']['id'] ?? '');
-        $text   = trim($message['text'] ?? '');
+        $text   = trim($message['text'] ?? $message['caption'] ?? '');
         $user   = $message['from'] ?? [];
         $userName = trim(($user['first_name'] ?? '') . ' ' . ($user['last_name'] ?? '')) ?: ($user['username'] ?? 'User');
 
         if (!$chatId || !$text) return;
+
+        // ── Daily Production Report Tracking ──
+        try {
+            if ($this->reportTracker && $this->reportTracker->processIncomingMessage($message)) {
+                return;
+            }
+        } catch (\Throwable $e) {
+            Log::error('TelegramBotService DailyReportTracker error: ' . $e->getMessage());
+        }
 
         // Check active state session
         $state = Cache::get("tg_state_{$chatId}");
@@ -372,7 +396,8 @@ class TelegramBotService
         float $qty,
         string $reason,
         string $note,
-        string $performedBy
+        string $performedBy,
+        ?string $recorderName = null
     ): bool {
         $material = Material::find($materialId);
         if (!$material) {
@@ -414,10 +439,10 @@ class TelegramBotService
             7 => 'កក្កដា', 8 => 'សីហា', 9 => 'កញ្ញា', 10 => 'តុលា', 11 => 'វិច្ឆិកា', 12 => 'ធ្នូ'
         ];
         $dateKhmer = now()->format('j') . ' ' . ($monthsKh[(int)now()->format('n')] ?? '') . ' ' . now()->format('Y');
-        $timeStr   = now()->format('H:i');
+        $timeStr   = now()->format('h:i A');
 
         $reasonMap = [
-            'Production'          => 'ប្រើប្រាស់ក្នុងការផលិត',
+            'Production'          => 'ប្រើប្រាស់ក្នុងការបោះពុម្ព',
             'Machine maintenance' => 'ថែទាំម៉ាស៊ីន',
             'Cleaning'            => 'សម្អាត',
             'Damaged'             => 'ខូចខាត',
@@ -432,42 +457,33 @@ class TelegramBotService
 
         $refCode  = 'SO-' . now()->format('Ymd') . '-' . str_pad($movement->id ?? 1, 4, '0', STR_PAD_LEFT);
         $itemName = $material->name_km ?: $material->name;
-        $unitStr  = $material->unit ?: 'ដប';
+        $unitStr  = $material->unit ?: 'pcs';
+        $warn     = ($remaining <= 0 || (!empty($material->min_stock) && $remaining <= $material->min_stock)) ? ' ⚠️' : '';
 
         // 3. Post live notification to configured Telegram Usage Channel
         $targetChatId = \App\Models\Setting::get('stock_out_chat_id') ?: \App\Models\Setting::get('daily_usage_chat_id', $chatId);
         $targetThread = \App\Models\Setting::get('stock_out_thread_id') ?: \App\Models\Setting::get('daily_usage_thread_id');
 
-        $defaultTemplate = "<b>របាយការណ៍ដកស្តុកប្រើប្រាស់</b>\n" .
-               "━━━━━━━━━━━━━━\n\n" .
-               "<b>មុខទំនិញ:</b> {name}\n" .
-               "<b>ចំនួនដក:</b> {quantity} {unit}\n" .
-               "<b>គោលបំណង:</b> {reason}\n\n" .
-               "<b>អ្នកដក:</b> {performed_by}\n" .
-               "<b>កាលបរិច្ឆេទ:</b> {date}\n" .
-               "<b>ម៉ោង:</b> {time}\n\n" .
-               "<b>ស្តុកមុនដក:</b> {stock_before} {unit}\n" .
-               "<b>ស្តុកនៅសល់:</b> {stock_remaining} {unit}\n\n" .
-               "<b>លេខប្រតិបត្តិការ:</b> {ref_code}\n" .
-               "━━━━━━━━━━━━━━\n" .
-               "🤖 <b>ប្រព័ន្ធបានកត់ត្រាដោយស្វ័យប្រវត្តិ</b>";
+        $takenByHtml = htmlspecialchars($performedBy);
+        $actorLine = "<b>អ្នកដក:</b> {$takenByHtml}";
+        if (!empty($recorderName)) {
+            $actorLine .= " | <b>អ្នកកត់ត្រា:</b> " . htmlspecialchars($recorderName);
+        }
 
-        $template = \App\Models\Setting::get('stock_out_template', $defaultTemplate);
-
-        $replacements = [
-            '{name}'            => htmlspecialchars($itemName),
-            '{quantity}'        => $qty,
-            '{unit}'            => htmlspecialchars($unitStr),
-            '{reason}'          => htmlspecialchars($reasonKh),
-            '{performed_by}'    => htmlspecialchars($performedBy),
-            '{date}'            => $dateKhmer,
-            '{time}'            => $timeStr,
-            '{stock_before}'    => ($current + 0),
-            '{stock_remaining}' => ($remaining + 0),
-            '{ref_code}'        => $refCode,
-        ];
-
-        $msg = str_replace(array_keys($replacements), array_values($replacements), $template);
+        $divider = "━━━━━━━━━━━━━━━";
+        $msg = "<b>របាយការណ៍ដកស្តុកប្រើប្រាស់</b>\n" .
+               "{$divider}\n" .
+               "<b>លេខយោង:</b> <code>{$refCode}</code>\n" .
+               "<b>កាលបរិច្ឆេទ:</b> {$dateKhmer} | {$timeStr}\n" .
+               "{$actorLine}\n" .
+               "<b>គោលបំណង:</b> " . htmlspecialchars($reasonKh) . "\n" .
+               "{$divider}\n\n" .
+               "<b>សម្ភារៈដែលបានយកប្រើប្រាស់ (1 មុខ)</b>\n\n" .
+               "<b>01. " . htmlspecialchars($itemName) . "</b>\n" .
+               "• យកប្រើប្រាស់: <b>{$qty} " . htmlspecialchars($unitStr) . "</b>\n" .
+               "• ស្តុកនៅសល់: <b>{$remaining} " . htmlspecialchars($unitStr) . "</b>{$warn}\n\n" .
+               "{$divider}\n" .
+               "<b>កំណត់ត្រាត្រូវបានបង្កើតដោយស្វ័យប្រវត្តិ</b>";
 
         if ($targetChatId !== $chatId) {
             $this->telegramService->sendMessage($targetChatId, $msg, $targetThread ? (int)$targetThread : null, 'HTML');

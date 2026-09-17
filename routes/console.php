@@ -17,3 +17,10 @@ Schedule::command('app:send-daily-briefing')->dailyAt('07:30');
 
 // Send the daily stock usage report automatically at 8:00 AM
 Schedule::command('app:send-daily-stock-usage')->dailyAt('08:00');
+
+// ── Daily Production Report Tracking ────────────────────────
+// Automatically check daily production report deadlines every minute
+Schedule::command('reports:check-deadlines')->everyMinute();
+
+// Automatically initialize daily report tracking records at midnight
+Schedule::command('reports:init-today')->dailyAt('00:01');

@@ -159,6 +159,21 @@ class DashboardController extends Controller
         $telegramAlertChatId = \App\Models\Setting::get('alert_chat_id', config('services.telegram.alert_chat_id'));
         $telegramStatus = $telegramToken && $telegramAlertChatId ? 'active' : ($telegramToken ? 'pending' : 'disconnected');
 
+        // ── Weekly Top Takers ─────────────────────
+        $weekStart = now()->startOfWeek(\Carbon\Carbon::MONDAY)->toDateString();
+        $weekTopTakers = \App\Models\StockMovement::selectRaw(
+                'performed_by, COUNT(*) as move_count, SUM(CASE WHEN type="out" THEN quantity ELSE 0 END) as out_qty'
+            )
+            ->where('movement_date', '>=', $weekStart)
+            ->whereNotNull('performed_by')
+            ->where('performed_by', '!=', '')
+            ->groupBy('performed_by')
+            ->orderByDesc('move_count')
+            ->limit(5)
+            ->get();
+        $todayOutput = (int) DailyPrint::whereDate('date', today())->sum('printed_today');
+        $recentActivities = \App\Models\ActivityLog::latest()->take(6)->get();
+
         return view('dashboard.index', compact(
             'totalBooks', 'totalPrinted', 'totalTarget', 'overallPct',
             'doneCount', 'inProgress',
@@ -171,7 +186,8 @@ class DashboardController extends Controller
             'operationalMachines', 'totalMachines', 'maintenanceDue', 'breakdowns',
             'pendingPOs', 'overduePOs',
             'unreadNotifs', 'notifications',
-            'upcomingMaintenance', 'telegramStatus'
+            'upcomingMaintenance', 'telegramStatus',
+            'weekTopTakers', 'todayOutput', 'recentActivities'
         ));
     }
 }

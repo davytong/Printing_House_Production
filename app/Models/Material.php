@@ -73,16 +73,22 @@ class Material extends Model
             ? $movements
             : collect($movements);
 
-        // Latest adjustment (by movement_date, then created_at as tiebreak)
+        // Latest adjustment (by movement_date, then created_at as tiebreak, then id)
         $lastAdjust = $movements->where('type', 'adjust')
             ->sortBy([
                 ['movement_date', 'asc'],
                 ['created_at', 'asc'],
+                ['id', 'asc'],
             ])
             ->last();
 
         if ($lastAdjust) {
-            $after  = $movements->where('created_at', '>', $lastAdjust->created_at);
+            $after  = $movements->filter(function ($mv) use ($lastAdjust) {
+                if ($mv->created_at != $lastAdjust->created_at) {
+                    return $mv->created_at > $lastAdjust->created_at;
+                }
+                return $mv->id > $lastAdjust->id;
+            });
             $adjIn  = (float) $after->where('type', 'in')->sum('quantity');
             $adjOut = (float) $after->where('type', 'out')->sum('quantity');
             return (float) $lastAdjust->quantity + $adjIn - $adjOut;

@@ -124,20 +124,41 @@
 
 <div class="d-flex justify-content-between align-items-center mb-4 flex-wrap gap-3">
     <div>
-        <h1 class="page-title mb-0" style="font-size:1.75rem">Executive Dashboard</h1>
+        <div class="d-flex align-items-center gap-2">
+            <h1 class="page-title mb-0" style="font-size:1.75rem">Production Command Center</h1>
+            <span class="badge" style="background: rgba(16,185,129,0.15); color: #059669; border: 1px solid rgba(16,185,129,0.3); font-size: 0.75rem; padding: 0.35rem 0.65rem; border-radius: 99px;">
+                <span style="display:inline-block; width:6px; height:6px; border-radius:50%; background:#10b981; margin-right:4px;"></span> Live System
+            </span>
+        </div>
+        <p class="text-muted mb-0" style="font-size: 0.82rem; margin-top: 2px;">
+            Active Batch: <strong>{{ $currentBatch->name }}</strong> · Today: <strong class="text-primary">+{{ number_format($todayOutput) }} units</strong> printed
+        </p>
     </div>
     
-    <a href="{{ route('telegram.setup') }}" class="tg-widget">
-        <i class="bi bi-telegram" style="color:#0ea5e9; font-size:1.1rem"></i>
-        <span>Telegram Bot</span>
-        @if($telegramStatus === 'active')
-            <div class="tg-status-dot active" title="Active & Configured"></div>
-        @elseif($telegramStatus === 'pending')
-            <div class="tg-status-dot pending" title="Bot Connected, Missing Alert Group"></div>
-        @else
-            <div class="tg-status-dot disconnected" title="Disconnected"></div>
+    <div class="d-flex align-items-center gap-2 flex-wrap">
+        <a href="{{ route('printing.index') }}" class="btn btn-primary btn-sm px-3 shadow-sm">
+            <i class="bi bi-plus-circle me-1"></i> Record Output
+        </a>
+        <a href="{{ route('printing.report') }}" class="btn btn-outline-primary btn-sm px-3">
+            <i class="bi bi-file-earmark-text me-1"></i> Daily Report
+        </a>
+        @if(\App\Services\RoleService::can('view_audit_logs'))
+        <a href="{{ route('audit.index') }}" class="btn btn-outline-secondary btn-sm px-3">
+            <i class="bi bi-shield-check me-1"></i> Audit Trail
+        </a>
         @endif
-    </a>
+        <a href="{{ route('telegram.setup') }}" class="tg-widget">
+            <i class="bi bi-telegram" style="color:#0ea5e9; font-size:1.1rem"></i>
+            <span>Bot</span>
+            @if($telegramStatus === 'active')
+                <div class="tg-status-dot active" title="Active & Configured"></div>
+            @elseif($telegramStatus === 'pending')
+                <div class="tg-status-dot pending" title="Bot Connected, Missing Alert Group"></div>
+            @else
+                <div class="tg-status-dot disconnected" title="Disconnected"></div>
+            @endif
+        </a>
+    </div>
 </div>
 
 {{-- ── KPI Row ── --}}
@@ -527,6 +548,142 @@
     </div>
   </div>
 
+</div>
+
+{{-- ── Row 4: Top Takers This Week ── --}}
+<div class="row g-4 mt-1">
+  <div class="col-12">
+    <div class="panel">
+      <div class="panel-header">
+        <div class="ph-title">
+          <div class="ph-icon" style="background:linear-gradient(135deg,rgba(79,70,229,.15),rgba(99,102,241,.08));color:#4f46e5">
+            <i class="bi bi-person-lines-fill"></i>
+          </div>
+          <span>Top Stock Takers — <span style="font-family:var(--font-latin);font-size:.8rem;font-weight:600;color:var(--text-muted)">this week</span></span>
+        </div>
+        <a href="{{ route('stock.person-report') }}" class="btn btn-ghost btn-sm" style="font-size:.78rem">
+          Full Report <i class="bi bi-arrow-right"></i>
+        </a>
+      </div>
+
+      @if($weekTopTakers->isEmpty())
+        <div style="padding:2rem 1.5rem;text-align:center;color:var(--text-muted);font-size:.85rem">
+          <i class="bi bi-person-dash" style="font-size:1.8rem;display:block;opacity:.3;margin-bottom:.5rem"></i>
+          គ្មានអ្នកទាញ Stock សប្តាហ៍នេះ
+        </div>
+      @else
+      @php
+        $takerColors = ['#4f46e5','#0ea5e9','#10b981','#f59e0b','#ef4444'];
+        $maxMoves = $weekTopTakers->max('move_count') ?: 1;
+      @endphp
+      <div style="padding:1rem 1.5rem;display:flex;flex-direction:column;gap:.75rem">
+        @foreach($weekTopTakers as $ti => $taker)
+        @php $tc = $takerColors[$ti % count($takerColors)]; @endphp
+        <div style="display:flex;align-items:center;gap:1rem">
+          {{-- Rank --}}
+          <div style="width:28px;height:28px;border-radius:50%;background:{{ $tc }}22;color:{{ $tc }};display:flex;align-items:center;justify-content:center;font-family:var(--font-latin);font-size:.78rem;font-weight:800;flex-shrink:0">
+            {{ $ti + 1 }}
+          </div>
+          {{-- Name --}}
+          <div style="min-width:140px;max-width:200px;font-size:.88rem;font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:var(--text-primary)">
+            {{ $taker->performed_by }}
+          </div>
+          {{-- Bar --}}
+          <div style="flex:1;height:8px;border-radius:999px;background:rgba(0,0,0,.05);overflow:hidden">
+            <div style="height:100%;width:{{ round($taker->move_count / $maxMoves * 100) }}%;background:{{ $tc }};border-radius:999px;transition:width .8s cubic-bezier(.34,1.56,.64,1)"></div>
+          </div>
+          {{-- Stats --}}
+          <div style="text-align:right;flex-shrink:0">
+            <span style="font-family:var(--font-latin);font-weight:800;font-size:.9rem;color:{{ $tc }}">{{ $taker->move_count }}</span>
+            <span style="font-size:.72rem;color:var(--text-muted);font-family:var(--font-latin)"> moves</span>
+            @if($taker->out_qty > 0)
+              <div style="font-size:.7rem;color:var(--text-muted);font-family:var(--font-latin)">-{{ number_format($taker->out_qty, 1) + 0 }} taken</div>
+            @endif
+          </div>
+        </div>
+        @endforeach
+      </div>
+      @endif
+    </div>
+  </div>
+</div>
+
+{{-- ── Row 5: Recent Factory Audit Trail ── --}}
+<div class="row g-4 mt-1">
+  <div class="col-12">
+    <div class="panel">
+      <div class="panel-header">
+        <div class="ph-title">
+          <div class="ph-icon" style="background:linear-gradient(135deg,rgba(79,70,229,.15),rgba(99,102,241,.08));color:#4f46e5">
+            <i class="bi bi-activity"></i>
+          </div>
+          <span>Recent Factory Audit Trail — <span style="font-family:var(--font-latin);font-size:.8rem;font-weight:600;color:var(--text-muted)">សកម្មភាពថ្មីៗក្នុងរោងពុម្ព</span></span>
+        </div>
+        @if(\App\Services\RoleService::can('view_audit_logs'))
+        <a href="{{ route('audit.index') }}" class="btn btn-ghost btn-sm" style="font-size:.78rem">
+          Full Audit Trail <i class="bi bi-arrow-right"></i>
+        </a>
+        @endif
+      </div>
+
+      @if($recentActivities->isEmpty())
+        <div style="padding:2rem 1.5rem;text-align:center;color:var(--text-muted);font-size:.85rem">
+          <i class="bi bi-clock-history" style="font-size:1.8rem;display:block;opacity:.3;margin-bottom:.5rem"></i>
+          គ្មានសកម្មភាពថ្មីៗទេ / No recent activity recorded
+        </div>
+      @else
+      <div class="table-responsive">
+        <table class="table table-hover align-middle mb-0" style="font-size: 0.85rem;">
+          <thead class="table-light" style="font-size: 0.75rem; text-transform: uppercase; color: var(--text-muted);">
+            <tr>
+              <th style="padding-left: 1.5rem; width: 170px;">Time</th>
+              <th style="width: 180px;">User & Position</th>
+              <th style="width: 140px;">Module</th>
+              <th>Action & Summary</th>
+              <th style="width: 120px; text-align: right; padding-right: 1.5rem;">Network</th>
+            </tr>
+          </thead>
+          <tbody>
+            @foreach($recentActivities as $act)
+            @php $badge = $act->module_badge; @endphp
+            <tr>
+              <td style="padding-left: 1.5rem; font-family: var(--font-latin); color: var(--text-secondary);">
+                <span class="fw-bold text-dark">{{ $act->created_at->format('H:i:s') }}</span>
+                <span class="text-muted small">({{ $act->created_at->diffForHumans() }})</span>
+              </td>
+              <td>
+                <div class="d-flex align-items-center gap-2">
+                  <div style="width: 26px; height: 26px; border-radius: 50%; background: #4f46e522; color: #4f46e5; display:flex; align-items:center; justify-content:center; font-weight:700; font-size: 0.72rem;">
+                    {{ strtoupper(substr($act->user_name, 0, 1)) }}
+                  </div>
+                  <div>
+                    <div class="fw-bold text-dark" style="font-size: 0.82rem;">{{ $act->user_name }}</div>
+                    <div class="text-muted" style="font-size: 0.7rem;">{{ ucfirst(str_replace('_', ' ', $act->position)) }}</div>
+                  </div>
+                </div>
+              </td>
+              <td>
+                <span class="badge" style="background: {{ $badge['bg'] }}18; color: {{ $badge['bg'] }}; border: 1px solid {{ $badge['bg'] }}33; font-size: 0.72rem;">
+                  <i class="bi {{ $badge['icon'] }}"></i> {{ $badge['label'] }}
+                </span>
+              </td>
+              <td>
+                <div class="fw-semibold text-dark">{{ $act->action }}</div>
+                @if($act->details)
+                  <div class="text-muted small text-truncate" style="max-width: 450px;">{{ $act->details }}</div>
+                @endif
+              </td>
+              <td style="text-align: right; padding-right: 1.5rem; font-family: var(--font-latin); font-size: 0.75rem;" class="text-muted">
+                {{ $act->ip_address ?: '127.0.0.1' }}
+              </td>
+            </tr>
+            @endforeach
+          </tbody>
+        </table>
+      </div>
+      @endif
+    </div>
+  </div>
 </div>
 
 @endsection

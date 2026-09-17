@@ -210,6 +210,12 @@ class TelegramController extends Controller
                     }
                 }
 
+                \App\Models\ActivityLog::record(
+                    'Broadcast Telegram Image',
+                    "Sent image snapshot to chat {$chatId}" . ($threadId ? " (topic {$threadId})" : ""),
+                    'telegram'
+                );
+
                 return response()->json(['ok' => true, 'message' => 'Image sent']);
             }
         } catch (\Throwable $e) {
@@ -293,6 +299,12 @@ class TelegramController extends Controller
         }
 
         if ($allOk) {
+            \App\Models\ActivityLog::record(
+                'Broadcast Telegram Report',
+                "Sent " . count($rawMessages) . " message(s) to chat {$chatId}" . ($threadId ? " (topic {$threadId})" : ""),
+                'telegram'
+            );
+
             return response()->json(['ok' => true, 'message' => count($rawMessages) > 1 ? 'Both messages sent' : 'Report sent']);
         }
 

@@ -13,8 +13,9 @@ Route::post('/telegram/send-image',  [TelegramController::class, 'sendImage'])->
 Route::post('/telegram/send-report', [TelegramController::class, 'sendReport'])->name('telegram.send');
 
 // Telegram Mini App APIs
-Route::get('/telegram/app/data',     [App\Http\Controllers\TelegramMiniAppController::class, 'getData']);
+Route::get('/telegram/app/data',       [App\Http\Controllers\TelegramMiniAppController::class, 'getData']);
 Route::post('/telegram/app/stock-out', [App\Http\Controllers\TelegramMiniAppController::class, 'stockOut']);
+Route::post('/telegram/app/resend/{id}', [App\Http\Controllers\TelegramMiniAppController::class, 'resend']);
 
 // ── Autocomplete APIs ────────────────────────────────────
 Route::prefix('autocomplete')->group(function () {

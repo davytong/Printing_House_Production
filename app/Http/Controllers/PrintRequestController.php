@@ -252,6 +252,12 @@ class PrintRequestController extends Controller
             route('requests.show', $printRequest)
         );
 
+        \App\Models\ActivityLog::record(
+            'Approved Print Request',
+            "Approved {$printRequest->request_code} · {$printRequest->title} ({$printRequest->total_books_requested} items)",
+            'production'
+        );
+
         return back()->with('success', 'ស្នើរសុំត្រូវបានអនុម័ត');
     }
 
@@ -265,6 +271,13 @@ class PrintRequestController extends Controller
             'status'           => 'rejected',
             'rejection_reason' => $request->rejection_reason,
         ]);
+
+        \App\Models\ActivityLog::record(
+            'Rejected Print Request',
+            "Rejected {$printRequest->request_code} · {$printRequest->title} (Reason: {$request->rejection_reason})",
+            'production'
+        );
+
         return back()->with('success', 'ស្នើរសុំត្រូវបានបដិសេធ');
     }
 

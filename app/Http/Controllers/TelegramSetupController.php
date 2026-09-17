@@ -143,19 +143,18 @@ class TelegramSetupController extends Controller
 
     public function getDefaultStockOutTemplate(): string
     {
-        return "<b>របាយការណ៍ដកស្តុកប្រើប្រាស់</b>\n" .
-               "━━━━━━━━━━━━━━\n\n" .
-               "<b>មុខទំនិញ:</b> {name}\n" .
-               "<b>ចំនួនដក:</b> {quantity} {unit}\n" .
-               "<b>គោលបំណង:</b> {reason}\n\n" .
-               "<b>អ្នកដក:</b> {performed_by}\n" .
-               "<b>កាលបរិច្ឆេទ:</b> {date}\n" .
-               "<b>ម៉ោង:</b> {time}\n\n" .
-               "<b>ស្តុកមុនដក:</b> {stock_before} {unit}\n" .
-               "<b>ស្តុកនៅសល់:</b> {stock_remaining} {unit}\n\n" .
-               "<b>លេខប្រតិបត្តិការ:</b> {ref_code}\n" .
-               "━━━━━━━━━━━━━━\n" .
-               "🤖 <b>ប្រព័ន្ធបានកត់ត្រាដោយស្វ័យប្រវត្តិ</b>";
+        return "<b>[ ប័ណ្ណបញ្ចេញស្តុកទំនិញ / STOCK DISPATCH ]</b>\n" .
+               "─────────────────────────────\n" .
+               "<b>លេខយោង (Ref):</b> <code>{ref_code}</code>\n" .
+               "<b>កាលបរិច្ឆេទ (Date):</b> {date} | {time}\n" .
+               "<b>អ្នកទទួល (Recipient):</b> {performed_by}\n" .
+               "<b>គោលបំណង (Purpose):</b> {reason}\n" .
+               "─────────────────────────────\n" .
+               "<b>សម្ភារៈ:</b> <b>{name}</b>\n" .
+               "<b>ចំនួនបញ្ចេញ:</b> <b>{quantity} {unit}</b>\n" .
+               "<b>ស្តុកនៅសល់:</b> <b>{stock_remaining} {unit}</b> (មុនដក: {stock_before} {unit})\n" .
+               "─────────────────────────────\n" .
+               "<i>កត់ត្រាដោយស្វ័យប្រវត្តិតាមរយៈប្រព័ន្ធ PrintTracker Pro</i>";
     }
 
     public function saveStockOutTemplate(Request $request): RedirectResponse

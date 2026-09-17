@@ -1162,23 +1162,36 @@ const TODAY_TOTAL = {{ $todayTotal }};
   }
 
   function getBookCategoryLabel(title, category) {
-    const t = (title || '').toLowerCase();
+    const t = (title || '').toLowerCase().trim();
     if (t.includes('textbook')) return 'Textbook';
     if (t.includes('workbook')) return 'Workbook';
+    if (t.includes('slidebook') || t.includes('slide book')) return 'Slidebook';
+    if (t.includes('storybook') || t.includes('story book')) return 'Storybook';
+    if (t.includes('guidebook') || t.includes('guide book')) return 'Guidebook';
     if (t.includes('song')) return 'Song';
     if (t.includes('forktale') || t.includes('folktale')) return 'Folktale';
     if (t.includes('eloquence')) return 'Eloquence';
     if (t.includes('flashcard')) return 'Flashcard';
-    if (t.includes('guidebook')) return 'Guidebook';
+    if (t.includes('artcraft')) return 'Artcraft';
+    if (t.includes('alphabet') || t.includes('alpahabet')) return 'Alphabets';
 
-    if (category && category.trim()) {
+    // Extract last word from title (e.g. "Principle Economic Slidebook" -> "Slidebook")
+    const cleanTitle = (title || '').replace(/[^\p{L}\p{N}\s]/gu, ' ').trim();
+    const words = cleanTitle.split(/\s+/).filter(Boolean);
+    if (words.length > 0) {
+      const last = words[words.length - 1];
+      if (isNaN(last) && last.length >= 2) {
+        return last.charAt(0).toUpperCase() + last.slice(1).toLowerCase();
+      }
+    }
+
+    const bindingMethods = ['perfect_binding', 'staple', 'saddle_stitch'];
+    if (category && category.trim() && !bindingMethods.includes(category.trim().toLowerCase())) {
       const c = category.trim();
       return c.charAt(0).toUpperCase() + c.slice(1);
     }
 
-    const parts = (title || '').trim().split(' ');
-    const last = parts[parts.length - 1];
-    return last ? (last.charAt(0).toUpperCase() + last.slice(1)) : 'Other';
+    return 'Other';
   }
 
   function generateCaptionText(books, audience = currentAudience) {
@@ -1260,7 +1273,7 @@ const TODAY_TOTAL = {{ $todayTotal }};
       });
 
       if (gradeItemsText.trim().length > 0) {
-        detailsText += `***សៀវភៅ ${grade}\n`;
+        detailsText += `សៀវភៅ ${grade}\n`;
         if (targets.length > 0) {
           detailsText += targets.join(' / ') + '\n\n';
         } else {

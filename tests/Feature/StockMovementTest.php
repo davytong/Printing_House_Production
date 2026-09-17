@@ -202,4 +202,90 @@ class StockMovementTest extends TestCase
             ]
         ]);
     }
+
+    /**
+     * Test saving daily update resets today_out so (បានប្រើ) does not persist after save.
+     */
+    public function test_saving_daily_update_resets_today_movements(): void
+    {
+        $material = Material::create([
+            'code'      => 'C-RESET-1',
+            'name'      => 'Plate Cleaner Reset Test',
+            'name_km'   => 'សាប៊ូជូតស្អាត តេស្ត',
+            'category'  => 'consumable',
+            'unit'      => 'bottle',
+            'unit_cost' => 2.0,
+            'min_stock' => 5,
+            'status'    => 'active',
+        ]);
+
+        // Record initial stock IN 10
+        StockMovement::create([
+            'material_id'   => $material->id,
+            'type'          => 'in',
+            'quantity'      => 10,
+            'movement_date' => now()->toDateString(),
+        ]);
+
+        // Record Stock OUT 2 bottles today
+        StockMovement::create([
+            'material_id'   => $material->id,
+            'type'          => 'out',
+            'quantity'      => 2,
+            'movement_date' => now()->toDateString(),
+        ]);
+
+        $this->assertEquals(8, $material->currentStock());
+
+        // Prior to saving, daily update shows today_out = 2
+        $response = $this->get('/stock/movements/daily?category=consumable');
+        $response->assertStatus(200);
+        $response->assertSee('data-today-out="2"', false);
+
+        // User saves daily update confirming current stock of 8
+        $postResponse = $this->post('/stock/movements/daily', [
+            'category'      => 'consumable',
+            'update_date'   => now()->toDateString(),
+            'performed_by'  => 'Tester',
+            'send_telegram' => 0,
+            'items'         => [
+                [
+                    'material_id'   => $material->id,
+                    'current_stock' => 8,
+                ]
+            ]
+        ]);
+        $postResponse->assertRedirect();
+
+        // After saving, reload daily update: today_out MUST be 0 (reset)
+        $reloaded = $this->get('/stock/movements/daily?category=consumable');
+        $reloaded->assertStatus(200);
+        $reloaded->assertSee('data-today-out="0"', false);
+        $reloaded->assertDontSee('data-today-out="2"', false);
+
+        // Daily stats endpoint also returns 0 for today_out
+        $stats = $this->get('/stock/movements/daily-stats?category=consumable&date=' . now()->toDateString());
+        $stats->assertStatus(200);
+        $stats->assertJsonFragment([
+            $material->id => [
+                'today_in'  => 0,
+                'today_out' => 0,
+            ]
+        ]);
+
+        // If a new stock out occurs AFTER the save, it captures only the new movement (1)
+        StockMovement::create([
+            'material_id'   => $material->id,
+            'type'          => 'out',
+            'quantity'      => 1,
+            'movement_date' => now()->toDateString(),
+        ]);
+
+        $this->assertEquals(7, $material->currentStock());
+
+        $afterNewOut = $this->get('/stock/movements/daily?category=consumable');
+        $afterNewOut->assertStatus(200);
+        $afterNewOut->assertSee('data-today-out="1"', false);
+    }
 }
+

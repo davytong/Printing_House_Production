@@ -147,6 +147,259 @@
         </div>
     </div>
 
+    <!-- Daily Report Tracking Maintenance & Health Check -->
+    <div class="settings-section">
+        <div class="settings-section-title d-flex justify-content-between align-items-center flex-wrap gap-2">
+            <div class="d-flex align-items-center gap-2">
+                <i class="bi bi-clipboard-check text-primary"></i>
+                <span>{{ app()->getLocale() == 'km' ? 'ការតាមដានរបាយការណ៍ និងថែទាំប្រព័ន្ធ' : 'Daily Report Tracking & Maintenance' }}</span>
+            </div>
+            <div class="d-flex gap-2">
+                <a href="{{ route('reports.tracking.index') }}" class="btn btn-sm btn-outline-primary">
+                    <i class="bi bi-grid-3x3-gap me-1"></i>{{ app()->getLocale() == 'km' ? 'ផ្ទាំងតាមដាន' : 'Tracking Matrix' }}
+                </a>
+                <a href="{{ route('reports.requirements.index') }}" class="btn btn-sm btn-dark">
+                    <i class="bi bi-people me-1"></i>{{ app()->getLocale() == 'km' ? 'កាលវិភាគបុគ្គលិក' : 'Staff Requirements' }}
+                </a>
+            </div>
+        </div>
+
+        @if(session('success'))
+            <div class="alert alert-success alert-dismissible fade show d-flex align-items-center py-2 mb-3" role="alert">
+                <i class="bi bi-check-circle-fill me-2 fs-5"></i>
+                <div>{{ session('success') }}</div>
+                <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+            </div>
+        @endif
+        @if(session('info'))
+            <div class="alert alert-info alert-dismissible fade show d-flex align-items-center py-2 mb-3" role="alert">
+                <i class="bi bi-info-circle-fill me-2 fs-5"></i>
+                <div>{{ session('info') }}</div>
+                <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+            </div>
+        @endif
+
+        <!-- Live Health & Status Cards -->
+        <div class="p-3 rounded-3 bg-light border mb-3">
+            <div class="d-flex flex-wrap justify-content-between align-items-center gap-2 mb-3 pb-2 border-bottom">
+                <div class="d-flex align-items-center gap-2">
+                    <span class="badge bg-success-subtle text-success border border-success-subtle px-2 py-1">
+                        <i class="bi bi-broadcast me-1"></i>Active / Polling
+                    </span>
+                    <span class="small text-muted font-monospace">
+                        <i class="bi bi-clock me-1"></i>{{ $trackingStats['local_time'] ?? now('Asia/Phnom_Penh')->format('d/m/Y h:i A') }} (Asia/Phnom_Penh)
+                    </span>
+                </div>
+                <div class="small fw-semibold text-secondary">
+                    កាលវិភាគសកម្ម: <span class="text-primary">{{ $trackingStats['active_requirements'] ?? 0 }}</span> / {{ $trackingStats['total_requirements'] ?? 0 }}
+                </div>
+            </div>
+
+            <!-- Today's Metric Badges -->
+            <div class="row g-2 text-center">
+                <div class="col-6 col-sm-3 col-md">
+                    <div class="p-2 bg-white rounded-2 border">
+                        <div class="small text-muted" style="font-size:0.75rem">បានផ្ញើ (On-time)</div>
+                        <div class="fs-5 fw-bold text-success">{{ $trackingStats['today_submitted'] ?? 0 }}</div>
+                    </div>
+                </div>
+                <div class="col-6 col-sm-3 col-md">
+                    <div class="p-2 bg-white rounded-2 border">
+                        <div class="small text-muted" style="font-size:0.75rem">យឺត (Late)</div>
+                        <div class="fs-5 fw-bold text-warning-emphasis">{{ $trackingStats['today_late'] ?? 0 }}</div>
+                    </div>
+                </div>
+                <div class="col-6 col-sm-3 col-md">
+                    <div class="p-2 bg-white rounded-2 border">
+                        <div class="small text-muted" style="font-size:0.75rem">មិនបានផ្ញើ (Missed)</div>
+                        <div class="fs-5 fw-bold text-danger">{{ $trackingStats['today_missed'] ?? 0 }}</div>
+                    </div>
+                </div>
+                <div class="col-6 col-sm-3 col-md">
+                    <div class="p-2 bg-white rounded-2 border">
+                        <div class="small text-muted" style="font-size:0.75rem">រង់ចាំ (Pending)</div>
+                        <div class="fs-5 fw-bold text-secondary">{{ $trackingStats['today_pending'] ?? 0 }}</div>
+                    </div>
+                </div>
+                <div class="col-12 col-sm-12 col-md">
+                    <div class="p-2 bg-white rounded-2 border">
+                        <div class="small text-muted" style="font-size:0.75rem">Alerts ផ្ញើរួច</div>
+                        <div class="fs-5 fw-bold text-primary">{{ $trackingStats['today_alerts_sent'] ?? 0 }}</div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Maintenance Action Buttons -->
+        <div class="mb-4">
+            <div class="small fw-bold text-uppercase text-muted mb-2">
+                <i class="bi bi-tools me-1"></i>ឧបករណ៍ថែទាំ និងត្រួតពិនិត្យ (Maintenance & Check Tools)
+            </div>
+            <div class="d-flex flex-wrap gap-2">
+                <form action="{{ route('settings.report-tracking.check') }}" method="POST" class="d-inline">
+                    @csrf
+                    <button type="submit" class="btn btn-outline-danger btn-sm" title="ពិនិត្យ និងផ្ញើ Alert ឥឡូវនេះ">
+                        <i class="bi bi-bell-fill me-1"></i>Check Deadlines & Alert Now
+                    </button>
+                </form>
+
+                <form action="{{ route('settings.report-tracking.sync') }}" method="POST" class="d-inline">
+                    @csrf
+                    <button type="submit" class="btn btn-outline-primary btn-sm" title="ធ្វើសមកាលកម្មបង្កើតកំណត់ត្រាថ្ងៃនេះ">
+                        <i class="bi bi-arrow-repeat me-1"></i>Sync Today's Records
+                    </button>
+                </form>
+
+                <form action="{{ route('settings.report-tracking.fetch-users') }}" method="POST" class="d-inline">
+                    @csrf
+                    <button type="submit" class="btn btn-outline-success btn-sm" title="ទាញយកគណនី Telegram ទាំងអស់ពីក្រុមស្វ័យប្រវត្តិ">
+                        <i class="bi bi-cloud-arrow-down me-1"></i>Fetch Users from Telegram ({{ \App\Models\TelegramUser::count() }})
+                    </button>
+                </form>
+
+                <form action="{{ route('reports.tracking.send-summary') }}" method="POST" class="d-inline">
+                    @csrf
+                    <button type="submit" class="btn btn-outline-info btn-sm" title="ផ្ញើសេចក្តីសង្ខេបទៅ Telegram ឥឡូវនេះ">
+                        <i class="bi bi-telegram me-1"></i>Send Summary to Telegram
+                    </button>
+                </form>
+
+                <form action="{{ route('settings.report-tracking.reset-alerts') }}" method="POST" class="d-inline"
+                      onsubmit="return confirm('តើអ្នកចង់កំណត់ Alert ឡើងវិញសម្រាប់ការធ្វើតេស្តមែនទេ? (Reset today alerts for testing?)');">
+                    @csrf
+                    <button type="submit" class="btn btn-outline-warning btn-sm" title="កំណត់ Alert ឡើងវិញដើម្បីអាច Test Alert ម្តងទៀតបាន">
+                        <i class="bi bi-arrow-counterclockwise me-1"></i>Reset Alerts (Test Mode)
+                    </button>
+                </form>
+            </div>
+            <div class="form-text mt-1" style="font-size:0.8rem">
+                ជំនួយ: ចុច "Reset Alerts" ដើម្បីលុបស្ថានភាព Alert ថ្ងៃនេះ ដើម្បីអាចធ្វើតេស្តបាញ់ Alert ឡើងវិញបាន។
+            </div>
+        </div>
+
+        <!-- Configuration Settings Form -->
+        <form action="{{ route('settings.report-tracking.save') }}" method="POST" class="border-top pt-3">
+            @csrf
+            <div class="small fw-bold text-uppercase text-muted mb-3">
+                <i class="bi bi-sliders me-1"></i>ការកំណត់ប្រព័ន្ធទូទៅ (Global Configuration)
+            </div>
+
+            <div class="row g-3">
+                <div class="col-md-6">
+                    <label class="form-label fw-semibold small">គោលការណ៍សារស្ទួន (Duplicate Report Policy)</label>
+                    <select name="report_duplicate_policy" class="form-select form-select-sm">
+                        <option value="first_valid" {{ ($reportSettings['duplicate_policy'] ?? 'first_valid') === 'first_valid' ? 'selected' : '' }}>
+                            First Valid Report (ណែនាំ: រក្សាទុកពេលផ្ញើលើកដំបូង និងកត់ត្រាការកែប្រែជា Revision)
+                        </option>
+                        <option value="latest_valid" {{ ($reportSettings['duplicate_policy'] ?? '') === 'latest_valid' ? 'selected' : '' }}>
+                            Latest Valid Report (ប្រើប្រាស់ពេលផ្ញើចុងក្រោយជាផ្លូវការ)
+                        </option>
+                    </select>
+                </div>
+
+                @php
+                    $curChatId   = (string)($reportSettings['alert_chat_id'] ?? '');
+                    $curThreadId = (string)($reportSettings['alert_thread_id'] ?? '');
+                    $matchedKnown = false;
+                    foreach ($telegramGroups as $tg) {
+                        if ($curChatId === (string)$tg->chat_id && $curThreadId === (string)($tg->message_thread_id ?? '')) {
+                            $matchedKnown = true;
+                            break;
+                        }
+                    }
+                    $isCustomTarget = (!empty($curChatId) && !$matchedKnown);
+                @endphp
+
+                <!-- Group Selector Dropdown -->
+                <div class="col-md-12">
+                    <label class="form-label fw-semibold small d-flex justify-content-between align-items-center">
+                        <span>
+                            <i class="bi bi-telegram text-primary me-1"></i>
+                            ជ្រើសរើសក្រុម/Topic ទទួល Alert (Choose Telegram Group / Topic)
+                        </span>
+                        <span class="badge bg-primary-subtle text-primary border border-primary-subtle">
+                            ស្វ័យប្រវត្តិតាម Telegram
+                        </span>
+                    </label>
+
+                    <select name="report_alert_target" id="report_alert_target" class="form-select form-select-sm" onchange="onAlertTargetChange(this)" style="font-size:0.92rem;">
+                        <option value="" {{ empty($curChatId) ? 'selected' : '' }}>
+                            — ប្រើប្រាស់ Default ក្នុង .env ({{ config('services.telegram.alert_chat_id') ?: 'Not configured' }}) —
+                        </option>
+
+                        @if(isset($groupedChats))
+                            @foreach($groupedChats as $cId => $chatGrps)
+                                @php $baseName = $chatGrps->first()->name ?? 'Group '.$cId; @endphp
+                                <optgroup label="📢 {{ $baseName }} (ID: {{ $cId }})">
+                                    @foreach($chatGrps as $g)
+                                        @php
+                                            $val = $g->chat_id . '|' . ($g->message_thread_id ?? '');
+                                            $isSelected = ($curChatId === (string)$g->chat_id && $curThreadId === (string)($g->message_thread_id ?? ''));
+                                            
+                                            if ($g->message_thread_id) {
+                                                $disp = ($g->topic_name ?: 'Topic #'.$g->message_thread_id) . ' (#'.$g->message_thread_id.')';
+                                            } else {
+                                                $disp = $g->name . ' — (General / Main Channel)';
+                                            }
+                                        @endphp
+                                        <option value="{{ $val }}" data-chat="{{ $g->chat_id }}" data-thread="{{ $g->message_thread_id ?? '' }}" {{ $isSelected ? 'selected' : '' }}>
+                                            {{ $g->message_thread_id ? '↳ 📌 ' : '👥 ' }}{{ $disp }}
+                                        </option>
+                                    @endforeach
+                                </optgroup>
+                            @endforeach
+                        @endif
+
+                        <option value="custom" {{ $isCustomTarget ? 'selected' : '' }}>
+                            ✏️ បញ្ចូលលេខសម្គាល់ដោយផ្ទាល់ (Custom Chat ID / Thread ID)
+                        </option>
+                    </select>
+                    <div class="form-text mt-1 text-muted" style="font-size:0.8rem">
+                        ជ្រើសរើសក្រុម ឬ Forum Topic ណាមួយដែល bot បានចូលរួម ដើម្បីទទួលការជូនដំណឹងពេលបុគ្គលិកមិនទាន់បានផ្ញើរបាយការណ៍។
+                    </div>
+                </div>
+
+                <!-- Custom Chat ID & Thread ID (Toggled or shown if Custom selected) -->
+                <div id="customAlertTargetWrapper" class="col-12" style="{{ $isCustomTarget ? '' : 'display: none;' }}">
+                    <div class="p-3 bg-light rounded-3 border">
+                        <div class="small fw-bold text-secondary mb-2">
+                            <i class="bi bi-pencil-square me-1"></i>កំណត់លេខសម្គាល់ដោយផ្ទាល់ (Manual Telegram IDs)
+                        </div>
+                        <div class="row g-2">
+                            <div class="col-md-6">
+                                <label class="form-label small fw-semibold">Custom Telegram Chat ID</label>
+                                <input type="text" name="report_alert_chat_id" id="report_alert_chat_id"
+                                       class="form-control form-control-sm font-monospace"
+                                       value="{{ $curChatId }}" placeholder="-100... or -464...">
+                            </div>
+                            <div class="col-md-6">
+                                <label class="form-label small fw-semibold">Custom Topic Thread ID (Optional)</label>
+                                <input type="number" name="report_alert_thread_id" id="report_alert_thread_id"
+                                       class="form-control form-control-sm font-monospace"
+                                       value="{{ $curThreadId }}" placeholder="e.g. 881">
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="col-md-6 d-flex align-items-end">
+                    <div class="form-check form-switch mb-2">
+                        <input class="form-check-input" type="checkbox" name="report_send_ack" value="1" id="setting_send_ack"
+                               {{ ($reportSettings['send_ack'] ?? '1') == '1' ? 'checked' : '' }}>
+                        <label class="form-check-label fw-semibold small" for="setting_send_ack">
+                            ផ្ញើវិក្កយបត្រទទួលពេលផ្ញើយឺត (Send Late Receipt on Telegram)
+                        </label>
+                    </div>
+                </div>
+
+                <div class="col-12 text-end mt-3">
+                    <button type="submit" class="btn btn-primary btn-sm px-3">
+                        <i class="bi bi-save me-1"></i>រក្សាទុកការកំណត់ (Save Settings)
+                    </button>
+                </div>
+            </div>
+        </form>
+    </div>
     <!-- Account & Profile -->
     <div class="settings-section">
         <div class="settings-section-title">

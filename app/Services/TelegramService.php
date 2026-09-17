@@ -8,6 +8,23 @@ use Illuminate\Support\Facades\Storage;
 
 class TelegramService
 {
+    /**
+     * Production / Live Work Group Chat IDs.
+     * Under NO circumstances should testing messages be sent to these groups.
+     */
+    public const WORK_GROUPS = [
+        '-4646583053',      // BELTEI Printing Press (Live Staff Group)
+        '-1003150870760',   // Press Processing Works (Production Supergroup / Forum Topics)
+    ];
+
+    /**
+     * Dedicated Testing Group Chat IDs.
+     */
+    public const TESTING_GROUPS = [
+        '-1003744799209',   // Testing Supergroup
+        '-5150858234',      // Testing Group
+    ];
+
     private string $apiBase;
 
     public function __construct()
@@ -31,6 +48,10 @@ class TelegramService
      */
     public function sendMediaGroup(string $chatId, array $paths, string $caption = '', ?int $threadId = null): bool
     {
+        if ($this->isTestMessageBlocked($chatId, $caption)) {
+            return false;
+        }
+
         if (empty($paths)) return false;
 
         $caption = mb_substr($caption, 0, 1024);
@@ -74,6 +95,10 @@ class TelegramService
      */
     public function sendPhoto(string $chatId, string $imagePath, string $caption = '', ?int $threadId = null): bool
     {
+        if ($this->isTestMessageBlocked($chatId, $caption)) {
+            return false;
+        }
+
         $caption  = mb_substr($caption, 0, 1024);
         $fullPath = Storage::disk('public')->path($imagePath);
 
@@ -107,10 +132,41 @@ class TelegramService
     }
 
     /**
+     * Safety guard: Strictly prevent test messages from being sent to production work groups.
+     */
+    public function isTestMessageBlocked(string $chatId, string $text = ''): bool
+    {
+        $isWorkGroup = in_array((string)$chatId, self::WORK_GROUPS, true);
+        if (! $isWorkGroup) {
+            return false;
+        }
+
+        // Block if running under automated test environment
+        if (app()->environment('testing')) {
+            Log::warning("TelegramService: Prevented message dispatch to work group {$chatId} during automated testing.");
+            return true;
+        }
+
+        // Block if message indicates test/trial/debug
+        if ($text !== '' && preg_match('/\[(test|testing|debug|trial)\]|test\s+mode|🧪|សាកល្បង/iu', $text)) {
+            Log::warning("TelegramService: Prevented test message dispatch to live staff work group {$chatId}.", [
+                'snippet' => mb_substr($text, 0, 100),
+            ]);
+            return true;
+        }
+
+        return false;
+    }
+
+    /**
      * Send a text message (optionally into a topic thread).
      */
     public function sendMessage(string $chatId, string $text, ?int $threadId = null, ?string $parseMode = null, ?array $replyMarkup = null): bool
     {
+        if ($this->isTestMessageBlocked($chatId, $text)) {
+            return false;
+        }
+
         $params = ['chat_id' => $chatId, 'text' => mb_substr($text, 0, 4096)];
         if ($parseMode) $params['parse_mode'] = $parseMode;
         if ($threadId) $params['message_thread_id'] = $threadId;
@@ -151,6 +207,26 @@ class TelegramService
     /**
      * Send message to ALL registered groups (respecting each group's thread_id).
      */
+    /**
+     * Fetch administrators/members of a chat from Telegram API.
+     */
+    public function getChatAdministrators(string $chatId): array
+    {
+        try {
+            $response = $this->http(15)->get("{$this->apiBase}/getChatAdministrators", [
+                'chat_id' => $chatId,
+            ]);
+
+            if ($response->successful() && $response->json('ok')) {
+                return $response->json('result') ?? [];
+            }
+        } catch (\Throwable $e) {
+            Log::error("TelegramService getChatAdministrators failed for {$chatId}: " . $e->getMessage());
+        }
+
+        return [];
+    }
+
     public function broadcastMessage(string $text, ?string $parseMode = null): int
     {
         $groups = \App\Models\TelegramGroup::all();

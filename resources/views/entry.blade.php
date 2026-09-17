@@ -459,6 +459,24 @@ body {
       </div>
     </div>
 
+    <!-- Admin PIN Protection Group -->
+    <div class="form-group" id="adminPinGroup" style="{{ (old('position') === 'admin' || $errors->has('admin_pin')) ? 'display:block;' : 'display:none;' }}margin-top:1rem;">
+      <label><i class="bi bi-key-fill"></i> Admin Access PIN / លេខកូដសម្ងាត់</label>
+      <div style="position:relative;">
+        <input type="password" name="admin_pin" id="adminPinInput"
+               placeholder="Enter admin PIN (default: 1234)"
+               inputmode="numeric" autocomplete="current-password"
+               style="letter-spacing:0.25rem;font-size:1.1rem;padding-right:2.75rem;">
+        <button type="button" id="togglePinBtn" onclick="togglePinVisibility()"
+                style="position:absolute;right:0.75rem;top:50%;transform:translateY(-50%);background:none;border:none;color:#94a3b8;cursor:pointer;font-size:1.1rem;">
+          <i class="bi bi-eye" id="pinEyeIcon"></i>
+        </button>
+      </div>
+      <small style="color:#94a3b8;font-size:0.75rem;margin-top:0.35rem;display:block;">
+        <i class="bi bi-shield-check"></i> Required for administrative control & logs
+      </small>
+    </div>
+
     <button type="submit" class="btn-enter" id="enterBtn" disabled>
       <i class="bi bi-arrow-right-circle"></i> Continue
     </button>
@@ -469,8 +487,35 @@ body {
 function selectPos(el) {
   document.querySelectorAll('.pos-btn').forEach(b => b.classList.remove('selected'));
   el.classList.add('selected');
-  document.getElementById('positionInput').value = el.dataset.pos;
+  const pos = el.dataset.pos;
+  document.getElementById('positionInput').value = pos;
   document.getElementById('enterBtn').disabled = false;
+
+  const pinGroup = document.getElementById('adminPinGroup');
+  const pinInput = document.getElementById('adminPinInput');
+  if (pos === 'admin') {
+    pinGroup.style.display = 'block';
+    pinInput.required = true;
+    setTimeout(() => pinInput.focus(), 150);
+  } else {
+    pinGroup.style.display = 'none';
+    pinInput.required = false;
+    pinInput.value = '';
+  }
+}
+
+function togglePinVisibility() {
+  const pinInput = document.getElementById('adminPinInput');
+  const icon = document.getElementById('pinEyeIcon');
+  if (pinInput.type === 'password') {
+    pinInput.type = 'text';
+    icon.classList.remove('bi-eye');
+    icon.classList.add('bi-eye-slash');
+  } else {
+    pinInput.type = 'password';
+    icon.classList.remove('bi-eye-slash');
+    icon.classList.add('bi-eye');
+  }
 }
 
 // ── Remember Me: save to localStorage on submit, restore on load ──
