@@ -15,6 +15,10 @@ echo Stopping MySQL...
 taskkill /f /im mysqld.exe >nul 2>&1
 echo Done.
 
+echo Stopping Telegram Bot Poller...
+taskkill /f /fi "WINDOWTITLE eq Telegram Bot Poller*" >nul 2>&1
+echo Done.
+
 echo.
 echo ============================================
 echo   PrintTracker stopped successfully.

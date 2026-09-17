@@ -37,15 +37,20 @@ timeout /t 3 /nobreak >nul
 echo     Apache ready.
 
 REM ── Laravel warm-up ──────────────────────────
-echo  [4/5] Optimising Laravel...
+echo  [4/6] Optimising Laravel...
 cd /d "D:\printing-tracker\printing-tracker"
 php artisan config:cache >nul 2>&1
 php artisan route:cache  >nul 2>&1
 php artisan view:cache   >nul 2>&1
 echo     Done.
 
+REM ── Start Telegram Bot Poller ───────────────
+echo  [5/6] Starting Telegram Bot Poller...
+taskkill /f /fi "WINDOWTITLE eq Telegram Bot Poller*" >nul 2>&1
+start "Telegram Bot Poller" /min cmd /c "cd /d D:\printing-tracker\printing-tracker && php artisan telegram:poll --watch --interval=5"
+
 REM ── Open browser ─────────────────────────────
-echo  [5/5] Opening PrintTracker...
+echo  [6/6] Opening PrintTracker...
 timeout /t 2 /nobreak >nul
 start "" "http://localhost:8081"
 

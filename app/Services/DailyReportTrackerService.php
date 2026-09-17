@@ -28,6 +28,7 @@ class DailyReportTrackerService
 
         $telegramUserId = (string) $from['id'];
         $text = trim($message['text'] ?? $message['caption'] ?? '');
+        $chatId = (string) ($message['chat']['id'] ?? '');
 
         // Reports must contain content (minimum 15 characters)
         if (mb_strlen($text) < 15) {
@@ -73,17 +74,21 @@ class DailyReportTrackerService
             if ($duplicatePolicy === 'first_valid') {
                 $submission->message_text        = $text;
                 $submission->telegram_message_id = $message['message_id'] ?? $submission->telegram_message_id;
-                $submission->telegram_chat_id    = (string) ($message['chat']['id'] ?? $submission->telegram_chat_id);
+                $submission->telegram_chat_id    = $chatId;
                 $submission->revision_count      += 1;
                 $submission->save();
 
                 Log::info("DailyReportTracker: Revision #{$submission->revision_count} recorded for {$matchedRequirement->staff_name} ({$matchedRequirement->report_title}).");
+
+                if ($matchedRequirement->send_ack) {
+                    $this->sendRevisionAcknowledgement($submission, $chatId, $message['message_thread_id'] ?? null);
+                }
+
                 return true;
             }
         }
 
         // First submission (or latest_valid policy overwrite)
-        $chatId    = (string) ($message['chat']['id'] ?? '');
         $messageId = $message['message_id'] ?? null;
 
         $submission->telegram_user_id    = $telegramUserId;
@@ -106,9 +111,9 @@ class DailyReportTrackerService
 
         Log::info("DailyReportTracker: Recorded submission for {$matchedRequirement->staff_name} ({$matchedRequirement->report_title}). Status: {$submission->status}, Late: {$submission->late_minutes}m.");
 
-        // Optionally send Telegram acknowledgement if late (or if configured)
-        if ($submission->status === 'late' && $matchedRequirement->send_ack) {
-            $this->sendLateAcknowledgement($submission, $chatId, $message['message_thread_id'] ?? null);
+        // Send Telegram acknowledgement (both on-time and late if send_ack is enabled)
+        if ($matchedRequirement->send_ack) {
+            $this->sendSubmissionAcknowledgement($submission, $chatId, $message['message_thread_id'] ?? null);
         }
 
         return true;
@@ -225,22 +230,51 @@ class DailyReportTrackerService
     }
 
     /**
-     * Send Khmer receipt for late submission.
+     * Send Khmer receipt for a report submission (on-time or late).
      */
-    private function sendLateAcknowledgement(DailyReportSubmission $submission, string $chatId, ?int $threadId = null): void
+    private function sendSubmissionAcknowledgement(DailyReportSubmission $submission, string $chatId, ?int $threadId = null): void
     {
         $staffName   = $submission->requirement->staff_name;
         $reportTitle = $submission->requirement->report_title;
         $timeStr     = $submission->submitted_at->timezone('Asia/Phnom_Penh')->format('h:i A');
         $lateMinutes = $submission->late_minutes;
 
-        $msg = "✅ <b>របាយការណ៍បានទទួល</b>\n\n"
-             . "👤 <b>អ្នកផ្ញើ:</b> " . htmlspecialchars($staffName) . "\n"
-             . "📋 <b>របាយការណ៍:</b> " . htmlspecialchars($reportTitle) . "\n"
-             . "⏰ <b>ពេលផ្ញើ:</b> {$timeStr}\n"
-             . "⚠️ <b>ស្ថានភាព:</b> យឺត {$lateMinutes} នាទី";
+        if ($submission->status === 'submitted') {
+            $msg = "✅ <b>របាយការណ៍បានទទួល (On Time)</b>\n\n"
+                 . "👤 <b>អ្នកផ្ញើ:</b> " . htmlspecialchars($staffName) . "\n"
+                 . "📋 <b>របាយការណ៍:</b> " . htmlspecialchars($reportTitle) . "\n"
+                 . "⏰ <b>ម៉ោងផ្ញើ:</b> {$timeStr}\n"
+                 . "✨ <b>ស្ថានភាព:</b> បានផ្ញើទាន់ពេល";
+        } else {
+            $msg = "⚠️ <b>របាយការណ៍បានទទួល (Late)</b>\n\n"
+                 . "👤 <b>អ្នកផ្ញើ:</b> " . htmlspecialchars($staffName) . "\n"
+                 . "📋 <b>របាយការណ៍:</b> " . htmlspecialchars($reportTitle) . "\n"
+                 . "⏰ <b>ម៉ោងផ្ញើ:</b> {$timeStr}\n"
+                 . "⚠️ <b>ស្ថានភាព:</b> យឺត {$lateMinutes} នាទី";
+        }
 
         // Send to chat where message was posted
+        if (!empty($chatId)) {
+            $this->telegramService->sendMessage($chatId, $msg, $threadId, 'HTML');
+        }
+    }
+
+    /**
+     * Send Khmer receipt for a report revision / update.
+     */
+    private function sendRevisionAcknowledgement(DailyReportSubmission $submission, string $chatId, ?int $threadId = null): void
+    {
+        $staffName   = $submission->requirement->staff_name;
+        $reportTitle = $submission->requirement->report_title;
+        $timeStr     = Carbon::now('Asia/Phnom_Penh')->format('h:i A');
+        $revCount    = $submission->revision_count;
+
+        $msg = "📝 <b>បានធ្វើបច្ចុប្បន្នភាពរបាយការណ៍ (Revision #{$revCount})</b>\n\n"
+             . "👤 <b>អ្នកផ្ញើ:</b> " . htmlspecialchars($staffName) . "\n"
+             . "📋 <b>របាយការណ៍:</b> " . htmlspecialchars($reportTitle) . "\n"
+             . "⏰ <b>ម៉ោងកែប្រែ:</b> {$timeStr}\n"
+             . "ℹ️ ខ្លឹមសារត្រូវបានកត់ត្រាចូលប្រព័ន្ធដោយជោគជ័យ។";
+
         if (!empty($chatId)) {
             $this->telegramService->sendMessage($chatId, $msg, $threadId, 'HTML');
         }

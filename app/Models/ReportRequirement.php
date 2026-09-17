@@ -110,10 +110,21 @@ class ReportRequirement extends Model
             return false;
         }
 
-        // Clean brackets or special characters for regex matching
+        // 1. Exact tag match (with brackets if specified)
         $cleanTag = preg_quote($tag, '/');
+        if (preg_match("/{$cleanTag}/iu", $text)) {
+            return true;
+        }
 
-        // Check exact or bracketed pattern, case-insensitive
-        return (bool) preg_match("/{$cleanTag}/iu", $text);
+        // 2. Also match inner keyword if tag is wrapped in brackets (e.g. "[ព្រឹក]" -> "ព្រឹក")
+        $innerTag = trim($tag, "[] \t\n\r\0\x0B");
+        if ($innerTag !== '' && $innerTag !== $tag) {
+            $cleanInner = preg_quote($innerTag, '/');
+            if (preg_match("/{$cleanInner}/iu", $text)) {
+                return true;
+            }
+        }
+
+        return false;
     }
 }
