@@ -3,7 +3,35 @@
 @section('title', __('reports.requirements_title'))
 
 @section('content')
-<div class="container-fluid py-3 px-3 px-md-4">
+<!-- Google Fonts: Kantumruy Pro (Khmer) + Plus Jakarta Sans (Numbers / Latin) -->
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Kantumruy+Pro:ital,wght@0,300;0,400;0,500;0,600;0,700;1,400&family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+
+<style>
+.page-content {
+    max-width: 100% !important;
+    padding: 1.25rem 1.75rem 3rem !important;
+    margin: 0 auto !important;
+}
+@media (max-width: 767.98px) {
+    .page-content {
+        padding: 0.65rem 0.5rem 110px !important;
+    }
+}
+.requirements-shell,
+.requirements-shell *,
+.modal,
+.modal * {
+    font-family: 'Kantumruy Pro', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif !important;
+    letter-spacing: 0.01em;
+}
+.font-number {
+    font-family: 'Plus Jakarta Sans', 'Kantumruy Pro', sans-serif !important;
+    font-feature-settings: "tnum" 1;
+}
+</style>
+<div class="requirements-shell container-fluid py-2 px-0">
     <!-- Header -->
     <div class="d-flex flex-column flex-md-row justify-content-between align-items-md-center gap-3 mb-4">
         <div>

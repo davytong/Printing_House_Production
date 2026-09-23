@@ -3,6 +3,7 @@
 namespace App\Http\Controllers;
 
 use App\Models\TelegramGroup;
+use App\Services\TelegramService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Http;
@@ -165,6 +166,14 @@ class TelegramController extends Controller
         }
 
         $caption   = $request->input('caption', '🖨️ របាយការណ៍ការបោះពុម្ព');
+        // A report image can include one or more follow-up text messages; scan
+        // all user-provided text before sending the image so a test report can
+        // never partially reach a staff group.
+        $testContent = $caption . "\n" . (string) $request->input('full_text', '') . "\n"
+            . json_encode($request->input('full_texts', ''), JSON_UNESCAPED_UNICODE);
+        if (app(TelegramService::class)->isTestMessageBlocked((string) $chatId, $testContent)) {
+            return response()->json(['ok' => false, 'message' => 'Test messages may only be sent to a designated testing group.'], 422);
+        }
         // Prevent Telegram 1024-character caption cutoff on sendPhoto
         $photoCaption = mb_substr($caption, 0, 1000);
         $photoPath = $request->file('photo')->getRealPath();
@@ -219,8 +228,8 @@ class TelegramController extends Controller
                 return response()->json(['ok' => true, 'message' => 'Image sent']);
             }
         } catch (\Throwable $e) {
-            Log::error('Telegram sendPhoto: connection failed', ['error' => $e->getMessage()]);
-            return response()->json(['ok' => false, 'message' => 'Cannot connect to Telegram: ' . $e->getMessage()], 502);
+            Log::error('Telegram sendPhoto: connection failed', ['error' => TelegramService::redactApiError($e->getMessage())]);
+            return response()->json(['ok' => false, 'message' => 'Cannot connect to Telegram.'], 502);
         }
 
         Log::error('Telegram sendPhoto failed', [
@@ -269,6 +278,10 @@ class TelegramController extends Controller
             return response()->json(['ok' => false, 'message' => 'No message provided'], 422);
         }
 
+        if (app(TelegramService::class)->isTestMessageBlocked((string) $chatId, implode("\n", $rawMessages))) {
+            return response()->json(['ok' => false, 'message' => 'Test messages may only be sent to a designated testing group.'], 422);
+        }
+
         $allOk = true;
         foreach ($rawMessages as $rawText) {
             if (!is_string($rawText) || empty(trim($rawText))) continue;
@@ -292,8 +305,8 @@ class TelegramController extends Controller
                         $allOk = false;
                     }
                 } catch (\Throwable $e) {
-                    Log::error('Telegram sendMessage: connection failed', ['error' => $e->getMessage()]);
-                    return response()->json(['ok' => false, 'message' => 'Cannot connect to Telegram: ' . $e->getMessage()], 502);
+                    Log::error('Telegram sendMessage: connection failed', ['error' => TelegramService::redactApiError($e->getMessage())]);
+                    return response()->json(['ok' => false, 'message' => 'Cannot connect to Telegram.'], 502);
                 }
             }
         }

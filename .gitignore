@@ -32,4 +32,6 @@ _archive/
 
 
 database/*.sql
+/*.sql
+fix_*.php
 

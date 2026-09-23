@@ -95,6 +95,21 @@
     {{-- LEFT: qty inputs --}}
     <div class="col-lg-8">
 
+      {{-- Unsaved draft recovery banner --}}
+      <div id="draftRecoveryBanner" class="alert alert-warning alert-dismissible fade show d-none align-items-center justify-content-between mb-3 shadow-sm border-warning" role="alert">
+        <div class="d-flex align-items-center gap-2">
+          <i class="bi bi-clock-history fs-4 text-warning"></i>
+          <div>
+            <strong style="font-size:.88rem">រកឃើញទិន្នន័យព្រាងដែលមិនទាន់រក្សាទុក!</strong>
+            <div style="font-size:.76rem;color:var(--text-secondary)">អ្នកមានទិន្នន័យដែលបានបញ្ចូលលើទូរស័ព្ទនេះពីមុន។ តើអ្នកចង់ស្តារឡើងវិញទេ?</div>
+          </div>
+        </div>
+        <div class="d-flex gap-2">
+          <button type="button" class="btn btn-sm btn-warning fw-bold" id="btnRestoreDraft"><i class="bi bi-arrow-repeat"></i> ស្តារឡើងវិញ</button>
+          <button type="button" class="btn btn-sm btn-outline-secondary" id="btnDiscardDraft">លុបចោល</button>
+        </div>
+      </div>
+
       {{-- Reporter info bar --}}
       <div class="panel mb-4">
         <div class="panel-body" style="display:flex;flex-wrap:wrap;gap:1rem;align-items:flex-end;padding:1rem">
@@ -283,8 +298,8 @@
                    ondrop="handleDrop(event)">
                 <i class="bi bi-images" style="font-size:1.5rem;color:var(--text-muted)"></i>
                 <p style="font-size:.78rem;color:var(--text-muted);margin:.3rem 0 0">
-                  ចុចដើម្បីជ្រើស ឬ Drag &amp; Drop រូបភាព<br>
-                  <span style="font-size:.7rem">JPG / PNG / WebP · Max 10MB each · Max 10 photos</span>
+                  ចុចដើម្បីជ្រើស / ថតរូប ឬ Drag &amp; Drop រូបភាព<br>
+                  <span style="font-size:.7rem" class="text-success"><i class="bi bi-magic"></i> បង្រួមទំហំស្វ័យប្រវត្ត · ផ្ញើបានរហ័សលើទូរស័ព្ទ (Auto-compressed)</span>
                 </p>
               </div>
               <input type="file" id="imageInput" name="images[]" multiple accept="image/*"
@@ -507,6 +522,29 @@ document.getElementById('saveOnlyBtn')?.addEventListener('click', () => {
   document.getElementById('sendToggle').checked = false;
 });
 
+// ── CSRF Keep-Alive & Auto-Refresh ─────────────────────────
+let activeCsrfToken = '{{ csrf_token() }}';
+
+async function refreshCsrfToken() {
+  try {
+    const res = await fetch('{{ route("ping") }}', { credentials: 'same-origin' });
+    if (res.ok) {
+      const data = await res.json();
+      if (data.csrf_token) {
+        activeCsrfToken = data.csrf_token;
+        document.querySelectorAll('input[name="_token"]').forEach(el => el.value = activeCsrfToken);
+        const metaCsrf = document.querySelector('meta[name="csrf-token"]');
+        if (metaCsrf) metaCsrf.setAttribute('content', activeCsrfToken);
+      }
+    }
+  } catch (e) {
+    console.warn('CSRF ping failed:', e);
+  }
+}
+
+// Background heartbeat every 4 minutes while tab is active
+setInterval(refreshCsrfToken, 4 * 60 * 1000);
+
 // ── Low Stock Alert & Leader Notification Workflow ─────────────
 (function () {
   const form = document.getElementById('stockDailyForm');
@@ -515,14 +553,18 @@ document.getElementById('saveOnlyBtn')?.addEventListener('click', () => {
   let allowDirectSubmit = false;
   let detectedLowStockItems = [];
 
-  form.addEventListener('submit', function (e) {
+  form.addEventListener('submit', async function (e) {
     if (allowDirectSubmit) {
+      if (typeof clearDraft === 'function') clearDraft();
       // Show loading overlay
       if (typeof showLoading === 'function') showLoading(true, 'កំពុងរក្សាទុក និងផ្ញើ...');
       return;
     }
 
     e.preventDefault();
+
+    // Refresh CSRF token right before submit to prevent 419 expired error on mobile
+    await refreshCsrfToken();
 
     // Gather item values from form
     const items = [];
@@ -539,6 +581,7 @@ document.getElementById('saveOnlyBtn')?.addEventListener('click', () => {
 
     if (items.length === 0) {
       allowDirectSubmit = true;
+      if (typeof clearDraft === 'function') clearDraft();
       form.submit();
       return;
     }
@@ -548,7 +591,7 @@ document.getElementById('saveOnlyBtn')?.addEventListener('click', () => {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
-        'X-CSRF-TOKEN': '{{ csrf_token() }}'
+        'X-CSRF-TOKEN': activeCsrfToken
       },
       body: JSON.stringify({ items: items })
     })
@@ -564,6 +607,7 @@ document.getElementById('saveOnlyBtn')?.addEventListener('click', () => {
       } else {
         // No low stock items -> direct submit
         allowDirectSubmit = true;
+        if (typeof clearDraft === 'function') clearDraft();
         if (typeof showLoading === 'function') showLoading(true, 'កំពុងរក្សាទុក...');
         form.submit();
       }
@@ -571,6 +615,7 @@ document.getElementById('saveOnlyBtn')?.addEventListener('click', () => {
     .catch(err => {
       console.error('Low stock check failed:', err);
       allowDirectSubmit = true;
+      if (typeof clearDraft === 'function') clearDraft();
       form.submit();
     });
   });
@@ -604,6 +649,7 @@ document.getElementById('saveOnlyBtn')?.addEventListener('click', () => {
     if (alertModal) alertModal.hide();
 
     allowDirectSubmit = true;
+    if (typeof clearDraft === 'function') clearDraft();
     form.submit();
   });
 
@@ -621,7 +667,7 @@ document.getElementById('saveOnlyBtn')?.addEventListener('click', () => {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
-        'X-CSRF-TOKEN': '{{ csrf_token() }}'
+        'X-CSRF-TOKEN': activeCsrfToken
       },
       body: JSON.stringify({
         items: detectedLowStockItems,
@@ -632,6 +678,7 @@ document.getElementById('saveOnlyBtn')?.addEventListener('click', () => {
     }).catch(err => console.error('Low stock alert error:', err));
 
     allowDirectSubmit = true;
+    if (typeof clearDraft === 'function') clearDraft();
     if (typeof showLoading === 'function') showLoading(true, 'កំពុងរក្សាទុក...');
     form.submit();
   });
@@ -770,18 +817,204 @@ document.querySelector('[name=update_date]')?.addEventListener('change', functio
     .catch(err => console.error('Failed to fetch daily stats:', err));
   updatePreview();
 });
-document.querySelector('[name=performed_by]')?.addEventListener('input', updatePreview);
+document.querySelector('[name=performed_by]')?.addEventListener('input', () => {
+  updatePreview();
+  saveDraftDebounced();
+});
 
-// ── Multi-image handling ───────────────────────────────────
+// ── LocalStorage Draft Auto-Save & Recovery ──────────────────
+const DRAFT_KEY = `pt_stock_draft_${category}_${document.querySelector('[name=update_date]')?.value || 'today'}`;
+
+function saveDraft() {
+  const data = {
+    performed_by: document.querySelector('[name=performed_by]')?.value || '',
+    items: {},
+    timestamp: Date.now()
+  };
+  document.querySelectorAll('.qty-input').forEach(inp => {
+    const wrap = inp.closest('div[style*="display:flex"]');
+    const matIdInput = wrap?.querySelector('input[name*="[material_id]"]');
+    if (matIdInput) {
+      data.items[matIdInput.value] = inp.value;
+    }
+  });
+  try {
+    localStorage.setItem(DRAFT_KEY, JSON.stringify(data));
+  } catch (e) {}
+}
+
+let draftTimer = null;
+function saveDraftDebounced() {
+  clearTimeout(draftTimer);
+  draftTimer = setTimeout(saveDraft, 400);
+}
+
+// Attach auto-save to every qty input
+document.querySelectorAll('.qty-input').forEach(inp => {
+  inp.addEventListener('input', saveDraftDebounced);
+});
+
+function clearDraft() {
+  try {
+    localStorage.removeItem(DRAFT_KEY);
+  } catch (e) {}
+}
+
+function checkAndOfferDraftRestore() {
+  try {
+    const raw = localStorage.getItem(DRAFT_KEY);
+    if (!raw) return;
+    const data = JSON.parse(raw);
+    if (!data || !data.items) return;
+
+    let hasDifferences = false;
+    document.querySelectorAll('.qty-input').forEach(inp => {
+      const wrap = inp.closest('div[style*="display:flex"]');
+      const matIdInput = wrap?.querySelector('input[name*="[material_id]"]');
+      if (matIdInput && data.items[matIdInput.value] !== undefined) {
+        if (data.items[matIdInput.value] !== inp.value) {
+          hasDifferences = true;
+        }
+      }
+    });
+
+    if (hasDifferences) {
+      const banner = document.getElementById('draftRecoveryBanner');
+      if (banner) {
+        banner.classList.remove('d-none');
+        banner.classList.add('d-flex');
+      }
+    }
+  } catch (e) {}
+}
+
+function restoreDraft() {
+  try {
+    const raw = localStorage.getItem(DRAFT_KEY);
+    if (!raw) return;
+    const data = JSON.parse(raw);
+    if (data.performed_by) {
+      const byInp = document.querySelector('[name=performed_by]');
+      if (byInp && !byInp.value) byInp.value = data.performed_by;
+    }
+    if (data.items) {
+      document.querySelectorAll('.qty-input').forEach(inp => {
+        const wrap = inp.closest('div[style*="display:flex"]');
+        const matIdInput = wrap?.querySelector('input[name*="[material_id]"]');
+        if (matIdInput && data.items[matIdInput.value] !== undefined) {
+          inp.value = data.items[matIdInput.value];
+          inp.dispatchEvent(new Event('input'));
+        }
+      });
+    }
+    const banner = document.getElementById('draftRecoveryBanner');
+    if (banner) {
+      banner.classList.add('d-none');
+      banner.classList.remove('d-flex');
+    }
+    updatePreview();
+  } catch (e) {}
+}
+
+document.getElementById('btnRestoreDraft')?.addEventListener('click', restoreDraft);
+document.getElementById('btnDiscardDraft')?.addEventListener('click', () => {
+  clearDraft();
+  const banner = document.getElementById('draftRecoveryBanner');
+  if (banner) {
+    banner.classList.add('d-none');
+    banner.classList.remove('d-flex');
+  }
+});
+
+// Check draft on startup
+checkAndOfferDraftRestore();
+
+// ── Multi-image handling with Client-Side Canvas Compression ─
 let selectedFiles = new DataTransfer();
 
-function previewImages(files) {
-  for (const f of files) {
-    if (selectedFiles.files.length >= 10) break;
-    selectedFiles.items.add(f);
+async function compressImageFile(file, maxWidth = 1600, maxHeight = 1600, quality = 0.82) {
+  if (!file.type.startsWith('image/') || file.type === 'image/svg+xml' || file.type === 'image/gif') {
+    return file;
   }
-  document.getElementById('imageInput').files = selectedFiles.files;
-  renderPreviews();
+
+  return new Promise((resolve) => {
+    const reader = new FileReader();
+    reader.onload = (e) => {
+      const img = new Image();
+      img.onload = () => {
+        let width = img.width;
+        let height = img.height;
+
+        if (width > maxWidth || height > maxHeight) {
+          if (width > height) {
+            height = Math.round((height * maxWidth) / width);
+            width = maxWidth;
+          } else {
+            width = Math.round((width * maxHeight) / height);
+            height = maxHeight;
+          }
+        }
+
+        const canvas = document.createElement('canvas');
+        canvas.width = width;
+        canvas.height = height;
+        const ctx = canvas.getContext('2d');
+        ctx.drawImage(img, 0, 0, width, height);
+
+        canvas.toBlob(
+          (blob) => {
+            if (!blob || blob.size >= file.size) {
+              resolve(file);
+              return;
+            }
+            const cleanName = (file.name || 'photo').replace(/\.[^/.]+$/, "") + ".jpg";
+            const compressedFile = new File([blob], cleanName, {
+              type: 'image/jpeg',
+              lastModified: Date.now(),
+            });
+            resolve(compressedFile);
+          },
+          'image/jpeg',
+          quality
+        );
+      };
+      img.onerror = () => resolve(file);
+      img.src = e.target.result;
+    };
+    reader.onerror = () => resolve(file);
+    reader.readAsDataURL(file);
+  });
+}
+
+async function previewImages(files) {
+  if (!files || files.length === 0) return;
+
+  const dropZone = document.getElementById('imageDropZone');
+  const originalHtml = dropZone.innerHTML;
+  dropZone.innerHTML = `
+    <div class="spinner-border spinner-border-sm text-primary mb-1" role="status"></div>
+    <div style="font-size:.82rem;font-weight:600;color:var(--primary)">កំពុងរៀបចំរូបភាព... (Optimizing image...)</div>
+    <div style="font-size:.7rem;color:var(--text-muted)">បង្រួមទំហំស្វ័យប្រវត្ត ដើម្បីផ្ញើបានលឿន និងមិនគាំង</div>
+  `;
+
+  try {
+    for (const f of files) {
+      if (selectedFiles.files.length >= 10) {
+        alert('អាចភ្ជាប់រូបភាពបានអតិបរមា 10 ប៉ុណ្ណោះ / Max 10 photos.');
+        break;
+      }
+      const optimized = await compressImageFile(f);
+      selectedFiles.items.add(optimized);
+    }
+    document.getElementById('imageInput').files = selectedFiles.files;
+    renderPreviews();
+  } catch (err) {
+    console.error('Image compression error:', err);
+  } finally {
+    dropZone.innerHTML = originalHtml;
+    const count = selectedFiles.files.length;
+    dropZone.style.borderColor = count > 0 ? 'var(--primary)' : 'var(--border)';
+  }
 }
 
 function handleDrop(e) {
@@ -804,13 +1037,15 @@ function renderPreviews() {
   Array.from(selectedFiles.files).forEach((f, i) => {
     const url   = URL.createObjectURL(f);
     const wrap  = document.createElement('div');
+    const sizeKb = Math.round(f.size / 1024);
     wrap.style  = 'position:relative;display:inline-block';
     wrap.innerHTML = `
-      <img src="${url}" style="width:64px;height:64px;object-fit:cover;border-radius:6px;border:2px solid var(--border)">
+      <img src="${url}" style="width:68px;height:68px;object-fit:cover;border-radius:8px;border:2px solid var(--border)">
+      <span style="position:absolute;bottom:2px;left:2px;background:rgba(0,0,0,0.65);color:#fff;font-size:.58rem;padding:1px 4px;border-radius:4px;font-family:var(--font-latin)">${sizeKb}KB</span>
       <button type="button" onclick="removeImage(${i})"
-        style="position:absolute;top:-6px;right:-6px;width:18px;height:18px;border-radius:50%;
-               background:#dc2626;color:#fff;border:none;font-size:.65rem;line-height:1;
-               display:flex;align-items:center;justify-content:center;cursor:pointer">✕</button>`;
+        style="position:absolute;top:-6px;right:-6px;width:20px;height:20px;border-radius:50%;
+               background:#dc2626;color:#fff;border:none;font-size:.7rem;line-height:1;
+               display:flex;align-items:center;justify-content:center;cursor:pointer;box-shadow:0 2px 4px rgba(0,0,0,0.2)">✕</button>`;
     container.appendChild(wrap);
   });
   // Update count badge on drop zone

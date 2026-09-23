@@ -30,5 +30,28 @@ return Application::configure(basePath: dirname(__DIR__))
         ]);
     })
     ->withExceptions(function (Exceptions $exceptions): void {
-        //
+        $exceptions->render(function (\Illuminate\Session\TokenMismatchException $e, $request) {
+            if ($request->expectsJson()) {
+                return response()->json([
+                    'message' => 'សម័យកាលបានផុតកំណត់ (CSRF Token Mismatch)។ សូមព្យាយាមម្តងទៀត។ / CSRF token mismatch.',
+                    'csrf_token' => csrf_token(),
+                ], 419);
+            }
+
+            return redirect()->back()
+                ->with('error', 'ទំព័របានផុតកំណត់ (Session Expired)។ ទិន្នន័យត្រូវបានរក្សាទុក សូមចុច «រក្សាទុក» ម្តងទៀត។ / Session expired. Please try submitting again.')
+                ->withInput();
+        });
+
+        $exceptions->render(function (\Illuminate\Http\Exceptions\PostTooLargeException $e, $request) {
+            if ($request->expectsJson()) {
+                return response()->json([
+                    'message' => 'ទំហំរូបភាពធំពេកលើសពីការកំណត់។ / Upload payload is too large.',
+                ], 413);
+            }
+
+            return redirect()->back()
+                ->with('error', 'ទំហំរូបភាពធំពេកលើសពីការកំណត់។ សូមជ្រើសរូបភាពតូចជាងនេះ។ / Upload size is too large.')
+                ->withInput();
+        });
     })->create();

@@ -9,8 +9,10 @@ use Illuminate\Support\Facades\Route;
 Route::post('/telegram/webhook',     [TelegramController::class, 'webhook']);
 
 // Telegram outbound (called by the front-end report page)
-Route::post('/telegram/send-image',  [TelegramController::class, 'sendImage'])->name('telegram.send.image');
-Route::post('/telegram/send-report', [TelegramController::class, 'sendReport'])->name('telegram.send');
+Route::middleware('web')->group(function () {
+    Route::post('/telegram/send-image',  [TelegramController::class, 'sendImage'])->name('telegram.send.image');
+    Route::post('/telegram/send-report', [TelegramController::class, 'sendReport'])->name('telegram.send');
+});
 
 // Telegram Mini App APIs
 Route::get('/telegram/app/data',       [App\Http\Controllers\TelegramMiniAppController::class, 'getData']);

@@ -1465,6 +1465,254 @@ html[lang="en"] .data-table thead th .th-en {
 tr[class*="row-"]:hover, tbody tr:hover {
   background-color: rgba(0,0,0,0.015) !important;
 }
+
+/* ═══════════════════════════════════════════════════════
+   PRODUCT UI REFINEMENT — shared across every module
+   ═══════════════════════════════════════════════════════ */
+:root {
+  --content-max: 1440px;
+  --surface-raised: #ffffff;
+  --shadow-card: 0 1px 2px rgba(15, 23, 42, .04), 0 12px 28px rgba(15, 23, 42, .06);
+  --shadow-card-hover: 0 4px 8px rgba(15, 23, 42, .05), 0 18px 36px rgba(15, 23, 42, .09);
+}
+
+body {
+  background:
+    radial-gradient(circle at 15% -10%, rgba(99, 102, 241, .10), transparent 28rem),
+    radial-gradient(circle at 100% 0%, rgba(14, 165, 233, .07), transparent 26rem),
+    var(--bg);
+}
+
+.page-content {
+  max-width: var(--content-max);
+  padding: 2rem clamp(1rem, 3vw, 2.5rem) 2.75rem;
+}
+
+.section-title, .page-title {
+  letter-spacing: -.025em;
+  font-weight: 750;
+}
+.section-sub {
+  max-width: 68ch;
+  line-height: 1.65;
+}
+
+/* Purposeful page introductions for the main workspaces. */
+.workspace-hero {
+  position: relative;
+  z-index: 20;
+  isolation: isolate;
+  overflow: visible;
+  padding: clamp(1.15rem, 2.5vw, 1.75rem);
+  border: 1px solid color-mix(in srgb, var(--primary) 16%, var(--border));
+  border-radius: 16px;
+  background:
+    linear-gradient(120deg, color-mix(in srgb, var(--primary) 10%, var(--surface-raised)), var(--surface-raised) 55%),
+    var(--surface-raised);
+  box-shadow: var(--shadow-card);
+}
+.workspace-hero:focus-within,
+.workspace-hero:has(.show),
+.workspace-hero:has(.dropdown-menu.show) {
+  z-index: 100;
+}
+.workspace-hero::after {
+  content: "";
+  position: absolute;
+  z-index: -1;
+  width: 18rem;
+  height: 18rem;
+  right: 0;
+  top: -9rem;
+  border-radius: 999px;
+  background: radial-gradient(circle, rgba(99,102,241,.20), transparent 68%);
+  pointer-events: none;
+}
+.workspace-hero .section-title { margin-bottom: .25rem; }
+.workspace-hero .section-sub { margin-bottom: 0; color: var(--text-secondary); }
+.workspace-hero .btn { position: relative; z-index: 1; }
+
+/* Consistent elevation replaces page-by-page card treatments. */
+.panel, .kpi-card, .glass-card, .summary-card, .tbl-wrap {
+  background: var(--surface-raised);
+  border: 1px solid var(--border);
+  box-shadow: var(--shadow-card);
+}
+.panel, .tbl-wrap { border-radius: 14px; }
+.kpi-card { border-radius: 14px; }
+.panel:hover, .kpi-card:hover, .glass-card:hover, .summary-card:hover {
+  transform: translateY(-2px);
+  box-shadow: var(--shadow-card-hover);
+}
+.panel-header {
+  min-height: 64px;
+  padding: .9rem 1.25rem;
+  background: color-mix(in srgb, var(--surface-raised) 90%, var(--surface-2));
+}
+.panel-body { padding: clamp(1rem, 2vw, 1.5rem); }
+.panel-header .ph-title { font-weight: 700; }
+.panel-header .ph-title .ph-icon { border-radius: 10px; }
+
+/* Inputs and actions: reliable hit targets and visible keyboard focus. */
+.btn {
+  min-height: 38px;
+  border-radius: 10px;
+  font-weight: 650;
+}
+.btn-sm { min-height: 32px; }
+.btn:focus-visible,
+.form-control:focus-visible,
+.form-select:focus-visible,
+a:focus-visible,
+button:focus-visible {
+  outline: 3px solid rgba(79, 70, 229, .34);
+  outline-offset: 2px;
+}
+.form-control, .form-select {
+  min-height: 42px;
+  border-width: 1px;
+  background: var(--surface-raised);
+  box-shadow: 0 1px 2px rgba(15,23,42,.03);
+}
+.form-control:focus, .form-select:focus {
+  transform: none;
+  box-shadow: 0 0 0 4px var(--primary-glow);
+}
+.form-label { font-weight: 700; color: var(--text-primary); }
+
+/* Dense data remains easy to scan without movement or overlapping rows. */
+.data-table thead th {
+  padding: .8rem 1rem;
+  background: var(--surface-2);
+  border-bottom: 1px solid var(--border-dark);
+}
+.data-table tbody td { padding: .8rem 1rem; }
+.data-table tbody tr:hover {
+  transform: none;
+  box-shadow: inset 3px 0 0 var(--primary);
+}
+.data-table tbody tr:nth-child(even) td { background: color-mix(in srgb, var(--surface-raised) 97%, var(--surface-2)); }
+.table-responsive { border-radius: 12px; }
+
+.badge { font-weight: 700; letter-spacing: .01em; }
+.dropdown-menu, .modal-content {
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  box-shadow: 0 20px 44px rgba(15, 23, 42, .16);
+  background: var(--surface-raised);
+}
+.dropdown-item { border-radius: 8px; margin: 2px 6px; width: calc(100% - 12px); }
+.dropdown-item:hover, .dropdown-item:focus { background: var(--surface-2); color: var(--primary-dark); }
+
+/* Bootstrap surfaces are used by several older modules. Give them the same
+   product finish without requiring each workflow to be rewritten. */
+.card {
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  background: var(--surface-raised);
+  color: var(--text-primary);
+  box-shadow: var(--shadow-card);
+  overflow: hidden;
+}
+.card-header {
+  padding: .9rem 1.15rem;
+  background: var(--surface-2);
+  border-bottom: 1px solid var(--border);
+  color: var(--text-primary);
+  font-weight: 700;
+}
+.card-body { padding: clamp(1rem, 2vw, 1.35rem); }
+.card-footer { padding: .85rem 1.15rem; background: var(--surface-2); border-top: 1px solid var(--border); }
+.table { --bs-table-bg: transparent; --bs-table-color: var(--text-primary); --bs-table-border-color: var(--border); }
+.table > :not(caption) > * > * { padding: .8rem .9rem; vertical-align: middle; }
+.table > thead > tr > * {
+  background: var(--surface-2);
+  color: var(--text-secondary);
+  border-bottom-width: 1px;
+  font-size: .72rem;
+  font-weight: 800;
+  letter-spacing: .045em;
+  text-transform: uppercase;
+}
+.table-hover > tbody > tr:hover > * { --bs-table-accent-bg: color-mix(in srgb, var(--primary) 5%, transparent); color: var(--text-primary); }
+.alert { border: 1px solid transparent; border-radius: 12px; padding: .85rem 1rem; }
+.alert-success { border-color: #a7f3d0; }
+.alert-warning { border-color: #fde68a; }
+.alert-danger { border-color: #fecaca; }
+.alert-info { border-color: #bae6fd; }
+.nav-tabs { gap: .35rem; border-bottom: 1px solid var(--border); }
+.nav-tabs .nav-link {
+  border: 0;
+  border-radius: 9px 9px 0 0;
+  color: var(--text-secondary);
+  font-weight: 650;
+  padding: .65rem .85rem;
+}
+.nav-tabs .nav-link:hover { background: var(--surface-2); color: var(--primary); }
+.nav-tabs .nav-link.active { color: var(--primary); background: color-mix(in srgb, var(--primary) 9%, var(--surface-raised)); box-shadow: inset 0 -2px 0 var(--primary); }
+.pagination { gap: .25rem; }
+.page-link { border: 1px solid var(--border); border-radius: 8px !important; color: var(--text-secondary); min-width: 34px; text-align: center; }
+.page-link:hover { color: var(--primary); background: var(--surface-2); border-color: var(--primary); }
+.page-item.active .page-link { background: var(--primary); border-color: var(--primary); }
+.form-check-input { width: 1.15em; height: 1.15em; border-color: var(--border-dark); }
+.form-check-input:checked { background-color: var(--primary); border-color: var(--primary); }
+.form-check-input:focus { box-shadow: 0 0 0 3px var(--primary-glow); }
+.list-group-item { background: transparent; border-color: var(--border); color: var(--text-primary); padding: .8rem 1rem; }
+.accordion-item { background: var(--surface-raised); border-color: var(--border); }
+.accordion-button { background: var(--surface-raised); color: var(--text-primary); font-weight: 700; box-shadow: none; }
+.accordion-button:not(.collapsed) { background: color-mix(in srgb, var(--primary) 8%, var(--surface-raised)); color: var(--primary-dark); }
+.accordion-button:focus { box-shadow: inset 0 -1px 0 var(--border), 0 0 0 3px var(--primary-glow); }
+
+[data-theme="dark"] {
+  --surface-raised: #172033;
+  --shadow-card: 0 1px 2px rgba(0,0,0,.22), 0 12px 28px rgba(0,0,0,.20);
+  --shadow-card-hover: 0 4px 10px rgba(0,0,0,.24), 0 18px 36px rgba(0,0,0,.28);
+}
+[data-theme="dark"] body {
+  background:
+    radial-gradient(circle at 15% -10%, rgba(99, 102, 241, .16), transparent 28rem),
+    radial-gradient(circle at 100% 0%, rgba(14, 165, 233, .10), transparent 26rem),
+    var(--bg);
+}
+[data-theme="dark"] .panel-header,
+[data-theme="dark"] .data-table thead th { background: #1b263a; }
+[data-theme="dark"] .workspace-hero {
+  background: linear-gradient(120deg, rgba(99,102,241,.16), var(--surface-raised) 58%);
+  border-color: rgba(129,140,248,.20);
+}
+[data-theme="dark"] .data-table tbody tr:nth-child(even) td { background: #141e2f; }
+[data-theme="dark"] .dropdown-menu,
+[data-theme="dark"] .modal-content { background: var(--surface-raised); color: var(--text-primary); }
+[data-theme="dark"] .card,
+[data-theme="dark"] .accordion-item { background: var(--surface-raised); border-color: var(--border); }
+[data-theme="dark"] .card-header,
+[data-theme="dark"] .card-footer,
+[data-theme="dark"] .table > thead > tr > *,
+[data-theme="dark"] .accordion-button { background: #1b263a; color: var(--text-primary); }
+[data-theme="dark"] .list-group-item { background: transparent; color: var(--text-primary); border-color: var(--border); }
+[data-theme="dark"] .page-link { color: var(--text-secondary); background: var(--surface-raised); border-color: var(--border); }
+[data-theme="dark"] .nav-tabs .nav-link.active { color: #a5b4fc; background: rgba(99,102,241,.13); }
+
+@media (max-width: 768px) {
+  .page-content { padding: 1.1rem 1rem calc(5.5rem + env(safe-area-inset-bottom)); }
+  .section-title, .page-title { font-size: clamp(1.25rem, 6vw, 1.6rem); }
+  .panel-header { padding: .8rem 1rem; min-height: 56px; }
+  .panel-body { padding: 1rem; }
+  .kpi-card { padding: 1rem; }
+  .kpi-card .kpi-value { font-size: clamp(1.5rem, 7vw, 2rem); }
+  .data-table tbody td, .data-table thead th { padding: .65rem .75rem; }
+  .table > :not(caption) > * > * { padding: .7rem .75rem; }
+  .card-header, .card-footer { padding-inline: 1rem; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    scroll-behavior: auto !important;
+    animation-duration: .01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: .01ms !important;
+  }
+}
 </style>
 
 @stack('head')

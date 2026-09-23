@@ -29,18 +29,8 @@ class AppServiceProvider extends ServiceProvider
         // Without this, the default Tailwind paginator renders giant un-styled SVG arrows.
         Paginator::useBootstrapFive();
 
-        // Dynamically override APP_URL based on how the server is accessed
-        if (isset($_SERVER['HTTP_HOST'])) {
-            $isHttps = (isset($_SERVER['HTTPS']) && $_SERVER['HTTPS'] === 'on') ||
-                       (isset($_SERVER['HTTP_X_FORWARDED_PROTO']) && $_SERVER['HTTP_X_FORWARDED_PROTO'] === 'https');
-            
-            $proto = $isHttps ? 'https' : 'http';
-            config(['app.url' => $proto . '://' . $_SERVER['HTTP_HOST']]);
-            
-            if ($isHttps) {
-                \Illuminate\Support\Facades\URL::forceScheme('https');
-            }
-        }
+        // APP_URL is deployment configuration. Do not derive it from the Host
+        // header: an untrusted Host header can otherwise alter generated URLs.
 
         // Register Observers for automated syncing
         \App\Models\ProductionTask::observe(\App\Observers\ProductionTaskObserver::class);

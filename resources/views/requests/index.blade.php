@@ -3,7 +3,7 @@
 @section('page-title','Print Requests')
 
 @section('content')
-<div class="d-flex justify-content-between align-items-start flex-wrap gap-3 mb-4">
+<div class="workspace-hero d-flex justify-content-between align-items-start flex-wrap gap-3 mb-4">
   <div>
     <h1 class="section-title">ស្នើរសុំបោះពុម្ព</h1>
     <p class="section-sub">គ្រប់គ្រង និងអនុម័តការស្នើរសុំ</p>

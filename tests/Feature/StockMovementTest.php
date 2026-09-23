@@ -287,5 +287,64 @@ class StockMovementTest extends TestCase
         $afterNewOut->assertStatus(200);
         $afterNewOut->assertSee('data-today-out="1"', false);
     }
+
+    /**
+     * Test ping route for keep-alive and CSRF refresh.
+     */
+    public function test_ping_route_returns_ok_and_csrf_token(): void
+    {
+        $response = $this->get('/ping');
+        $response->assertStatus(200);
+        $response->assertJsonStructure(['ok', 'csrf_token']);
+        $this->assertTrue($response->json('ok'));
+    }
+
+    /**
+     * Test stock movements index view with filters and stats.
+     */
+    public function test_stock_movements_index_with_filters(): void
+    {
+        $material = Material::create([
+            'code'          => 'TEST-MV-01',
+            'name'          => 'Ink Cartridge Cyan',
+            'name_km'       => 'ទឹកថ្នាំ ផ្ទៃមេឃ',
+            'category'      => 'consumable',
+            'unit'          => 'bottle',
+            'unit_cost'     => 15.0,
+            'minimum_stock' => 5,
+            'status'        => 'active',
+        ]);
+
+        StockMovement::create([
+            'material_id'   => $material->id,
+            'type'          => 'in',
+            'quantity'      => 20,
+            'reference'     => 'PO-CYAN-01',
+            'performed_by'  => 'John Doe',
+            'movement_date' => now()->toDateString(),
+        ]);
+
+        // Access index page without filters
+        $response = $this->get('/stock/movements');
+        $response->assertStatus(200);
+        $response->assertSee('Stock Movements');
+        $response->assertSee('Ink Cartridge Cyan');
+        $response->assertSee('PO-CYAN-01');
+
+        // Access index page with type filter
+        $inResponse = $this->get('/stock/movements?type=in');
+        $inResponse->assertStatus(200);
+        $inResponse->assertSee('Ink Cartridge Cyan');
+
+        // Access index page with search filter
+        $searchResponse = $this->get('/stock/movements?search=CYAN');
+        $searchResponse->assertStatus(200);
+        $searchResponse->assertSee('Ink Cartridge Cyan');
+
+        // Access index page with non-matching search filter
+        $emptyResponse = $this->get('/stock/movements?search=NONEXISTENT_ITEM_XYZ');
+        $emptyResponse->assertStatus(200);
+        $emptyResponse->assertDontSee('PO-CYAN-01');
+    }
 }
 

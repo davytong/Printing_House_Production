@@ -3,6 +3,7 @@
 namespace App\Http\Controllers;
 
 use App\Models\TelegramGroup;
+use App\Services\TelegramService;
 use Illuminate\Http\Request;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Support\Facades\Http;
@@ -18,7 +19,7 @@ class TelegramSetupController extends Controller
                 ->withOptions(['curl' => [CURLOPT_RESOLVE => ['api.telegram.org:443:149.154.167.220']]])
                 ->get($this->apiBase() . $endpoint, $params);
         } catch (\Throwable $e) {
-            Log::error("TelegramSetup API GET failed: $endpoint", ['error' => $e->getMessage()]);
+            Log::error("TelegramSetup API GET failed: $endpoint", ['error' => TelegramService::redactApiError($e->getMessage())]);
             return null;
         }
     }
@@ -30,7 +31,7 @@ class TelegramSetupController extends Controller
                 ->withOptions(['curl' => [CURLOPT_RESOLVE => ['api.telegram.org:443:149.154.167.220']]])
                 ->post($this->apiBase() . $endpoint, $params);
         } catch (\Throwable $e) {
-            Log::error("TelegramSetup API POST failed: $endpoint", ['error' => $e->getMessage()]);
+            Log::error("TelegramSetup API POST failed: $endpoint", ['error' => TelegramService::redactApiError($e->getMessage())]);
             return null;
         }
     }
@@ -252,13 +253,8 @@ class TelegramSetupController extends Controller
     // ─────────────────────────────────────────────
     // Send a test alert to verify formatting
     // ─────────────────────────────────────────────
-    public function sendTestAlert(\App\Services\AlertService $alertService): RedirectResponse
+    public function sendTestAlert(\App\Services\AlertService $alertService, TelegramService $telegramService): RedirectResponse
     {
-        $chatId = \App\Models\Setting::get('alert_chat_id') ?: config('services.telegram.alert_chat_id');
-        if (!$chatId) {
-            return redirect()->back()->with('error', 'មិនអាចផ្ញើបានទេ៖ សូមជ្រើសរើស ក្រុម/Topic គោលដៅ ជាមុនសិន!');
-        }
-
         $dummy1 = new \App\Models\Material([
             'name' => 'Premium Glossy Paper 200gsm',
             'category' => 'paper',
@@ -273,9 +269,19 @@ class TelegramSetupController extends Controller
         ]);
         $dummy2->calculated_stock = 0;
 
-        $alertService->sendGroupedLowStockAlert(collect([$dummy1, $dummy2]), true);
+        // Test traffic is deliberately isolated from staff work groups. The
+        // production alert target is never consulted for this action.
+        $message = "🧪 [TEST] " . now()->format('d/m/Y H:i') . "\n\n"
+            . $alertService->formatLeaderLowStockMessage([
+                ['name' => $dummy1->name, 'category' => $dummy1->category, 'current_stock' => 450.5, 'min_stock' => 500, 'unit' => 'sheet'],
+                ['name' => $dummy2->name, 'category' => $dummy2->category, 'current_stock' => 0, 'min_stock' => 10, 'unit' => 'roll'],
+            ], now()->toDateString());
 
-        return redirect()->back()->with('success', 'សារសាកល្បងត្រូវបានបញ្ជូនទៅ Telegram របស់អ្នក!');
+        if (! $telegramService->sendMessage(TelegramService::TESTING_GROUPS[0], $message, null, 'HTML')) {
+            return redirect()->back()->with('error', 'មិនអាចផ្ញើសារសាកល្បងទៅ Testing Group បានទេ។ សូមពិនិត្យការភ្ជាប់ Bot។');
+        }
+
+        return redirect()->back()->with('success', 'សារសាកល្បងត្រូវបានបញ្ជូនទៅ Testing Group រួចរាល់។');
     }
 
     // ─────────────────────────────────────────────
@@ -564,27 +570,20 @@ class TelegramSetupController extends Controller
     // ─────────────────────────────────────────────
     // Send a test message to verify a group works
     // ─────────────────────────────────────────────
-    public function testGroup(TelegramGroup $group): RedirectResponse
+    public function testGroup(TelegramGroup $group, TelegramService $telegramService): RedirectResponse
     {
-        $params = [
-            'chat_id'    => $group->chat_id,
-            'text'       => "✅ PrintTracker connected!\n"
-                          . ($group->topic_name ? "Topic: {$group->topic_name}\n" : "")
-                          . "Time: " . now()->format('d/m/Y H:i:s'),
-        ];
-
-        if ($group->message_thread_id) {
-            $params['message_thread_id'] = $group->message_thread_id;
+        if (! in_array((string) $group->chat_id, TelegramService::TESTING_GROUPS, true)) {
+            return back()->with('error', 'ការសាកល្បងអាចផ្ញើបានតែទៅ Testing Group ប៉ុណ្ណោះ។');
         }
 
-        $response = $this->apiPost('/sendMessage', $params);
+        $message = "🧪 [TEST] PrintTracker connected!\n"
+                          . ($group->topic_name ? "Topic: {$group->topic_name}\n" : "")
+                          . "Time: " . now()->format('d/m/Y H:i:s');
 
-        if ($response && $response->successful() && $response->json('ok')) {
+        if ($telegramService->sendMessage($group->chat_id, $message, $group->message_thread_id)) {
             return back()->with('success', 'Test message sent to "' . $group->displayLabel() . '"!');
         }
 
-        return back()->with('error',
-            'Failed to send to "' . $group->displayLabel() . '": ' .
-            ($response?->json('description') ?? 'Connection error'));
+        return back()->with('error', 'Failed to send to "' . $group->displayLabel() . '". Check the bot connection and group access.');
     }
 }

@@ -17,13 +17,15 @@
 body {
   font-family: 'Poppins', 'Hanuman', sans-serif;
   min-height: 100vh;
+  min-height: 100dvh;
   display: flex;
   align-items: center;
   justify-content: center;
   background: linear-gradient(135deg, #0f172a 0%, #1e293b 50%, #0f172a 100%);
   padding: max(1rem, env(safe-area-inset-top)) max(1rem, env(safe-area-inset-right)) max(1rem, env(safe-area-inset-bottom)) max(1rem, env(safe-area-inset-left));
   position: relative;
-  overflow: hidden;
+  overflow-x: hidden;
+  overflow-y: auto;
 }
 
 /* ── Radar sweep background ── */
@@ -272,6 +274,9 @@ body {
   font-size: .78rem;
   font-weight: 600;
   color: rgba(255,255,255,.8);
+  appearance: none;
+  width: 100%;
+  font-family: inherit;
 }
 .pos-btn i { font-size: 1.4rem; color: rgba(255,255,255,.6); transition: color .25s ease, transform .25s ease; }
 .pos-btn:hover {
@@ -297,6 +302,25 @@ body {
   font-size: .82rem;
   margin-bottom: 1rem;
   text-align: left;
+}
+/* Keep the main action reachable on compact laptop screens and phones. */
+@media (max-height: 760px) {
+  body { align-items: flex-start; }
+  .entry-card { margin: .5rem auto; padding: 1.25rem 1.5rem; }
+  .entry-logo { width: 58px; height: 58px; border-radius: 14px; margin-bottom: .65rem; }
+  .entry-title { font-size: 1.2rem; }
+  .entry-sub { margin-bottom: 1rem; font-size: .78rem; }
+  .form-group { margin-bottom: .75rem; }
+  .form-group input { padding: .6rem .8rem; }
+  .position-grid { gap: .45rem; }
+  .pos-btn { padding: .55rem .4rem; min-height: 66px; }
+  .pos-btn i { font-size: 1.1rem; }
+  .btn-enter { padding: .7rem; margin-top: .15rem; }
+}
+@media (max-width: 380px) {
+  .entry-card { padding-inline: 1rem; border-radius: 16px; }
+  .position-grid { gap: .4rem; }
+  .pos-btn { font-size: .72rem; }
 }
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after {
@@ -413,7 +437,7 @@ body {
   <p class="entry-sub">Enter your name and select your position to continue</p>
 
   @if($errors->any())
-    <div class="error-msg">
+    <div class="error-msg" role="alert">
       <i class="bi bi-exclamation-circle me-1"></i>
       {{ $errors->first() }}
     </div>
@@ -423,8 +447,8 @@ body {
     @csrf
 
     <div class="form-group">
-      <label><i class="bi bi-person-fill"></i> Full Name</label>
-      <input type="text" name="full_name" value="{{ old('full_name', session('user_name')) }}"
+      <label for="fullName"><i class="bi bi-person-fill"></i> Full Name</label>
+      <input id="fullName" type="text" name="full_name" value="{{ old('full_name', session('user_name')) }}"
              placeholder="Enter your name..." required autofocus>
     </div>
 
@@ -432,30 +456,30 @@ body {
       <label><i class="bi bi-briefcase-fill"></i> Position</label>
       <input type="hidden" name="position" id="positionInput" value="{{ old('position') }}" required>
       <div class="position-grid">
-        <div class="pos-btn" data-pos="paper_report" onclick="selectPos(this)">
+        <button type="button" class="pos-btn" data-pos="paper_report" onclick="selectPos(this)" aria-pressed="false">
           <i class="bi bi-file-earmark-text"></i>
           <span>Paper Report</span>
-        </div>
-        <div class="pos-btn" data-pos="press_report" onclick="selectPos(this)">
+        </button>
+        <button type="button" class="pos-btn" data-pos="press_report" onclick="selectPos(this)" aria-pressed="false">
           <i class="bi bi-printer"></i>
           <span>Press Report</span>
-        </div>
-        <div class="pos-btn" data-pos="finishing_report" onclick="selectPos(this)">
+        </button>
+        <button type="button" class="pos-btn" data-pos="finishing_report" onclick="selectPos(this)" aria-pressed="false">
           <i class="bi bi-scissors"></i>
           <span>Finishing Report</span>
-        </div>
-        <div class="pos-btn" data-pos="procurement" onclick="selectPos(this)">
+        </button>
+        <button type="button" class="pos-btn" data-pos="procurement" onclick="selectPos(this)" aria-pressed="false">
           <i class="bi bi-cart3"></i>
           <span>Procurement</span>
-        </div>
-        <div class="pos-btn" data-pos="store" onclick="selectPos(this)">
+        </button>
+        <button type="button" class="pos-btn" data-pos="store" onclick="selectPos(this)" aria-pressed="false">
           <i class="bi bi-box-seam"></i>
           <span>Store</span>
-        </div>
-        <div class="pos-btn" data-pos="admin" onclick="selectPos(this)">
+        </button>
+        <button type="button" class="pos-btn" data-pos="admin" onclick="selectPos(this)" aria-pressed="false">
           <i class="bi bi-shield-lock"></i>
           <span>Admin</span>
-        </div>
+        </button>
       </div>
     </div>
 
@@ -485,8 +509,12 @@ body {
 
 <script>
 function selectPos(el) {
-  document.querySelectorAll('.pos-btn').forEach(b => b.classList.remove('selected'));
+  document.querySelectorAll('.pos-btn').forEach(b => {
+    b.classList.remove('selected');
+    b.setAttribute('aria-pressed', 'false');
+  });
   el.classList.add('selected');
+  el.setAttribute('aria-pressed', 'true');
   const pos = el.dataset.pos;
   document.getElementById('positionInput').value = pos;
   document.getElementById('enterBtn').disabled = false;

@@ -23,16 +23,63 @@ class MovementController extends Controller
         private TelegramService $telegramService,
     ) {}
 
-    public function index(): View
+    public function index(Request $request): View
     {
-        $movements = StockMovement::with('material')
-            ->orderByDesc('movement_date')
+        $query = StockMovement::with('material');
+
+        // Filter by movement type
+        if ($request->filled('type') && in_array($request->type, ['in', 'out', 'adjust'])) {
+            $query->where('type', $request->type);
+        }
+
+        // Filter by material category
+        if ($request->filled('category')) {
+            $query->whereHas('material', fn($q) => $q->where('category', $request->category));
+        }
+
+        // Filter by search keyword
+        if ($request->filled('search')) {
+            $search = trim($request->search);
+            $query->where(function ($q) use ($search) {
+                $q->where('reference', 'like', "%{$search}%")
+                  ->orWhere('performed_by', 'like', "%{$search}%")
+                  ->orWhere('notes', 'like', "%{$search}%")
+                  ->orWhereHas('material', fn($mq) => 
+                      $mq->where('name', 'like', "%{$search}%")
+                         ->orWhere('name_km', 'like', "%{$search}%")
+                         ->orWhere('code', 'like', "%{$search}%")
+                  );
+            });
+        }
+
+        // Filter by date range
+        if ($request->filled('start_date')) {
+            $query->where('movement_date', '>=', $request->start_date);
+        }
+        if ($request->filled('end_date')) {
+            $query->where('movement_date', '<=', $request->end_date);
+        }
+
+        $movements = $query->orderByDesc('movement_date')
             ->orderByDesc('created_at')
-            ->paginate(30);
+            ->paginate(30)
+            ->withQueryString();
 
         $todayMovements = $this->stockService->getTodayMovements();
 
-        return view('stock.movements.index', compact('movements', 'todayMovements'));
+        // Calculate today's summary metrics
+        $stats = [
+            'today_total'  => $todayMovements->count(),
+            'today_in'     => $todayMovements->where('type', 'in')->count(),
+            'today_in_qty' => (float)$todayMovements->where('type', 'in')->sum('quantity'),
+            'today_out'    => $todayMovements->where('type', 'out')->count(),
+            'today_out_qty'=> (float)$todayMovements->where('type', 'out')->sum('quantity'),
+            'today_adjust' => $todayMovements->where('type', 'adjust')->count(),
+        ];
+
+        $categories = Material::whereNotNull('category')->distinct()->pluck('category')->filter();
+
+        return view('stock.movements.index', compact('movements', 'todayMovements', 'stats', 'categories'));
     }
 
     public function create(): View
@@ -771,6 +818,22 @@ class MovementController extends Controller
             }
             if ($request->filled('type')) {
                 $query->where('type', $request->type);
+            }
+            if ($request->filled('category')) {
+                $query->whereHas('material', fn($q) => $q->where('category', $request->category));
+            }
+            if ($request->filled('search')) {
+                $search = trim($request->search);
+                $query->where(function ($q) use ($search) {
+                    $q->where('reference', 'like', "%{$search}%")
+                      ->orWhere('performed_by', 'like', "%{$search}%")
+                      ->orWhere('notes', 'like', "%{$search}%")
+                      ->orWhereHas('material', fn($mq) => 
+                          $mq->where('name', 'like', "%{$search}%")
+                             ->orWhere('name_km', 'like', "%{$search}%")
+                             ->orWhere('code', 'like', "%{$search}%")
+                      );
+                });
             }
             
             $movements = $query->orderByDesc('movement_date')

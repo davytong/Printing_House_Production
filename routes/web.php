@@ -27,6 +27,9 @@ Route::post('/logout', [App\Http\Controllers\EntryController::class, 'logout'])-
 // ── Language Switcher ────────────────────────────────────
 Route::get('/lang/{locale}', [App\Http\Controllers\LanguageController::class, 'switch'])->name('lang.switch');
 
+// ── Session Keep-Alive / CSRF Refresh ─────────────────────
+Route::get('/ping', fn() => response()->json(['ok' => true, 'csrf_token' => csrf_token()]))->name('ping');
+
 // ── Root → Executive Dashboard ────────────────────────────
 Route::get('/', [DashboardController::class, 'index'])->name('dashboard');
 Route::get('/search', [SearchController::class, 'index'])->name('search');

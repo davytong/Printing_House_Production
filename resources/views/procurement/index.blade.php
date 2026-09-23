@@ -3,7 +3,7 @@
 @section('page-title','Procurement Requests')
 
 @section('content')
-<div class="d-flex justify-content-between align-items-start flex-wrap gap-3 mb-4">
+<div class="workspace-hero d-flex justify-content-between align-items-start flex-wrap gap-3 mb-4">
   <div>
     <h1 class="section-title">Procurement Requests</h1>
     <p class="section-sub">Track purchase requests, approvals, and deliveries</p>

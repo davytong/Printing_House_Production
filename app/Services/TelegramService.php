@@ -27,6 +27,15 @@ class TelegramService
 
     private string $apiBase;
 
+    /**
+     * Never write a bot token to application logs. HTTP client exceptions include
+     * the full request URL, which contains the token for Telegram Bot API calls.
+     */
+    public static function redactApiError(string $message): string
+    {
+        return preg_replace('#bot[^/\s]+/#', 'bot[redacted]/', $message) ?? 'Telegram request failed';
+    }
+
     public function __construct()
     {
         $token = config('services.telegram.bot_token', '');
@@ -115,7 +124,7 @@ class TelegramService
                 ->attach('photo', file_get_contents($fullPath), 'report.jpg')
                 ->post("{$this->apiBase}/sendPhoto", $params);
         } catch (\Throwable $e) {
-            Log::error('TelegramService sendPhoto: connection failed', ['error' => $e->getMessage()]);
+            Log::error('TelegramService sendPhoto: connection failed', ['error' => self::redactApiError($e->getMessage())]);
             return false;
         }
 
@@ -136,22 +145,21 @@ class TelegramService
      */
     public function isTestMessageBlocked(string $chatId, string $text = ''): bool
     {
-        $isWorkGroup = in_array((string)$chatId, self::WORK_GROUPS, true);
-        if (! $isWorkGroup) {
-            return false;
-        }
+        $chatId = (string) $chatId;
+        $isWorkGroup = in_array($chatId, self::WORK_GROUPS, true);
+        $isTestMessage = $text !== '' && preg_match('/\[(test|testing|debug|trial)\]|test\s+mode|🧪|សាកល្បង/iu', $text);
 
-        // Block if running under automated test environment
-        if (app()->environment('testing')) {
-            Log::warning("TelegramService: Prevented message dispatch to work group {$chatId} during automated testing.");
+        // Test and diagnostic traffic belongs only in the two designated test
+        // chats, including when someone has registered another non-production
+        // group in the setup page.
+        if ($isTestMessage && ! in_array($chatId, self::TESTING_GROUPS, true)) {
+            Log::warning("TelegramService: Prevented test message outside a designated testing group ({$chatId}).");
             return true;
         }
 
-        // Block if message indicates test/trial/debug
-        if ($text !== '' && preg_match('/\[(test|testing|debug|trial)\]|test\s+mode|🧪|សាកល្បង/iu', $text)) {
-            Log::warning("TelegramService: Prevented test message dispatch to live staff work group {$chatId}.", [
-                'snippet' => mb_substr($text, 0, 100),
-            ]);
+        // Block if running under automated test environment
+        if ($isWorkGroup && app()->environment('testing')) {
+            Log::warning("TelegramService: Prevented message dispatch to work group {$chatId} during automated testing.");
             return true;
         }
 
@@ -175,7 +183,7 @@ class TelegramService
         try {
             $response = $this->http(15)->post("{$this->apiBase}/sendMessage", $params);
         } catch (\Throwable $e) {
-            Log::error('TelegramService sendMessage: connection failed', ['error' => $e->getMessage()]);
+            Log::error('TelegramService sendMessage: connection failed', ['error' => self::redactApiError($e->getMessage())]);
             return false;
         }
 
@@ -221,7 +229,7 @@ class TelegramService
                 return $response->json('result') ?? [];
             }
         } catch (\Throwable $e) {
-            Log::error("TelegramService getChatAdministrators failed for {$chatId}: " . $e->getMessage());
+            Log::error("TelegramService getChatAdministrators failed for {$chatId}: " . self::redactApiError($e->getMessage()));
         }
 
         return [];

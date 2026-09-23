@@ -90,6 +90,12 @@
     100% { transform: translateX(100%); }
 }
 
+@media (prefers-reduced-motion: reduce) {
+    .kpi-card, .tg-widget { transition: none; }
+    .kpi-card:hover, .tg-widget:hover { transform: none; }
+    .premium-prog-fill::after, .tg-status-dot.active { animation: none; }
+}
+
 /* Telegram Widget */
 .tg-widget {
     background: rgba(255, 255, 255, 0.7);

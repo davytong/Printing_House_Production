@@ -21,7 +21,7 @@
 @endphp
 
 {{-- ════  PAGE HEADER  ════ --}}
-<div class="d-flex align-items-start justify-content-between flex-wrap gap-3 mb-4">
+<div class="workspace-hero d-flex align-items-start justify-content-between flex-wrap gap-3 mb-4">
   <div>
     <h1 class="section-title">{{ app()->getLocale() == 'km' ? 'ការបោះពុម្ព' : 'Production' }}</h1>
     <p class="section-sub">{{ app()->getLocale() == 'km' ? 'គ្រប់គ្រង និងតាមដានការបោះពុម្ពសៀវភៅ' : 'Manage and track book printing' }}</p>
@@ -50,7 +50,7 @@
       <button class="btn btn-outline-secondary btn-sm dropdown-toggle" type="button" data-bs-toggle="dropdown">
         <i class="bi bi-clock-history"></i> {{ app()->getLocale() == 'km' ? 'ប្រវត្តិ Batch' : 'Batch History' }}
       </button>
-      <ul class="dropdown-menu dropdown-menu-end" style="min-width:240px">
+      <ul class="dropdown-menu dropdown-menu-end shadow-lg" style="min-width:280px; z-index: 1060">
         <li><h6 class="dropdown-header">អតីតកាល Batches — ចុច Switch ដើម្បីត្រឡប់</h6></li>
         
         {{-- Suspended Batches --}}

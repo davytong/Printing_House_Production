@@ -93,7 +93,8 @@ class DailyReportTrackingTest extends TestCase
         $this->assertNotNull($req);
 
         // Simulate submission at 15:27 (17 minutes late)
-        $simulatedTime = Carbon::now('Asia/Phnom_Penh')->setTime(15, 27, 0);
+        $deadline      = $req->calculateDeadlineForDate(Carbon::now('Asia/Phnom_Penh'));
+        $simulatedTime = $deadline->copy()->addMinutes(17);
         Carbon::setTestNow($simulatedTime);
 
         $reportText = "[Second Production Report]\nសូមគោរពរាយការណ៍\n* បោះពុម្ពបានចំនួន 3000 ក្បាល\n* ឥឡូវនេះកំពុងបោះពុម្ពបន្ត";
